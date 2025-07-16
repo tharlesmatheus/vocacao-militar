@@ -1,98 +1,46 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { QuestionCard } from "./QuestionCard";
 import { Pagination } from "./Pagination";
+import { supabase } from "../lib/supabaseClient"; // ajuste o caminho se necessário
 
-// Exemplo de 5 questões para teste da paginação
-const mockQuestoes = [
-    {
-        id: 1,
-        categorias: ["Direito Constitucional", "Direitos Fundamentais", "PM-SP", "2023", "Médio"],
-        enunciado: "Segundo a Constituição Federal de 1988, sobre os direitos e garantias fundamentais, é correto afirmar que:",
-        alternativas: [
-            "Os direitos fundamentais aplicam-se apenas aos brasileiros natos",
-            "A casa é asilo inviolável do indivíduo, não podendo ser adentrada em qualquer hipótese",
-            "É livre a manifestação do pensamento, sendo vedado o anonimato",
-            "A lei não pode estabelecer pena de morte em nenhuma hipótese",
-            "O direito de propriedade é absoluto e não admite limitações"
-        ],
-        correta: 2,
-        explicacao: "Conforme o artigo 5º, IV da CF/88, é livre a manifestação do pensamento, sendo vedado o anonimato. Esta é uma garantia fundamental que protege a liberdade de expressão, mas exige a identificação do emissor da opinião."
-    },
-    {
-        id: 2,
-        categorias: ["Matemática", "Álgebra", "ESA", "2022", "Fácil"],
-        enunciado: "Qual é o valor de x na equação 2x + 6 = 10?",
-        alternativas: [
-            "1",
-            "2",
-            "3",
-            "4",
-            "5"
-        ],
-        correta: 1,
-        explicacao: "2x + 6 = 10 ⇒ 2x = 4 ⇒ x = 2."
-    },
-    {
-        id: 3,
-        categorias: ["História", "Brasil República", "ENEM", "2020", "Difícil"],
-        enunciado: "Em que ano ocorreu a Proclamação da República no Brasil?",
-        alternativas: [
-            "1822",
-            "1889",
-            "1891",
-            "1930",
-            "1964"
-        ],
-        correta: 1,
-        explicacao: "A Proclamação da República no Brasil ocorreu em 1889."
-    },
-    {
-        id: 4,
-        categorias: ["Geografia", "Clima", "PM-MG", "2021", "Médio"],
-        enunciado: "Qual é o bioma predominante na região Centro-Oeste do Brasil?",
-        alternativas: [
-            "Mata Atlântica",
-            "Amazônia",
-            "Cerrado",
-            "Caatinga",
-            "Pampas"
-        ],
-        correta: 2,
-        explicacao: "O Cerrado é o bioma predominante na região Centro-Oeste."
-    },
-    {
-        id: 5,
-        categorias: ["Física", "Mecânica", "Colégio Naval", "2023", "Fácil"],
-        enunciado: "Qual a unidade de medida da força no Sistema Internacional?",
-        alternativas: [
-            "Joule",
-            "Pascal",
-            "Newton",
-            "Watt",
-            "Metro"
-        ],
-        correta: 2,
-        explicacao: "No Sistema Internacional, a unidade de força é o Newton (N)."
-    }
-];
-
-const parseOptions = (alternativas: string[]) => {
-    const letras = ["A", "B", "C", "D", "E"];
-    return alternativas.map((alt, i) => ({
-        letter: letras[i],
-        text: alt,
-    }));
+type Questao = {
+    id: string;
+    instituicao: string;
+    cargo: string;
+    disciplina: string;
+    assunto: string;
+    modalidade: string;
+    banca: string;
+    enunciado: string;
+    alternativas: { [key: string]: string }; // JSONB
+    correta: string;
+    explicacao: string;
+    created_at?: string;
 };
 
 export function QuestionsList() {
+    const [questoes, setQuestoes] = useState<Questao[]>([]);
     const [page, setPage] = useState(1);
-    const [perPage, setPerPage] = useState(3); // Para testar melhor, começa em 3 por página
+    const [perPage, setPerPage] = useState(3);
+    const [loading, setLoading] = useState(true);
 
-    // Paginação real
+    useEffect(() => {
+        setLoading(true);
+        supabase
+            .from("questoes")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .then(({ data, error }) => {
+                if (!error && data) setQuestoes(data as Questao[]);
+                setLoading(false);
+            });
+    }, []);
+
+    // Paginação
     const start = (page - 1) * perPage;
     const end = start + perPage;
-    const paginated = mockQuestoes.slice(start, end);
+    const paginated = questoes.slice(start, end);
 
     return (
         <div className="mt-2">
@@ -103,7 +51,7 @@ export function QuestionsList() {
                     </span>
                     <div className="flex items-center gap-4">
                         <span className="text-[#65749b] text-xs">
-                            Mostrando {paginated.length} de {mockQuestoes.length} questões
+                            Mostrando {paginated.length} de {questoes.length} questões
                         </span>
                         <select
                             className="bg-[#f3f5fa] border border-[#e3e8f3] rounded px-3 py-1 text-xs text-[#232939]"
@@ -116,9 +64,10 @@ export function QuestionsList() {
                         </select>
                     </div>
                 </div>
-
                 <div className="flex flex-col gap-7">
-                    {paginated.length === 0 ? (
+                    {loading ? (
+                        <div>Carregando questões...</div>
+                    ) : paginated.length === 0 ? (
                         <div className="min-h-[120px] flex items-center justify-center text-[#a8b1c6]">
                             Nenhuma questão encontrada.
                         </div>
@@ -126,19 +75,27 @@ export function QuestionsList() {
                         paginated.map((q) =>
                             <QuestionCard
                                 key={q.id}
-                                tags={q.categorias}
+                                tags={[
+                                    q.instituicao,
+                                    q.cargo,
+                                    q.disciplina,
+                                    q.assunto,
+                                    q.modalidade,
+                                    q.banca,
+                                ]}
                                 statement={q.enunciado}
-                                options={parseOptions(q.alternativas)}
-                                correct={["A", "B", "C", "D", "E"][q.correta]}
+                                options={Object.entries(q.alternativas).map(([letter, text]) => ({
+                                    letter,
+                                    text,
+                                }))}
+                                correct={q.correta}
                                 explanation={q.explicacao}
                             />
                         )
                     )}
                 </div>
-
-                {/* Paginação aqui embaixo */}
                 <Pagination
-                    total={mockQuestoes.length}
+                    total={questoes.length}
                     perPage={perPage}
                     page={page}
                     setPage={setPage}
