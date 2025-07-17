@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 type Option = { letter: string; text: string };
 
 interface QuestionCardProps {
-    id: string; // NOVO: Recebe o id da questão
+    id: string;
     tags: string[];
     statement: string;
     options: Option[];
@@ -13,7 +13,8 @@ interface QuestionCardProps {
     explanation: string;
     comentarios?: any[]; // Array de comentários
     erros?: any[];       // Array de erros
-    onNotificarErro?: (erroText: string) => void; // Para atualização instantânea
+    onNotificarErro?: (erroText: string) => void;
+    onNovoComentario?: (comentario: string) => void;
 }
 
 export function QuestionCard({
@@ -26,6 +27,7 @@ export function QuestionCard({
     comentarios = [],
     erros = [],
     onNotificarErro,
+    onNovoComentario,
 }: QuestionCardProps) {
     const [selected, setSelected] = useState<string | null>(null);
     const [showResult, setShowResult] = useState(false);
@@ -33,6 +35,10 @@ export function QuestionCard({
     const [showComentarios, setShowComentarios] = useState(false);
     const [errorText, setErrorText] = useState("");
     const [loadingErro, setLoadingErro] = useState(false);
+
+    const [comentarioText, setComentarioText] = useState("");
+    const [loadingComentario, setLoadingComentario] = useState(false);
+
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     React.useEffect(() => {
@@ -46,16 +52,12 @@ export function QuestionCard({
         if (!errorText.trim()) return;
         setLoadingErro(true);
 
-        // Novo erro
         const novoErro = {
             mensagem: errorText,
             data: new Date().toISOString()
         };
-
-        // Junta com os erros antigos
         const novosErros = [...(erros || []), novoErro];
 
-        // Atualiza no banco
         const { error } = await supabase
             .from("questoes")
             .update({ erros: novosErros })
@@ -65,9 +67,34 @@ export function QuestionCard({
         if (!error) {
             setShowModal(false);
             setErrorText("");
-            if (onNotificarErro) onNotificarErro(errorText); // Atualiza lista de erros (opcional)
+            if (onNotificarErro) onNotificarErro(errorText);
         } else {
             alert("Erro ao salvar notificação.");
+        }
+    };
+
+    // Adicionar novo comentário
+    const enviarComentario = async () => {
+        if (!comentarioText.trim()) return;
+        setLoadingComentario(true);
+
+        const novoComentario = {
+            texto: comentarioText,
+            data: new Date().toISOString()
+        };
+        const novosComentarios = [...(comentarios || []), novoComentario];
+
+        const { error } = await supabase
+            .from("questoes")
+            .update({ comentarios: novosComentarios })
+            .eq("id", id);
+
+        setLoadingComentario(false);
+        if (!error) {
+            setComentarioText("");
+            if (onNovoComentario) onNovoComentario(comentarioText);
+        } else {
+            alert("Erro ao salvar comentário.");
         }
     };
 
@@ -183,11 +210,35 @@ export function QuestionCard({
             {showComentarios && (
                 <div className="bg-[#f3f5fa] rounded-xl px-4 py-3 mt-3 text-[#232939]">
                     <div className="font-bold mb-2">Comentários</div>
+                    {/* Caixa para novo comentário */}
+                    <div className="mb-3 flex items-end gap-2">
+                        <textarea
+                            rows={2}
+                            className="w-full border border-[#e3e8f3] rounded-lg px-3 py-2 text-sm text-[#232939] bg-[#f9fafb] resize-none outline-none focus:ring-2 focus:ring-[#6a88d7]"
+                            placeholder="Digite um comentário..."
+                            value={comentarioText}
+                            onChange={e => setComentarioText(e.target.value)}
+                            disabled={loadingComentario}
+                        />
+                        <button
+                            className="bg-[#6a88d7] hover:bg-[#5272b4] text-white font-bold px-4 py-2 rounded-lg text-sm transition"
+                            onClick={enviarComentario}
+                            disabled={loadingComentario || !comentarioText.trim()}
+                        >
+                            {loadingComentario ? "Enviando..." : "Comentar"}
+                        </button>
+                    </div>
+                    {/* Lista de comentários */}
                     {comentarios?.length ? (
                         <ul className="flex flex-col gap-2">
                             {comentarios.map((com, i) => (
                                 <li key={i} className="bg-white rounded-lg px-3 py-2 border text-sm">
-                                    {com?.texto || JSON.stringify(com)}
+                                    {com?.texto || com?.mensagem || JSON.stringify(com)}
+                                    {com?.data && (
+                                        <span className="block text-[11px] text-gray-400 mt-1">
+                                            {new Date(com.data).toLocaleString()}
+                                        </span>
+                                    )}
                                 </li>
                             ))}
                         </ul>
