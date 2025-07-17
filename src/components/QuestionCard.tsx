@@ -1,27 +1,38 @@
 "use client";
 import React, { useState, useRef } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 type Option = { letter: string; text: string };
 
 interface QuestionCardProps {
+    id: string; // NOVO: Recebe o id da questão
     tags: string[];
     statement: string;
     options: Option[];
     correct: string;
     explanation: string;
+    comentarios?: any[]; // Array de comentários
+    erros?: any[];       // Array de erros
+    onNotificarErro?: (erroText: string) => void; // Para atualização instantânea
 }
 
 export function QuestionCard({
+    id,
     tags,
     statement,
     options,
     correct,
     explanation,
+    comentarios = [],
+    erros = [],
+    onNotificarErro,
 }: QuestionCardProps) {
     const [selected, setSelected] = useState<string | null>(null);
     const [showResult, setShowResult] = useState(false);
     const [showModal, setShowModal] = useState(false);
+    const [showComentarios, setShowComentarios] = useState(false);
     const [errorText, setErrorText] = useState("");
+    const [loadingErro, setLoadingErro] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     React.useEffect(() => {
@@ -29,6 +40,36 @@ export function QuestionCard({
             setTimeout(() => textareaRef.current?.focus(), 100);
         }
     }, [showModal]);
+
+    // Notificar erro
+    const enviarErro = async () => {
+        if (!errorText.trim()) return;
+        setLoadingErro(true);
+
+        // Novo erro
+        const novoErro = {
+            mensagem: errorText,
+            data: new Date().toISOString()
+        };
+
+        // Junta com os erros antigos
+        const novosErros = [...(erros || []), novoErro];
+
+        // Atualiza no banco
+        const { error } = await supabase
+            .from("questoes")
+            .update({ erros: novosErros })
+            .eq("id", id);
+
+        setLoadingErro(false);
+        if (!error) {
+            setShowModal(false);
+            setErrorText("");
+            if (onNotificarErro) onNotificarErro(errorText); // Atualiza lista de erros (opcional)
+        } else {
+            alert("Erro ao salvar notificação.");
+        }
+    };
 
     return (
         <div className="bg-white rounded-2xl p-7 mb-6 shadow border border-[#e3e8f3] max-w-6xl w-full mx-auto transition-all font-inter">
@@ -100,8 +141,9 @@ export function QuestionCard({
                 <button
                     className="bg-white border border-[#e3e8f3] text-[#425179] py-2 px-5 rounded-xl text-sm transition hover:bg-[#f3f5fa] font-medium"
                     type="button"
+                    onClick={() => setShowComentarios(v => !v)}
                 >
-                    Comentários (12)
+                    Comentários ({comentarios?.length ?? 0})
                 </button>
                 <button
                     className="bg-white border border-[#e3e8f3] text-[#425179] py-2 px-5 rounded-xl text-sm transition hover:bg-[#f3f5fa] font-medium"
@@ -137,6 +179,24 @@ export function QuestionCard({
                 </div>
             )}
 
+            {/* Comentários - Expande */}
+            {showComentarios && (
+                <div className="bg-[#f3f5fa] rounded-xl px-4 py-3 mt-3 text-[#232939]">
+                    <div className="font-bold mb-2">Comentários</div>
+                    {comentarios?.length ? (
+                        <ul className="flex flex-col gap-2">
+                            {comentarios.map((com, i) => (
+                                <li key={i} className="bg-white rounded-lg px-3 py-2 border text-sm">
+                                    {com?.texto || JSON.stringify(com)}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <div className="text-sm text-[#65749b]">Nenhum comentário ainda.</div>
+                    )}
+                </div>
+            )}
+
             {/* MODAL NOTIFICAR ERRO */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
@@ -160,14 +220,11 @@ export function QuestionCard({
                             onChange={e => setErrorText(e.target.value)}
                         />
                         <button
-                            onClick={() => {
-                                setShowModal(false);
-                                setErrorText("");
-                            }}
+                            onClick={enviarErro}
                             className="bg-[#6a88d7] hover:bg-[#5272b4] text-white font-bold px-5 py-2 rounded-lg text-sm w-full transition"
-                            disabled={!errorText.trim()}
+                            disabled={loadingErro || !errorText.trim()}
                         >
-                            Enviar Notificação
+                            {loadingErro ? "Enviando..." : "Enviar Notificação"}
                         </button>
                     </div>
                 </div>

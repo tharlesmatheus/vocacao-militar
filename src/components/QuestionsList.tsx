@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { QuestionCard } from "./QuestionCard";
 import { Pagination } from "./Pagination";
-import { supabase } from "../lib/supabaseClient"; // ajuste o caminho se necessário
+import { supabase } from "../lib/supabaseClient";
 
 type Questao = {
     id: string;
@@ -13,9 +13,11 @@ type Questao = {
     modalidade: string;
     banca: string;
     enunciado: string;
-    alternativas: { [key: string]: string }; // JSONB
+    alternativas: { [key: string]: string };
     correta: string;
     explicacao: string;
+    comentarios?: any[];
+    erros?: any[];
     created_at?: string;
 };
 
@@ -25,6 +27,7 @@ export function QuestionsList() {
     const [perPage, setPerPage] = useState(3);
     const [loading, setLoading] = useState(true);
 
+    // Carrega questões do banco
     useEffect(() => {
         setLoading(true);
         supabase
@@ -37,7 +40,21 @@ export function QuestionsList() {
             });
     }, []);
 
-    // Paginação
+    // Handler para atualizar erros instantaneamente
+    const handleNotificarErro = (questaoId: string, erroText: string) => {
+        setQuestoes(questoes =>
+            questoes.map(q =>
+                q.id === questaoId
+                    ? {
+                        ...q,
+                        erros: [...(q.erros ?? []), { mensagem: erroText, data: new Date().toISOString() }]
+                    }
+                    : q
+            )
+        );
+    };
+
+    // Paginação real
     const start = (page - 1) * perPage;
     const end = start + perPage;
     const paginated = questoes.slice(start, end);
@@ -75,6 +92,7 @@ export function QuestionsList() {
                         paginated.map((q) =>
                             <QuestionCard
                                 key={q.id}
+                                id={q.id}
                                 tags={[
                                     q.instituicao,
                                     q.cargo,
@@ -90,6 +108,9 @@ export function QuestionsList() {
                                 }))}
                                 correct={q.correta}
                                 explanation={q.explicacao}
+                                comentarios={q.comentarios}
+                                erros={q.erros}
+                                onNotificarErro={(erroText) => handleNotificarErro(q.id, erroText)}
                             />
                         )
                     )}
