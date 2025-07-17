@@ -2,11 +2,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-interface Option {
-    id: string;
-    nome: string;
-}
-
 interface Filters {
     instituicao?: string;
     cargo?: string;
@@ -22,13 +17,13 @@ interface QuestionFiltersProps {
 }
 
 export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
-    // Estados para os dados de cada filtro
-    const [instituicoes, setInstituicoes] = useState<Option[]>([]);
-    const [cargos, setCargos] = useState<Option[]>([]);
-    const [disciplinas, setDisciplinas] = useState<Option[]>([]);
-    const [assuntos, setAssuntos] = useState<Option[]>([]);
-    const [modalidades, setModalidades] = useState<Option[]>([]);
-    const [bancas, setBancas] = useState<Option[]>([]);
+    // Estados para cada lista de opções únicas
+    const [instituicoes, setInstituicoes] = useState<string[]>([]);
+    const [cargos, setCargos] = useState<string[]>([]);
+    const [disciplinas, setDisciplinas] = useState<string[]>([]);
+    const [assuntos, setAssuntos] = useState<string[]>([]);
+    const [modalidades, setModalidades] = useState<string[]>([]);
+    const [bancas, setBancas] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
 
     // Estados para o filtro selecionado
@@ -42,39 +37,37 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
         excluirRespondidas: false,
     });
 
-    // Busca os dados dos filtros no banco ao montar o componente
+    // Busca valores únicos para cada filtro
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
 
-            const [
-                { data: inst },
-                { data: carg },
-                { data: disc },
-                { data: ass },
-                { data: mod },
-                { data: ban },
-            ] = await Promise.all([
-                supabase.from("instituicoes").select("id, nome").order("nome"),
-                supabase.from("cargos").select("id, nome").order("nome"),
-                supabase.from("disciplinas").select("id, nome").order("nome"),
-                supabase.from("assuntos").select("id, nome").order("nome"),
-                supabase.from("modalidades").select("id, nome").order("nome"),
-                supabase.from("bancas").select("id, nome").order("nome"),
-            ]);
-            setInstituicoes(inst || []);
-            setCargos(carg || []);
-            setDisciplinas(disc || []);
-            setAssuntos(ass || []);
-            setModalidades(mod || []);
-            setBancas(ban || []);
+            // Busca todos os campos únicos da tabela questoes
+            const { data, error } = await supabase.from("questoes").select(
+                "instituicao, cargo, disciplina, assunto, modalidade, banca"
+            );
+
+            if (!data || error) {
+                setLoading(false);
+                return;
+            }
+
+            // Função para pegar valores distintos (elimina nulos e repetidos)
+            const getDistinct = (field: keyof Filters) =>
+                Array.from(new Set(data.map((q: any) => q[field]).filter((v: string) => !!v)));
+
+            setInstituicoes(getDistinct("instituicao"));
+            setCargos(getDistinct("cargo"));
+            setDisciplinas(getDistinct("disciplina"));
+            setAssuntos(getDistinct("assunto"));
+            setModalidades(getDistinct("modalidade"));
+            setBancas(getDistinct("banca"));
 
             setLoading(false);
         };
         fetchData();
     }, []);
 
-    // Corrigido para funcionar com checkbox
     const handleChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
         const target = e.target as HTMLInputElement | HTMLSelectElement;
         const { name, value, type } = target;
@@ -84,13 +77,11 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
         }));
     };
 
-    // Aplicar filtros
     const handleFiltrar = (e: React.FormEvent) => {
         e.preventDefault();
         if (onFiltrar) onFiltrar(selected);
     };
 
-    // Limpar filtros
     const handleLimpar = () => {
         setSelected({
             instituicao: "",
@@ -121,8 +112,8 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                         disabled={loading}
                     >
                         <option value="">Selecione</option>
-                        {instituicoes.map(opt => (
-                            <option key={opt.id} value={opt.id}>{opt.nome}</option>
+                        {instituicoes.map((nome) => (
+                            <option key={nome} value={nome}>{nome}</option>
                         ))}
                     </select>
                 </div>
@@ -137,8 +128,8 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                         disabled={loading}
                     >
                         <option value="">Selecione</option>
-                        {cargos.map(opt => (
-                            <option key={opt.id} value={opt.id}>{opt.nome}</option>
+                        {cargos.map((nome) => (
+                            <option key={nome} value={nome}>{nome}</option>
                         ))}
                     </select>
                 </div>
@@ -153,8 +144,8 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                         disabled={loading}
                     >
                         <option value="">Selecione</option>
-                        {disciplinas.map(opt => (
-                            <option key={opt.id} value={opt.id}>{opt.nome}</option>
+                        {disciplinas.map((nome) => (
+                            <option key={nome} value={nome}>{nome}</option>
                         ))}
                     </select>
                 </div>
@@ -169,8 +160,8 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                         disabled={loading}
                     >
                         <option value="">Selecione</option>
-                        {assuntos.map(opt => (
-                            <option key={opt.id} value={opt.id}>{opt.nome}</option>
+                        {assuntos.map((nome) => (
+                            <option key={nome} value={nome}>{nome}</option>
                         ))}
                     </select>
                 </div>
@@ -185,8 +176,8 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                         disabled={loading}
                     >
                         <option value="">Selecione</option>
-                        {modalidades.map(opt => (
-                            <option key={opt.id} value={opt.id}>{opt.nome}</option>
+                        {modalidades.map((nome) => (
+                            <option key={nome} value={nome}>{nome}</option>
                         ))}
                     </select>
                 </div>
@@ -201,8 +192,8 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                         disabled={loading}
                     >
                         <option value="">Selecione</option>
-                        {bancas.map(opt => (
-                            <option key={opt.id} value={opt.id}>{opt.nome}</option>
+                        {bancas.map((nome) => (
+                            <option key={nome} value={nome}>{nome}</option>
                         ))}
                     </select>
                 </div>
