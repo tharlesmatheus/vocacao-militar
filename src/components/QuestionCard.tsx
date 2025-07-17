@@ -11,8 +11,8 @@ interface QuestionCardProps {
     options: Option[];
     correct: string;
     explanation: string;
-    comentarios?: any[]; // Array de comentários
-    erros?: any[];       // Array de erros
+    comentarios?: any[];
+    erros?: any[];
     onNotificarErro?: (erroText: string) => void;
     onNovoComentario?: (comentario: string) => void;
 }
@@ -46,6 +46,31 @@ export function QuestionCard({
             setTimeout(() => textareaRef.current?.focus(), 100);
         }
     }, [showModal]);
+
+    // Função de compartilhamento
+    const compartilharQuestao = () => {
+        // Monta o texto de compartilhamento
+        const texto =
+            `${statement}
+
+${options.map(opt => `${opt.letter}) ${opt.text}`).join('\n')}
+
+Conheça a melhor plataforma de questões comentadas para concursos policiais:
+https://vocacaomilitar.com.br`;
+
+        if (navigator.share) {
+            // Usa a API Web Share se disponível
+            navigator.share({
+                title: "Questão para Concursos Policiais",
+                text: texto,
+                url: "https://vocacaomilitar.com.br"
+            });
+        } else {
+            // Fallback: copia o texto para área de transferência
+            navigator.clipboard.writeText(texto);
+            alert("Texto copiado para a área de transferência!");
+        }
+    };
 
     // Notificar erro
     const enviarErro = async () => {
@@ -175,6 +200,7 @@ export function QuestionCard({
                 <button
                     className="bg-white border border-[#e3e8f3] text-[#425179] py-2 px-5 rounded-xl text-sm transition hover:bg-[#f3f5fa] font-medium"
                     type="button"
+                    onClick={compartilharQuestao}
                 >
                     Compartilhar
                 </button>
