@@ -4,6 +4,17 @@ import { QuestionCard } from "./QuestionCard";
 import { Pagination } from "./Pagination";
 import { supabase } from "../lib/supabaseClient";
 
+// Tipos de filtro
+type Filters = {
+    instituicao?: string;
+    cargo?: string;
+    disciplina?: string;
+    assunto?: string;
+    modalidade?: string;
+    banca?: string;
+    excluirRespondidas?: boolean;
+};
+
 type Questao = {
     id: string;
     instituicao: string;
@@ -21,24 +32,42 @@ type Questao = {
     created_at?: string;
 };
 
-export function QuestionsList() {
+interface QuestionsListProps {
+    filters?: Filters;
+}
+
+export function QuestionsList({ filters = {} }: QuestionsListProps) {
     const [questoes, setQuestoes] = useState<Questao[]>([]);
     const [page, setPage] = useState(1);
     const [perPage, setPerPage] = useState(3);
     const [loading, setLoading] = useState(true);
 
-    // Carrega questões do banco
+    // Carrega questões do banco ao montar e quando filtros mudam
     useEffect(() => {
         setLoading(true);
-        supabase
-            .from("questoes")
-            .select("*")
-            .order("created_at", { ascending: false })
+
+        let query = supabase.from("questoes").select("*");
+
+        // Aplica os filtros (exceto excluirRespondidas)
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value && key !== "excluirRespondidas") {
+                query = query.eq(key, value);
+            }
+        });
+
+        // Filtro especial: excluir já respondidas (ajuste o campo conforme seu banco)
+        if (filters.excluirRespondidas) {
+            query = query.eq("respondida", false); // Altere "respondida" conforme o seu campo!
+        }
+
+        query.order("created_at", { ascending: false })
             .then(({ data, error }) => {
                 if (!error && data) setQuestoes(data as Questao[]);
+                else setQuestoes([]);
                 setLoading(false);
             });
-    }, []);
+        setPage(1); // Volta para página 1 ao filtrar
+    }, [filters]);
 
     // Handler para atualizar erros instantaneamente
     const handleNotificarErro = (questaoId: string, erroText: string) => {
