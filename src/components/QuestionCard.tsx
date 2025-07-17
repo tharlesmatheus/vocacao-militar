@@ -56,7 +56,7 @@ export function QuestionCard({
 ${options.map(opt => `${opt.letter}) ${opt.text}`).join('\n')}
 
 Conheça a melhor plataforma de questões comentadas para concursos policiais:
-https://vocacaomilitar.com.br`;
+`;
 
         if (navigator.share) {
             // Usa a API Web Share se disponível
