@@ -9,14 +9,23 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 export async function POST(req: NextRequest) {
     const { userId } = await req.json();
 
+    // Log para debug
+    console.log("PORTAL: userId recebido:", userId);
+
     // Busca o stripe_customer_id na tabela planos
     const { data, error } = await supabase
         .from("planos")
-        .select("stripe_customer_id")
+        .select("stripe_customer_id, status")
         .eq("user_id", userId)
         .single();
 
-    if (error || !data?.stripe_customer_id) {
+    console.log("PORTAL: resultado do supabase", { data, error });
+
+    if (error) {
+        return NextResponse.json({ error: "Erro ao buscar assinatura." }, { status: 400 });
+    }
+
+    if (!data?.stripe_customer_id) {
         return NextResponse.json({ error: "Usuário sem assinatura ativa." }, { status: 400 });
     }
 
