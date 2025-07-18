@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
     apiVersion: "2025-06-30.basil",
@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     const { userId } = await req.json();
 
     // Busca o stripe_subscription_id na tabela planos
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from("planos")
         .select("stripe_subscription_id")
         .eq("user_id", userId)

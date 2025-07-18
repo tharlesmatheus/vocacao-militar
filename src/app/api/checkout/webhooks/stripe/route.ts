@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
-
-// *** NÃO exponha essa key! Deixe ela só no .env do backend/server! ***
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { supabaseAdmin } from "@/lib/supabaseAdmin"; // Use o admin aqui!
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
     apiVersion: "2025-06-30.basil",
@@ -52,8 +46,8 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ received: true });
         }
 
-        // Upsert no Supabase
-        const { error } = await supabase.from("planos").upsert(
+        // Upsert no Supabase (usando service role/admin)
+        const { error } = await supabaseAdmin.from("planos").upsert(
             {
                 user_id,
                 status: subscription.status === "active" ? "ativo" : "pendente",
@@ -80,7 +74,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ received: true });
         }
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from("planos")
             .update({
                 status: "inativo",

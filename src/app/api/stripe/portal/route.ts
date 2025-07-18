@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
     apiVersion: "2025-06-30.basil",
@@ -12,8 +12,8 @@ export async function POST(req: NextRequest) {
     // Log para debug
     console.log("PORTAL: userId recebido:", userId);
 
-    // Busca o stripe_customer_id na tabela planos
-    const { data, error } = await supabase
+    // Busca o stripe_customer_id na tabela planos usando supabaseAdmin
+    const { data, error } = await supabaseAdmin
         .from("planos")
         .select("stripe_customer_id, status")
         .eq("user_id", userId)
