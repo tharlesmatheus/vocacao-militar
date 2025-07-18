@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabaseClient";
 
-// ATENÇÃO: use a versão correta igual ao seu painel ou igual ao que o TypeScript pede!
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2025-06-30.basil",
+    apiVersion: "2025-06-30.basil", // Ou só "2025-06-30" se preferir
 });
 
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
@@ -25,12 +24,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: err.message }, { status: 400 });
     }
 
+    console.log("Recebido evento Stripe:", event.type);
+
     if (event.type === "checkout.session.completed") {
         const session = event.data.object as Stripe.Checkout.Session;
-        const user_id = session.metadata?.user_id;
+        const user_id = session.metadata?.user_id; // GARANTA QUE ENVIARÁ user_id NO CHECKOUT!
+
+        console.log("Metadata recebido:", session.metadata);
 
         if (user_id) {
-            await supabase.from("planos").upsert(
+            const { error } = await supabase.from("planos").upsert(
                 {
                     user_id,
                     status: "ativo",
@@ -40,6 +43,11 @@ export async function POST(req: NextRequest) {
                 },
                 { onConflict: "user_id" }
             );
+            if (error) {
+                console.error("Erro ao salvar plano:", error);
+            }
+        } else {
+            console.warn("Não veio user_id no metadata do checkout.session.completed!");
         }
     }
 
@@ -48,12 +56,17 @@ export async function POST(req: NextRequest) {
         const user_id = subscription.metadata?.user_id;
 
         if (user_id) {
-            await supabase
+            const { error } = await supabase
                 .from("planos")
                 .update({
                     status: "inativo",
                 })
                 .eq("user_id", user_id);
+            if (error) {
+                console.error("Erro ao atualizar plano:", error);
+            }
+        } else {
+            console.warn("Não veio user_id no metadata do customer.subscription.deleted!");
         }
     }
 
