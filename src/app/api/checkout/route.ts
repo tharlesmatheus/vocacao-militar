@@ -1,4 +1,3 @@
-// src/app/api/checkout/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
@@ -28,14 +27,14 @@ export async function POST(req: NextRequest) {
                 email,
                 metadata: { user_id: userId }
             });
-        } else if (customer.metadata?.user_id !== userId) {
-            // 3. Se existe mas sem metadata correta, atualize
+        } else {
+            // 3. SEMPRE atualiza o metadata do customer, mesmo se já tiver (para evitar bugs!)
             await stripe.customers.update(customer.id, {
                 metadata: { user_id: userId }
             });
         }
 
-        // 4. Crie a sessão de checkout com o customer E o metadata!
+        // 4. Crie a sessão de checkout com o customer e o metadata na session (opcional, mas bom!)
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             mode: "subscription",
@@ -46,8 +45,7 @@ export async function POST(req: NextRequest) {
                     quantity: 1,
                 },
             ],
-            // 👇 ISSO É FUNDAMENTAL!
-            metadata: { user_id: userId },
+            metadata: { user_id: userId }, // não obrigatório, mas útil pra logs
             success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/plano?success=1`,
             cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/plano?canceled=1`,
         });
