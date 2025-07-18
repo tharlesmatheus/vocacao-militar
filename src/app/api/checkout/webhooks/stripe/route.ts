@@ -3,9 +3,8 @@ import Stripe from "stripe";
 import { supabase } from "@/lib/supabaseClient";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2025-06-30.basil", // Ou só "2025-06-30" se preferir
+    apiVersion: "2025-06-30.basil",
 });
-
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 export async function POST(req: NextRequest) {
@@ -24,50 +23,46 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: err.message }, { status: 400 });
     }
 
-    console.log("Recebido evento Stripe:", event.type);
+    // Sempre pegar o user_id do customer.metadata!
+    if (
+        event.type === "customer.subscription.created" ||
+        event.type === "customer.subscription.updated" ||
+        event.type === "customer.subscription.deleted"
+    ) {
+        const subscription = event.data.object as Stripe.Subscription;
+        const customerId = subscription.customer as string;
+        const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
+        const user_id = customer.metadata?.user_id;
 
-    if (event.type === "checkout.session.completed") {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const user_id = session.metadata?.user_id; // GARANTA QUE ENVIARÁ user_id NO CHECKOUT!
-
-        console.log("Metadata recebido:", session.metadata);
-
-        if (user_id) {
-            const { error } = await supabase.from("planos").upsert(
-                {
-                    user_id,
-                    status: "ativo",
-                    proximo_pagamento: session.expires_at
-                        ? new Date(session.expires_at * 1000).toISOString()
-                        : null,
-                },
-                { onConflict: "user_id" }
-            );
-            if (error) {
-                console.error("Erro ao salvar plano:", error);
-            }
-        } else {
-            console.warn("Não veio user_id no metadata do checkout.session.completed!");
+        if (!user_id) {
+            console.warn("Stripe Customer não tem user_id no metadata!", { customerId });
+            return NextResponse.json({ received: true });
         }
+
+        // status = ativo ou inativo
+        let status = "inativo";
+        if (event.type !== "customer.subscription.deleted" && subscription.status === "active") {
+            status = "ativo";
+        }
+
+        await supabase.from("planos").upsert(
+            {
+                user_id,
+                status,
+                stripe_customer_id: customerId,
+                stripe_subscription_id: subscription.id,
+                proximo_pagamento: (subscription as any).current_period_end
+                    ? new Date((subscription as any).current_period_end * 1000).toISOString()
+                    : null,
+            },
+            { onConflict: "user_id" }
+        );
     }
 
-    if (event.type === "customer.subscription.deleted") {
-        const subscription = event.data.object as Stripe.Subscription;
-        const user_id = subscription.metadata?.user_id;
-
-        if (user_id) {
-            const { error } = await supabase
-                .from("planos")
-                .update({
-                    status: "inativo",
-                })
-                .eq("user_id", user_id);
-            if (error) {
-                console.error("Erro ao atualizar plano:", error);
-            }
-        } else {
-            console.warn("Não veio user_id no metadata do customer.subscription.deleted!");
-        }
+    // Só para debug/log
+    if (event.type === "checkout.session.completed") {
+        const session = event.data.object as Stripe.Checkout.Session;
+        console.log("checkout.session.completed recebido!", session.id, session.metadata);
     }
 
     return NextResponse.json({ received: true }, { status: 200 });
