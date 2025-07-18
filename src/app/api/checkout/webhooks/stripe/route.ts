@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { supabase } from "@/lib/supabaseClient";
+import { createClient } from "@supabase/supabase-js";
+
+// *** NÃO exponha essa key! Deixe ela só no .env do backend/server! ***
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
     apiVersion: "2025-06-30.basil",
@@ -23,7 +29,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: err.message }, { status: 400 });
     }
 
-    // 1. Nova assinatura criada ou atualizada
+    // ASSINATURA CRIADA/ATUALIZADA
     if (
         event.type === "customer.subscription.created" ||
         event.type === "customer.subscription.updated"
@@ -35,7 +41,7 @@ export async function POST(req: NextRequest) {
         const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
         const user_id = customer.metadata?.user_id;
 
-        // Pega o período final (próximo pagamento) de forma segura
+        // Pega o período final (próximo pagamento)
         const currentPeriodEnd = (subscription as any).current_period_end as number | undefined;
         const proximo_pagamento = currentPeriodEnd
             ? new Date(currentPeriodEnd * 1000).toISOString()
@@ -62,7 +68,7 @@ export async function POST(req: NextRequest) {
         }
     }
 
-    // 2. Assinatura cancelada
+    // ASSINATURA CANCELADA
     if (event.type === "customer.subscription.deleted") {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
@@ -86,7 +92,7 @@ export async function POST(req: NextRequest) {
         }
     }
 
-    // Só loga para debug (opcional)
+    // DEBUG opcional
     if (event.type === "checkout.session.completed") {
         const session = event.data.object as Stripe.Checkout.Session;
         console.log("checkout.session.completed", session.id, session.metadata);
