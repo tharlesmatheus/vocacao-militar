@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // 4. Crie a sessão de checkout com o customer
+        // 4. Crie a sessão de checkout com o customer E o metadata!
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             mode: "subscription",
@@ -46,6 +46,8 @@ export async function POST(req: NextRequest) {
                     quantity: 1,
                 },
             ],
+            // 👇 ISSO É FUNDAMENTAL!
+            metadata: { user_id: userId },
             success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/plano?success=1`,
             cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/plano?canceled=1`,
         });
