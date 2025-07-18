@@ -16,7 +16,6 @@ export default function PlanoPage() {
     const [proximoPagamento, setProximoPagamento] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
-    // Pega status real do backend (Supabase)
     useEffect(() => {
         async function fetchPlano() {
             const { data: { user } } = await supabase.auth.getUser();
@@ -30,13 +29,12 @@ export default function PlanoPage() {
             if (data) {
                 setStatus(data.status as PlanoStatus);
                 setProximoPagamento(data.proximo_pagamento);
-                // Se quiser exibir método de pagamento, adapte!
             }
         }
         fetchPlano();
     }, []);
 
-    // Stripe Checkout integrado com sua API
+    // Checkout Stripe
     async function handleCheckout() {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
@@ -58,16 +56,55 @@ export default function PlanoPage() {
         const { url, error: apiError } = await resp.json();
         setLoading(false);
         if (url) {
-            window.location.href = url; // Redireciona para Stripe
+            window.location.href = url;
         } else {
             alert("Erro ao criar checkout: " + (apiError || "Erro desconhecido"));
         }
     }
 
-    function handleCancelar() {
-        alert("Cancelar assinatura: implemente integração real aqui!");
-        // Aqui você chamaria sua API para cancelar assinatura (em produção).
-        setStatus("inativo");
+    // Billing Portal Stripe (alterar/cadastrar cartão)
+    async function handleBillingPortal() {
+        setLoading(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            alert("Faça login!");
+            setLoading(false);
+            return;
+        }
+        const resp = await fetch("/api/stripe/portal", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id }),
+        });
+        const { url, error } = await resp.json();
+        setLoading(false);
+        if (url) window.location.href = url;
+        else alert("Erro ao abrir portal: " + (error || "Erro desconhecido"));
+    }
+
+    // Cancelar assinatura Stripe
+    async function handleCancelar() {
+        if (!confirm("Tem certeza que deseja cancelar seu plano?")) return;
+        setLoading(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            alert("Faça login!");
+            setLoading(false);
+            return;
+        }
+        const resp = await fetch("/api/stripe/cancel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id }),
+        });
+        const { success, error } = await resp.json();
+        setLoading(false);
+        if (success) {
+            alert("Plano cancelado! Você manterá acesso até o fim do período já pago.");
+            setStatus("inativo");
+        } else {
+            alert("Erro ao cancelar: " + (error || "Erro desconhecido"));
+        }
     }
 
     return (
@@ -132,11 +169,11 @@ export default function PlanoPage() {
                                 Método de Pagamento
                             </div>
                             <div className="text-sm text-[#232939] mb-2">
-                                {/* Aqui, mostrar cartão real do usuário, se desejar (ex: Stripe Billing portal) */}
                                 {status === "ativo" ? "Cartão de Crédito •••• 1234" : "Nenhum cadastrado"}
                             </div>
                             <button className="bg-[#6a88d7] hover:bg-[#5272b4] text-white px-4 py-2 rounded-lg font-semibold text-sm shadow border border-[#6a88d7] transition w-full"
-                                onClick={() => alert("Integração para alterar/cadastrar cartão! (Stripe Billing Portal)")}
+                                onClick={handleBillingPortal}
+                                disabled={loading}
                             >
                                 {status === "ativo" ? "Alterar" : "Cadastrar"}
                             </button>
@@ -148,6 +185,7 @@ export default function PlanoPage() {
                                 <button
                                     className="block w-full rounded-lg bg-red-50 text-red-500 font-bold px-4 py-2 border border-red-200 hover:bg-red-100 transition text-sm"
                                     onClick={handleCancelar}
+                                    disabled={loading}
                                 >
                                     Cancelar Plano
                                 </button>
