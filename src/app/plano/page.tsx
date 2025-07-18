@@ -1,28 +1,73 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Star, CheckCircle, CreditCard } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 
-type PlanoStatus = "ativo" | "inativo" | "pendente"; // status do usuário
+type PlanoStatus = "ativo" | "inativo" | "pendente";
+
+interface PlanoInfo {
+    status: PlanoStatus;
+    proximo_pagamento: string | null;
+    metodo_pagamento?: string | null;
+}
 
 export default function PlanoPage() {
-    // Mock: substitua por dados vindos do backend
     const [status, setStatus] = useState<PlanoStatus>("inativo");
+    const [proximoPagamento, setProximoPagamento] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
-    // Simulação de checkout: troque por integração real!
+    // Pega status real do backend (Supabase)
+    useEffect(() => {
+        async function fetchPlano() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const { data, error } = await supabase
+                .from("planos")
+                .select("*")
+                .eq("user_id", user.id)
+                .single();
+
+            if (data) {
+                setStatus(data.status as PlanoStatus);
+                setProximoPagamento(data.proximo_pagamento);
+                // Se quiser exibir método de pagamento, adapte!
+            }
+        }
+        fetchPlano();
+    }, []);
+
+    // Stripe Checkout integrado com sua API
     async function handleCheckout() {
         setLoading(true);
-        setTimeout(() => {
-            alert("Integrar com Stripe/MercadoPago/Pix aqui!");
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            alert("Faça login para assinar!");
             setLoading(false);
-        }, 1200);
+            return;
+        }
+
+        const resp = await fetch("/api/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                userId: user.id,
+                email: user.email,
+            }),
+        });
+
+        const { url, error: apiError } = await resp.json();
+        setLoading(false);
+        if (url) {
+            window.location.href = url; // Redireciona para Stripe
+        } else {
+            alert("Erro ao criar checkout: " + (apiError || "Erro desconhecido"));
+        }
     }
 
-    // Simulação de cancelar: troque por chamada de API real
     function handleCancelar() {
-        if (window.confirm("Tem certeza que deseja cancelar sua assinatura?")) {
-            setStatus("inativo");
-        }
+        alert("Cancelar assinatura: implemente integração real aqui!");
+        // Aqui você chamaria sua API para cancelar assinatura (em produção).
+        setStatus("inativo");
     }
 
     return (
@@ -30,7 +75,7 @@ export default function PlanoPage() {
             <div className="bg-white rounded-2xl shadow border border-[#E3E8F3] px-6 py-7 flex flex-col gap-5 relative transition">
                 {/* Selo de status */}
                 <span className={`absolute top-5 right-6 flex items-center gap-2 rounded-full px-4 py-1 shadow-sm font-bold text-xs
-            ${status === "ativo"
+                    ${status === "ativo"
                         ? "bg-green-100 border border-green-200 text-green-600"
                         : status === "pendente"
                             ? "bg-yellow-100 border border-yellow-300 text-yellow-600"
@@ -71,7 +116,9 @@ export default function PlanoPage() {
                                 Próximo Pagamento
                             </div>
                             <div className="text-2xl font-bold mb-2 text-[#232939]">
-                                {status === "ativo" ? "15/08/2024" : "—"}
+                                {status === "ativo" && proximoPagamento
+                                    ? new Date(proximoPagamento).toLocaleDateString("pt-BR")
+                                    : "—"}
                             </div>
                             <div className="text-sm text-[#7b8bb0]">Valor: <b>R$ 7,00</b>/mês</div>
                         </div>
@@ -85,11 +132,12 @@ export default function PlanoPage() {
                                 Método de Pagamento
                             </div>
                             <div className="text-sm text-[#232939] mb-2">
-                                {/* Aqui, mostrar cartão real do usuário */}
+                                {/* Aqui, mostrar cartão real do usuário, se desejar (ex: Stripe Billing portal) */}
                                 {status === "ativo" ? "Cartão de Crédito •••• 1234" : "Nenhum cadastrado"}
                             </div>
                             <button className="bg-[#6a88d7] hover:bg-[#5272b4] text-white px-4 py-2 rounded-lg font-semibold text-sm shadow border border-[#6a88d7] transition w-full"
-                                onClick={() => alert("Integração para alterar cartão")}>
+                                onClick={() => alert("Integração para alterar/cadastrar cartão! (Stripe Billing Portal)")}
+                            >
                                 {status === "ativo" ? "Alterar" : "Cadastrar"}
                             </button>
                         </div>
