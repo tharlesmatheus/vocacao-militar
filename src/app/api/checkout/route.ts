@@ -10,25 +10,42 @@ export async function POST(req: NextRequest) {
     try {
         const { userId, email } = await req.json();
 
-        // Validação básica
         if (!userId || !email) {
             return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
         }
 
-        // Cria a sessão de checkout Stripe
+        // 1. Buscar cliente Stripe existente
+        let customers = await stripe.customers.list({
+            email,
+            limit: 1
+        });
+
+        let customer: Stripe.Customer | undefined = customers.data[0];
+
+        if (!customer) {
+            // 2. Se não existe, criar (com o user_id no metadata!)
+            customer = await stripe.customers.create({
+                email,
+                metadata: { user_id: userId }
+            });
+        } else if (customer.metadata?.user_id !== userId) {
+            // 3. Se existe mas sem metadata correta, atualize
+            await stripe.customers.update(customer.id, {
+                metadata: { user_id: userId }
+            });
+        }
+
+        // 4. Crie a sessão de checkout com o customer
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             mode: "subscription",
-            customer_email: email,
+            customer: customer.id,
             line_items: [
                 {
                     price: process.env.STRIPE_PRICE_ID!,
                     quantity: 1,
                 },
             ],
-            metadata: {
-                user_id: userId, // use snake_case
-            },
             success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/plano?success=1`,
             cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/plano?canceled=1`,
         });
