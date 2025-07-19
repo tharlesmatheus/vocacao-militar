@@ -17,13 +17,12 @@ interface QuestionCardProps {
     onNovoComentario?: (comentario: string) => void;
 }
 
-// Função para atualizar estatísticas do aluno
+// Função para atualizar estatísticas do aluno (sem o campo "acertos")
 async function atualizarEstatisticasQuestao(acertou: boolean) {
-    // 1. Pega o usuário logado
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return; // não logado, não faz nada
+    if (!user) return;
 
-    // 2. Busca estatísticas atuais
+    // Busca estatísticas atuais
     const { data, error } = await supabase
         .from("estatisticas")
         .select("*")
@@ -31,27 +30,30 @@ async function atualizarEstatisticasQuestao(acertou: boolean) {
         .single();
 
     if (error || !data) {
-        // Se não existe ainda, cria com os dados iniciais
-        await supabase.from("estatisticas").insert({
+        // Cria novo registro caso não exista
+        await supabase.from("estatisticas").insert([{
             user_id: user.id,
             questoes_respondidas: 1,
             taxa_acerto: acertou ? 100 : 0,
-            acertos: acertou ? 1 : 0,
+            tempo_estudado: "00:00:00", // ou deixe sem enviar se quiser
             progresso_semanal: [
                 { dia: new Date().toLocaleDateString("pt-BR"), questoes: 1 }
-            ]
-        });
+            ],
+            atualizado_em: new Date().toISOString(),
+        }]);
         return;
     }
 
-    // 3. Atualiza os dados
+    // Calcula novos valores
     const novasQuestoes = (data.questoes_respondidas ?? 0) + 1;
-    const novosAcertos = (data.acertos ?? 0) + (acertou ? 1 : 0);
+    // Calcula quantos acertos existiam (baseado na taxa_acerto antiga)
+    const acertosAnteriores = Math.round((data.taxa_acerto ?? 0) / 100 * (data.questoes_respondidas ?? 0));
+    const novosAcertos = acertosAnteriores + (acertou ? 1 : 0);
     const taxa_acerto = Math.round((novosAcertos / novasQuestoes) * 100);
 
     // Atualiza progresso semanal
     const hoje = new Date().toLocaleDateString("pt-BR");
-    let progresso = data.progresso_semanal || [];
+    let progresso = Array.isArray(data.progresso_semanal) ? [...data.progresso_semanal] : [];
     const idx = progresso.findIndex((d: any) => d.dia === hoje);
     if (idx > -1) {
         progresso[idx].questoes += 1;
@@ -64,8 +66,8 @@ async function atualizarEstatisticasQuestao(acertou: boolean) {
         .update({
             questoes_respondidas: novasQuestoes,
             taxa_acerto,
-            acertos: novosAcertos,
-            progresso_semanal: progresso
+            progresso_semanal: progresso,
+            atualizado_em: new Date().toISOString(),
         })
         .eq("user_id", user.id);
 }
