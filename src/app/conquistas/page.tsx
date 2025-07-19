@@ -43,39 +43,89 @@ type Conquista = {
     compartilhavel?: boolean;
 };
 
+const conquistasPadrao = [
+    { titulo: "Soldado", descricao: "Respondeu 50 questões", tipo: "Comum", xp: 50, progressoMin: 50 },
+    { titulo: "Cabo", descricao: "Respondeu 300 questões", tipo: "Comum", xp: 80, progressoMin: 300 },
+    { titulo: "Terceiro Sargento", descricao: "Respondeu 400 questões", tipo: "Raro", xp: 120, progressoMin: 400 },
+    { titulo: "Segundo Sargento", descricao: "Respondeu 500 questões", tipo: "Raro", xp: 200, progressoMin: 500 },
+    { titulo: "Primeiro Sargento", descricao: "Respondeu 700 questões", tipo: "Raro", xp: 250, progressoMin: 700 },
+    { titulo: "Subtenente", descricao: "Respondeu 900 questões", tipo: "Épico", xp: 350, progressoMin: 900 },
+    { titulo: "Aspirante", descricao: "Respondeu 1200 questões", tipo: "Épico", xp: 500, progressoMin: 1200 },
+    { titulo: "Segundo Tenente", descricao: "Respondeu 1500 questões", tipo: "Épico", xp: 700, progressoMin: 1500 },
+    { titulo: "Primeiro Tenente", descricao: "Respondeu 1800 questões", tipo: "Épico", xp: 900, progressoMin: 1800 },
+    { titulo: "Capitão", descricao: "Respondeu 2100 questões", tipo: "Lendário", xp: 1200, progressoMin: 2100 },
+    { titulo: "Major", descricao: "Respondeu 2500 questões", tipo: "Lendário", xp: 1600, progressoMin: 2500 },
+    { titulo: "Tenente Coronel", descricao: "Respondeu 3000 questões", tipo: "Lendário", xp: 2200, progressoMin: 3000 },
+    { titulo: "Coronel", descricao: "Respondeu 4000 questões", tipo: "Lendário", xp: 3500, progressoMin: 4000 },
+    { titulo: "General", descricao: "Respondeu 5000 questões", tipo: "Lendário", xp: 5000, progressoMin: 5000 },
+];
+
 export default function ConquistasPage() {
     const [conquistas, setConquistas] = useState<Conquista[]>([]);
+    const [estat, setEstat] = useState<{ questoes_respondidas: number } | null>(null);
     const [copied, setCopied] = useState<number | null>(null);
     const cardRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
+    // Carrega estatísticas
     useEffect(() => {
-        async function fetchConquistas() {
-            // 1. Pega usuário logado
+        async function fetchEstatisticas() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
-            // 2. Busca conquistas desse usuário
+            const { data } = await supabase
+                .from("estatisticas")
+                .select("*")
+                .eq("user_id", user.id)
+                .single();
+            setEstat(data ? { questoes_respondidas: data.questoes_respondidas } : null);
+        }
+        fetchEstatisticas();
+    }, []);
+
+    // Checa e cria conquistas, depois carrega todas para exibir
+    useEffect(() => {
+        async function checkAndCreateConquistas() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user || !estat) return;
+            // Busca conquistas já conquistadas
+            const { data: conquistasExistentes } = await supabase
+                .from("conquistas")
+                .select("titulo")
+                .eq("user_id", user.id);
+            const titulos = (conquistasExistentes ?? []).map(c => c.titulo);
+
+            for (const c of conquistasPadrao) {
+                if (estat.questoes_respondidas >= c.progressoMin && !titulos.includes(c.titulo)) {
+                    await supabase.from("conquistas").insert([{
+                        user_id: user.id,
+                        titulo: c.titulo,
+                        descricao: c.descricao,
+                        tipo: c.tipo,
+                        xp: c.xp,
+                        progresso: 100,
+                        conquistada_em: new Date().toISOString(),
+                        compartilhavel: true
+                    }]);
+                }
+            }
+            // Agora busca todas as conquistas para exibir
             const { data } = await supabase
                 .from("conquistas")
                 .select("*")
                 .eq("user_id", user.id)
                 .order("xp", { ascending: true });
-
             setConquistas(data ?? []);
         }
-        fetchConquistas();
-    }, []);
+        if (estat) checkAndCreateConquistas();
+    }, [estat]);
 
     async function handleCompartilhar(conquista: Conquista) {
         const ref = cardRefs.current[conquista.id];
         if (ref) {
-            // 1. Tira print do card
             const canvas = await html2canvas(ref);
             const imgData = canvas.toDataURL("image/png");
-            // 2. Cria blob (necessário para compartilhar)
             const res = await fetch(imgData);
             const blob = await res.blob();
 
-            // 3. Tenta compartilhar imagem (Web Share API Level 2)
             if (
                 navigator.canShare &&
                 navigator.canShare({ files: [new File([blob], "conquista.png", { type: "image/png" })] })
@@ -85,11 +135,8 @@ export default function ConquistasPage() {
                         files: [new File([blob], "conquista.png", { type: "image/png" })],
                         text: `Conheça a melhor plataforma de questões comentadas para carreiras policiais: https://vocacaomilitar.com.br`,
                     });
-                } catch (err) {
-                    // usuário cancelou ou erro
-                }
+                } catch (err) { }
             } else {
-                // fallback: faz download da imagem + copia texto para compartilhar
                 const link = document.createElement("a");
                 link.href = imgData;
                 link.download = "conquista.png";
@@ -112,7 +159,6 @@ export default function ConquistasPage() {
                         ref={el => { cardRefs.current[c.id] = el; }}
                         className={`relative bg-white border border-[#E3E8F3] rounded-2xl shadow-sm flex flex-col items-center px-6 py-8 hover:shadow-md hover:border-[#b7c6de] transition-all`}
                     >
-                        {/* Medalha verde de conquistado */}
                         {c.progresso === 100 && (
                             <span className="absolute top-3 right-3 bg-green-500 text-white rounded-full p-1 shadow text-xs">
                                 <Trophy className="w-5 h-5" />
@@ -131,7 +177,6 @@ export default function ConquistasPage() {
                                 +{c.xp} XP
                             </span>
                         </div>
-                        {/* Barra de progresso */}
                         {c.progresso < 100 && (
                             <>
                                 <div className="w-full text-xs text-[#a1aac7] mb-1 text-center">Progresso</div>
