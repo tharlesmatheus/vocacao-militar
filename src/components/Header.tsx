@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../lib/supabaseClient"; // ajuste se necessário
+import { supabase } from "../lib/supabaseClient"; // ajuste o caminho se necessário
 
 export function Header() {
     const [menuAberto, setMenuAberto] = useState(false);
@@ -23,7 +23,7 @@ export function Header() {
 
     async function logout() {
         await supabase.auth.signOut();
-        router.push("/login"); // ajuste para a sua rota de login
+        router.push("/auth"); // redireciona para /auth dentro do app
     }
 
     return (
