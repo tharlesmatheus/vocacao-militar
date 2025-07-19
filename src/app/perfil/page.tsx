@@ -15,7 +15,6 @@ export default function PerfilPage() {
     const [msg, setMsg] = useState("");
     const [loading, setLoading] = useState(true);
 
-    // Carrega dados do usuário ao abrir página
     useEffect(() => {
         async function fetchUser() {
             setLoading(true);
@@ -23,7 +22,7 @@ export default function PerfilPage() {
             if (user) {
                 setNome(user.user_metadata?.nome ?? "");
                 setEmail(user.email ?? "");
-                setTelefone(user.phone ?? user.user_metadata?.telefone ?? "");
+                setTelefone(user.user_metadata?.telefone ?? "");
                 setCriadoEm(
                     user.created_at
                         ? new Date(user.created_at).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
@@ -40,11 +39,8 @@ export default function PerfilPage() {
         setMsg("");
         setLoading(true);
 
-        // Atualiza nome/telefone no user_metadata
-        const updates: any = { data: { nome, telefone } };
-
-        // Atualiza telefone raiz (caso usuário queira receber código via SMS etc)
-        if (telefone) updates.phone = telefone;
+        // Atualiza nome/telefone só no user_metadata!
+        const updates = { data: { nome, telefone } };
 
         const { error } = await supabase.auth.updateUser(updates);
         if (error) {
@@ -54,7 +50,7 @@ export default function PerfilPage() {
         }
 
         // Atualiza senha se informado
-        if (senhaAtual && novaSenha) {
+        if (novaSenha) {
             const { error: errSenha } = await supabase.auth.updateUser({ password: novaSenha });
             if (errSenha) {
                 setMsg("Erro ao atualizar senha: " + errSenha.message);
@@ -150,6 +146,7 @@ export default function PerfilPage() {
                         <label className="block text-sm font-medium text-[#425179] dark:text-[#b1bad3] mb-1 flex items-center gap-2">
                             <Lock className="w-4 h-4" /> Trocar Senha
                         </label>
+                        {/* Senha atual (opcional, pode esconder se quiser) */}
                         <input
                             type="password"
                             placeholder="Senha atual (não obrigatório)"
@@ -157,6 +154,7 @@ export default function PerfilPage() {
                             value={senhaAtual}
                             onChange={e => setSenhaAtual(e.target.value)}
                             autoComplete="current-password"
+                            disabled={loading}
                         />
                         <input
                             type="password"
@@ -165,6 +163,7 @@ export default function PerfilPage() {
                             value={novaSenha}
                             onChange={e => setNovaSenha(e.target.value)}
                             autoComplete="new-password"
+                            disabled={loading}
                         />
                     </div>
                 )}
