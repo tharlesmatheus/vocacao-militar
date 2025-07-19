@@ -14,6 +14,7 @@ export default function PerfilPage() {
     const [novaSenha, setNovaSenha] = useState("");
     const [msg, setMsg] = useState("");
     const [loading, setLoading] = useState(true);
+    const [isGoogleUser, setIsGoogleUser] = useState(false);
 
     useEffect(() => {
         async function fetchUser() {
@@ -27,6 +28,9 @@ export default function PerfilPage() {
                     user.created_at
                         ? new Date(user.created_at).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
                         : ""
+                );
+                setIsGoogleUser(
+                    user.app_metadata?.provider === "google"
                 );
             }
             setLoading(false);
@@ -49,8 +53,8 @@ export default function PerfilPage() {
             return;
         }
 
-        // Atualiza senha se informado
-        if (novaSenha) {
+        // Atualiza senha se informado e se NÃO for Google user
+        if (!isGoogleUser && novaSenha) {
             const { error: errSenha } = await supabase.auth.updateUser({ password: novaSenha });
             if (errSenha) {
                 setMsg("Erro ao atualizar senha: " + errSenha.message);
@@ -140,13 +144,13 @@ export default function PerfilPage() {
                         autoComplete="tel"
                     />
                 </div>
-                {/* Troca de Senha */}
-                {editando && (
+                {/* Troca de Senha (apenas se NÃO for Google) */}
+                {!isGoogleUser && editando && (
                     <div className="mb-3">
                         <label className="block text-sm font-medium text-[#425179] dark:text-[#b1bad3] mb-1 flex items-center gap-2">
                             <Lock className="w-4 h-4" /> Trocar Senha
                         </label>
-                        {/* Senha atual (opcional, pode esconder se quiser) */}
+                        {/* Senha atual (opcional) */}
                         <input
                             type="password"
                             placeholder="Senha atual (não obrigatório)"
@@ -165,6 +169,13 @@ export default function PerfilPage() {
                             autoComplete="new-password"
                             disabled={loading}
                         />
+                    </div>
+                )}
+                {/* AVISO PARA USUÁRIO GOOGLE */}
+                {isGoogleUser && editando && (
+                    <div className="mb-3 text-sm text-[#e2735e]">
+                        Usuários Google não podem alterar senha neste painel.<br />
+                        A alteração de senha só pode ser feita na conta Google.
                     </div>
                 )}
                 {/* Salvar */}
