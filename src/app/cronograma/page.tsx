@@ -1,6 +1,8 @@
 "use client";
-import React, { useState } from "react";
+
+import React, { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 
 const diasDaSemana = [
     { nome: "Segunda", abrev: "Seg" },
@@ -11,6 +13,7 @@ const diasDaSemana = [
     { nome: "Sábado", abrev: "Sáb" },
     { nome: "Domingo", abrev: "Dom" },
 ];
+
 const blocosPadrao = [
     { hora: "08:00 - 09:00" },
     { hora: "09:00 - 10:00" },
@@ -19,14 +22,67 @@ const blocosPadrao = [
 ];
 
 export default function CronogramaSemanalPage() {
-    const [blocos, setBlocos] = useState(
-        blocosPadrao.map((b) => ({
-            hora: b.hora,
-            atividades: Array(7).fill(""),
-        }))
-    );
+    const [blocos, setBlocos] = useState<{ hora: string, atividades: string[] }[]>([]);
     const [edit, setEdit] = useState<{ i: number; j: number } | null>(null);
     const [novoBloco, setNovoBloco] = useState("");
+    const [loading, setLoading] = useState(true);
+    const [msg, setMsg] = useState("");
+    const [cronogramaId, setCronogramaId] = useState<string | null>(null);
+
+    // Carregar cronograma do usuário ao abrir a página
+    useEffect(() => {
+        async function fetchCronograma() {
+            setLoading(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                setLoading(false);
+                return;
+            }
+            const { data, error } = await supabase
+                .from("cronograma")
+                .select("*")
+                .eq("user_id", user.id)
+                .single();
+
+            if (!data || error) {
+                // Se não existir, cria um novo cronograma padrão
+                const blocosInicial = blocosPadrao.map(b => ({
+                    hora: b.hora,
+                    atividades: Array(7).fill(""),
+                }));
+                const { data: criado } = await supabase
+                    .from("cronograma")
+                    .insert({
+                        user_id: user.id,
+                        blocos: blocosInicial,
+                    })
+                    .select("*")
+                    .single();
+                setBlocos(criado?.blocos ?? blocosInicial);
+                setCronogramaId(criado?.id ?? null);
+            } else {
+                setBlocos(data.blocos ?? []);
+                setCronogramaId(data.id);
+            }
+            setLoading(false);
+        }
+        fetchCronograma();
+    }, []);
+
+    // Função para salvar alterações sempre que blocos mudar
+    useEffect(() => {
+        if (!cronogramaId || loading) return;
+        async function salvar() {
+            setMsg("Salvando...");
+            await supabase
+                .from("cronograma")
+                .update({ blocos, atualizado_em: new Date().toISOString() })
+                .eq("id", cronogramaId);
+            setMsg("Cronograma salvo!");
+            setTimeout(() => setMsg(""), 1200);
+        }
+        salvar();
+    }, [blocos, cronogramaId, loading]);
 
     function handleCellEdit(i: number, j: number, value: string) {
         setBlocos((prev) => {
@@ -57,21 +113,19 @@ export default function CronogramaSemanalPage() {
                     value={novoBloco}
                     onChange={e => setNovoBloco(e.target.value)}
                     maxLength={20}
+                    disabled={loading}
                 />
                 <button
                     className="flex items-center gap-2 bg-[#6a88d7] hover:bg-[#5272b4] text-white font-bold px-4 py-2 rounded-lg text-sm shadow transition"
                     onClick={handleAddBloco}
+                    disabled={loading}
                 >
                     <Plus className="w-4 h-4" /> Adicionar Bloco
                 </button>
             </div>
-
-            {/* SUGESTÃO: Aviso de rolagem em mobile */}
             <div className="sm:hidden text-center text-[13px] text-[#a0a8bc] mb-1 -mt-3">
                 Arraste a tabela para o lado →
             </div>
-
-            {/* Tabela responsiva com scroll horizontal */}
             <div className="w-full overflow-x-auto rounded-2xl border border-[#e3e8f3] shadow bg-white scrollbar-thin scrollbar-thumb-[#cdd3eb] scrollbar-track-transparent">
                 <table className="min-w-[700px] sm:min-w-full text-xs sm:text-sm">
                     <thead>
@@ -133,12 +187,12 @@ export default function CronogramaSemanalPage() {
                                         )}
                                     </td>
                                 ))}
-                                {/* Remove linha */}
                                 <td className="pl-1 pr-1 text-center align-middle rounded-r-2xl">
                                     <button
                                         className="bg-red-50 hover:bg-red-100 border border-red-100 text-red-400 rounded p-1 transition"
                                         title="Remover Bloco"
                                         onClick={() => handleRemoveBloco(i)}
+                                        disabled={loading}
                                     >
                                         <Trash2 size={15} />
                                     </button>
@@ -148,10 +202,10 @@ export default function CronogramaSemanalPage() {
                     </tbody>
                 </table>
             </div>
-
             <div className="text-xs text-[#7b8bb0] mt-1 ml-1">
-                Toque/click nas células para editar. Suas alterações ficam salvas enquanto o navegador estiver aberto.
+                Toque/click nas células para editar. Suas alterações são salvas automaticamente!
             </div>
+            {msg && <div className="text-center text-green-600 mt-2">{msg}</div>}
         </div>
     );
 }
