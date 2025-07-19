@@ -17,6 +17,59 @@ interface QuestionCardProps {
     onNovoComentario?: (comentario: string) => void;
 }
 
+// Função para atualizar estatísticas do aluno
+async function atualizarEstatisticasQuestao(acertou: boolean) {
+    // 1. Pega o usuário logado
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return; // não logado, não faz nada
+
+    // 2. Busca estatísticas atuais
+    const { data, error } = await supabase
+        .from("estatisticas")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
+
+    if (error || !data) {
+        // Se não existe ainda, cria com os dados iniciais
+        await supabase.from("estatisticas").insert({
+            user_id: user.id,
+            questoes_respondidas: 1,
+            taxa_acerto: acertou ? 100 : 0,
+            acertos: acertou ? 1 : 0,
+            progresso_semanal: [
+                { dia: new Date().toLocaleDateString("pt-BR"), questoes: 1 }
+            ]
+        });
+        return;
+    }
+
+    // 3. Atualiza os dados
+    const novasQuestoes = (data.questoes_respondidas ?? 0) + 1;
+    const novosAcertos = (data.acertos ?? 0) + (acertou ? 1 : 0);
+    const taxa_acerto = Math.round((novosAcertos / novasQuestoes) * 100);
+
+    // Atualiza progresso semanal
+    const hoje = new Date().toLocaleDateString("pt-BR");
+    let progresso = data.progresso_semanal || [];
+    const idx = progresso.findIndex((d: any) => d.dia === hoje);
+    if (idx > -1) {
+        progresso[idx].questoes += 1;
+    } else {
+        progresso.push({ dia: hoje, questoes: 1 });
+    }
+
+    await supabase
+        .from("estatisticas")
+        .update({
+            questoes_respondidas: novasQuestoes,
+            taxa_acerto,
+            acertos: novosAcertos,
+            progresso_semanal: progresso
+        })
+        .eq("user_id", user.id);
+}
+
 export function QuestionCard({
     id,
     tags,
@@ -49,24 +102,15 @@ export function QuestionCard({
 
     // Função de compartilhamento
     const compartilharQuestao = () => {
-        // Monta o texto de compartilhamento
         const texto =
-            `${statement}
-
-${options.map(opt => `${opt.letter}) ${opt.text}`).join('\n')}
-
-Conheça a melhor plataforma de questões comentadas para concursos policiais:
-`;
-
+            `${statement}\n\n${options.map(opt => `${opt.letter}) ${opt.text}`).join('\n')}\n\nConheça a melhor plataforma de questões comentadas para concursos policiais:\n`;
         if (navigator.share) {
-            // Usa a API Web Share se disponível
             navigator.share({
                 title: "Questão para Concursos Policiais",
                 text: texto,
                 url: "https://vocacaomilitar.com.br"
             });
         } else {
-            // Fallback: copia o texto para área de transferência
             navigator.clipboard.writeText(texto);
             alert("Texto copiado para a área de transferência!");
         }
@@ -185,7 +229,12 @@ Conheça a melhor plataforma de questões comentadas para concursos policiais:
             <div className="flex flex-wrap gap-2 mb-4">
                 <button
                     className="bg-[#6a88d7] hover:bg-[#5272b4] text-white font-bold py-2 px-5 rounded-xl text-sm transition"
-                    onClick={() => setShowResult(true)}
+                    onClick={async () => {
+                        setShowResult(true);
+                        if (selected) {
+                            await atualizarEstatisticasQuestao(selected === correct);
+                        }
+                    }}
                     disabled={!selected || showResult}
                 >
                     Conferir Resposta
