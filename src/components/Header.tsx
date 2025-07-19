@@ -1,13 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabaseClient"; // ajuste o caminho se precisar
+import { useRouter } from "next/navigation";
+import { supabase } from "../lib/supabaseClient"; // ajuste se necessário
 
 export function Header() {
     const [menuAberto, setMenuAberto] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
-    const navigate = useNavigate();
+    const router = useRouter();
 
-    // Fecha o menu ao clicar fora
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -24,7 +23,7 @@ export function Header() {
 
     async function logout() {
         await supabase.auth.signOut();
-        navigate("/login"); // ajuste se sua rota de login for diferente
+        router.push("/login"); // ajuste para a sua rota de login
     }
 
     return (
@@ -36,7 +35,6 @@ export function Header() {
                 <span className="text-sm md:text-base font-medium text-[#232939]/80 font-sans">
                     Bem-vindo, Candidato!
                 </span>
-                {/* Avatar com menu de logout */}
                 <div className="relative" ref={menuRef}>
                     <button
                         className="w-9 h-9 rounded-full bg-[#dde3ef] flex items-center justify-center font-bold text-[#232939] text-base focus:outline-none"
