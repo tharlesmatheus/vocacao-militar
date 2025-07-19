@@ -4,8 +4,21 @@ import { supabase } from "../lib/supabaseClient"; // ajuste o caminho se necess�
 
 export function Header() {
     const [menuAberto, setMenuAberto] = useState(false);
+    const [aluno, setAluno] = useState<string | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
+
+    // Buscar nome do aluno ao carregar o componente
+    useEffect(() => {
+        async function fetchAluno() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                // Ajuste a chave caso use outro campo
+                setAluno(user.user_metadata?.nome || user.user_metadata?.name || user.email);
+            }
+        }
+        fetchAluno();
+    }, []);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -23,17 +36,14 @@ export function Header() {
 
     async function logout() {
         await supabase.auth.signOut();
-        router.push("/auth"); // redireciona para /auth dentro do app
+        router.push("/auth");
     }
 
     return (
-        <header className="w-full px-4 md:px-8 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
-            <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold font-sans text-[#232939]">
-                Vocação Militar
-            </h1>
+        <header className="w-full px-4 md:px-8 py-4 border-b border-gray-200 bg-white flex items-center justify-end">
             <div className="flex items-center gap-3 md:gap-6">
                 <span className="text-sm md:text-base font-medium text-[#232939]/80 font-sans">
-                    Bem-vindo, Candidato!
+                    {aluno ? `Bem-vindo, ${aluno}!` : "Bem-vindo!"}
                 </span>
                 <div className="relative" ref={menuRef}>
                     <button
