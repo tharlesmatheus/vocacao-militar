@@ -75,11 +75,11 @@ export default function PerfilPage() {
         <div className="w-full max-w-2xl mx-auto px-2 sm:px-4 md:px-8 py-8 flex flex-col gap-6">
             <form
                 onSubmit={handleSalvar}
-                className="bg-white dark:bg-[#181F2C] rounded-2xl border border-[#E3E8F3] dark:border-[#232939] p-6 flex flex-col relative shadow"
+                className="bg-white rounded-2xl border border-[#E3E8F3] p-6 flex flex-col relative shadow"
             >
                 <div className="flex items-center mb-6 gap-2">
                     <User2 className="w-6 h-6 text-[#6a88d7]" />
-                    <h2 className="font-bold text-lg text-[#232939] dark:text-white">
+                    <h2 className="font-bold text-lg text-[#232939]">
                         Informações Pessoais
                     </h2>
                     <button
@@ -94,24 +94,24 @@ export default function PerfilPage() {
 
                 {/* Membro desde */}
                 <div className="mb-3">
-                    <label className="block text-sm font-medium text-[#425179] dark:text-[#b1bad3] mb-1">
+                    <label className="block text-sm font-medium text-[#425179] mb-1">
                         Membro desde
                     </label>
                     <input
                         type="text"
-                        className="w-full px-3 py-2 rounded-lg bg-[#f5f7fa] dark:bg-[#23293a] border border-[#E3E8F3] dark:border-[#353a50] text-[#232939] dark:text-white outline-none text-sm font-medium transition"
+                        className="w-full px-3 py-2 rounded-lg bg-[#f5f7fa] border border-[#E3E8F3] text-[#232939] outline-none text-sm font-medium transition"
                         value={criadoEm}
                         disabled
                     />
                 </div>
                 {/* Nome */}
                 <div className="mb-3">
-                    <label className="block text-sm font-medium text-[#425179] dark:text-[#b1bad3] mb-1">
+                    <label className="block text-sm font-medium text-[#425179] mb-1">
                         Nome Completo
                     </label>
                     <input
                         type="text"
-                        className="w-full px-3 py-2 rounded-lg bg-[#f5f7fa] dark:bg-[#23293a] border border-[#E3E8F3] dark:border-[#353a50] text-[#232939] dark:text-white outline-none focus:ring-2 focus:ring-[#6a88d7] text-sm font-medium transition"
+                        className="w-full px-3 py-2 rounded-lg bg-[#f5f7fa] border border-[#E3E8F3] text-[#232939] outline-none focus:ring-2 focus:ring-[#6a88d7] text-sm font-medium transition"
                         value={nome}
                         onChange={e => setNome(e.target.value)}
                         disabled={!editando || loading}
@@ -120,24 +120,24 @@ export default function PerfilPage() {
                 </div>
                 {/* Email */}
                 <div className="mb-3">
-                    <label className="block text-sm font-medium text-[#425179] dark:text-[#b1bad3] mb-1">
+                    <label className="block text-sm font-medium text-[#425179] mb-1">
                         Email
                     </label>
                     <input
                         type="email"
-                        className="w-full px-3 py-2 rounded-lg bg-[#f5f7fa] dark:bg-[#23293a] border border-[#E3E8F3] dark:border-[#353a50] text-[#232939] dark:text-white outline-none text-sm font-medium transition"
+                        className="w-full px-3 py-2 rounded-lg bg-[#f5f7fa] border border-[#E3E8F3] text-[#232939] outline-none text-sm font-medium transition"
                         value={email}
                         disabled // Email não pode ser alterado pelo usuário diretamente
                     />
                 </div>
                 {/* Telefone */}
                 <div className="mb-3">
-                    <label className="block text-sm font-medium text-[#425179] dark:text-[#b1bad3] mb-1">
+                    <label className="block text-sm font-medium text-[#425179] mb-1">
                         Telefone
                     </label>
                     <input
                         type="tel"
-                        className="w-full px-3 py-2 rounded-lg bg-[#f5f7fa] dark:bg-[#23293a] border border-[#E3E8F3] dark:border-[#353a50] text-[#232939] dark:text-white outline-none focus:ring-2 focus:ring-[#6a88d7] text-sm font-medium transition"
+                        className="w-full px-3 py-2 rounded-lg bg-[#f5f7fa] border border-[#E3E8F3] text-[#232939] outline-none focus:ring-2 focus:ring-[#6a88d7] text-sm font-medium transition"
                         value={telefone}
                         onChange={e => setTelefone(e.target.value)}
                         disabled={!editando || loading}
@@ -147,14 +147,13 @@ export default function PerfilPage() {
                 {/* Troca de Senha (apenas se NÃO for Google) */}
                 {!isGoogleUser && editando && (
                     <div className="mb-3">
-                        <label className="block text-sm font-medium text-[#425179] dark:text-[#b1bad3] mb-1 flex items-center gap-2">
+                        <label className="block text-sm font-medium text-[#425179] mb-1 flex items-center gap-2">
                             <Lock className="w-4 h-4" /> Trocar Senha
                         </label>
-                        {/* Senha atual (opcional) */}
                         <input
                             type="password"
                             placeholder="Senha atual (não obrigatório)"
-                            className="w-full px-3 py-2 mb-2 rounded-lg bg-[#f5f7fa] dark:bg-[#23293a] border border-[#E3E8F3] dark:border-[#353a50] text-[#232939] dark:text-white outline-none focus:ring-2 focus:ring-[#6a88d7] text-sm font-medium transition"
+                            className="w-full px-3 py-2 mb-2 rounded-lg bg-[#f5f7fa] border border-[#E3E8F3] text-[#232939] outline-none focus:ring-2 focus:ring-[#6a88d7] text-sm font-medium transition"
                             value={senhaAtual}
                             onChange={e => setSenhaAtual(e.target.value)}
                             autoComplete="current-password"
@@ -163,7 +162,7 @@ export default function PerfilPage() {
                         <input
                             type="password"
                             placeholder="Nova senha"
-                            className="w-full px-3 py-2 rounded-lg bg-[#f5f7fa] dark:bg-[#23293a] border border-[#E3E8F3] dark:border-[#353a50] text-[#232939] dark:text-white outline-none focus:ring-2 focus:ring-[#6a88d7] text-sm font-medium transition"
+                            className="w-full px-3 py-2 rounded-lg bg-[#f5f7fa] border border-[#E3E8F3] text-[#232939] outline-none focus:ring-2 focus:ring-[#6a88d7] text-sm font-medium transition"
                             value={novaSenha}
                             onChange={e => setNovaSenha(e.target.value)}
                             autoComplete="new-password"
