@@ -2,14 +2,24 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Trophy, Medal, Share2 } from "lucide-react";
-import html2canvas from "html2canvas";
+import { Trophy, Medal } from "lucide-react";
 
 // Ícones por título
 const iconeMap: Record<string, React.ReactNode> = {
     Soldado: <Medal className="w-10 h-10" style={{ color: "#64748b" }} />,
     Cabo: <Medal className="w-10 h-10" style={{ color: "#22d3ee" }} />,
-    // ...adicione outros conforme necessário
+    "Terceiro Sargento": <Medal className="w-10 h-10" style={{ color: "#a3e635" }} />,
+    "Segundo Sargento": <Medal className="w-10 h-10" style={{ color: "#16a34a" }} />,
+    "Primeiro Sargento": <Medal className="w-10 h-10" style={{ color: "#ea580c" }} />,
+    Subtenente: <Medal className="w-10 h-10" style={{ color: "#fde68a" }} />,
+    Aspirante: <Medal className="w-10 h-10" style={{ color: "#fbbf24" }} />,
+    "Segundo Tenente": <Medal className="w-10 h-10" style={{ color: "#ef4444" }} />,
+    "Primeiro Tenente": <Medal className="w-10 h-10" style={{ color: "#7c3aed" }} />,
+    Capitão: <Medal className="w-10 h-10" style={{ color: "#eab308" }} />,
+    Major: <Medal className="w-10 h-10" style={{ color: "#818cf8" }} />,
+    "Tenente Coronel": <Medal className="w-10 h-10" style={{ color: "#6366f1" }} />,
+    Coronel: <Medal className="w-10 h-10" style={{ color: "#f59e42" }} />,
+    General: <Medal className="w-10 h-10" style={{ color: "#eab308" }} />,
 };
 
 type Conquista = {
@@ -26,15 +36,24 @@ type Conquista = {
 const conquistasPadrao = [
     { titulo: "Soldado", descricao: "Respondeu 50 questões", tipo: "Comum", xp: 50, progressoMin: 50 },
     { titulo: "Cabo", descricao: "Respondeu 300 questões", tipo: "Comum", xp: 80, progressoMin: 300 },
-    // ...adicione as demais
+    { titulo: "Terceiro Sargento", descricao: "Respondeu 400 questões", tipo: "Raro", xp: 120, progressoMin: 400 },
+    { titulo: "Segundo Sargento", descricao: "Respondeu 500 questões", tipo: "Raro", xp: 200, progressoMin: 500 },
+    { titulo: "Primeiro Sargento", descricao: "Respondeu 700 questões", tipo: "Raro", xp: 250, progressoMin: 700 },
+    { titulo: "Subtenente", descricao: "Respondeu 900 questões", tipo: "Épico", xp: 350, progressoMin: 900 },
+    { titulo: "Aspirante", descricao: "Respondeu 1200 questões", tipo: "Épico", xp: 500, progressoMin: 1200 },
+    { titulo: "Segundo Tenente", descricao: "Respondeu 1500 questões", tipo: "Épico", xp: 700, progressoMin: 1500 },
+    { titulo: "Primeiro Tenente", descricao: "Respondeu 1800 questões", tipo: "Épico", xp: 900, progressoMin: 1800 },
+    { titulo: "Capitão", descricao: "Respondeu 2100 questões", tipo: "Lendário", xp: 1200, progressoMin: 2100 },
+    { titulo: "Major", descricao: "Respondeu 2500 questões", tipo: "Lendário", xp: 1600, progressoMin: 2500 },
+    { titulo: "Tenente Coronel", descricao: "Respondeu 3000 questões", tipo: "Lendário", xp: 2200, progressoMin: 3000 },
+    { titulo: "Coronel", descricao: "Respondeu 4000 questões", tipo: "Lendário", xp: 3500, progressoMin: 4000 },
+    { titulo: "General", descricao: "Respondeu 5000 questões", tipo: "Lendário", xp: 5000, progressoMin: 5000 },
 ];
 
 export default function ConquistasPage() {
     const [conquistas, setConquistas] = useState<Conquista[]>([]);
     const [estat, setEstat] = useState<{ questoes_respondidas: number } | null>(null);
     const [userName, setUserName] = useState("");
-    const [copied, setCopied] = useState<number | null>(null);
-    const cardRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
     useEffect(() => {
         async function getNome() {
@@ -92,88 +111,12 @@ export default function ConquistasPage() {
         if (estat) checkAndCreateConquistas();
     }, [estat]);
 
-    // Patch de cor: remove "oklch" antes do print
-    function patchColorsForPrint(ref: HTMLDivElement) {
-        Array.from(ref.querySelectorAll('*')).forEach(el => {
-            const style = window.getComputedStyle(el);
-            if (style.backgroundColor.includes('oklch')) {
-                (el as HTMLElement).style.backgroundColor = "#fff";
-            }
-            if (style.color.includes('oklch')) {
-                (el as HTMLElement).style.color = "#232939";
-            }
-        });
-    }
-
-    async function handleCompartilhar(conquista: Conquista) {
-        const ref = cardRefs.current[conquista.id];
-        if (ref) {
-            // Salva estilos antigos
-            const oldBg = ref.style.background;
-            const oldBorder = ref.style.border;
-            const oldBoxShadow = ref.style.boxShadow;
-
-            // Patching core card for print (garante cor sólida)
-            ref.style.background = "#fff";
-            ref.style.border = "1.5px solid #E3E8F3";
-            ref.style.borderRadius = "18px";
-            ref.style.boxShadow = "0 1px 10px 0 rgba(75,110,204,0.06)";
-            patchColorsForPrint(ref);
-
-            // Esconde botão
-            const btn = ref.querySelector(".btn-compartilhar") as HTMLElement;
-            if (btn) btn.style.display = "none";
-
-            // Faz print
-            const canvas = await html2canvas(ref, {
-                backgroundColor: "#fff",
-                useCORS: true,
-                scale: 2,
-            });
-
-            // Restaura estilos
-            ref.style.background = oldBg;
-            ref.style.border = oldBorder;
-            ref.style.boxShadow = oldBoxShadow;
-            if (btn) btn.style.display = "";
-
-            const imgData = canvas.toDataURL("image/png");
-            const res = await fetch(imgData);
-            const blob = await res.blob();
-            const file = new File([blob], "conquista.png", { type: "image/png" });
-
-            if (
-                navigator.canShare &&
-                navigator.canShare({ files: [file] })
-            ) {
-                try {
-                    await navigator.share({
-                        files: [file],
-                        text: `Conheça a melhor plataforma de questões comentadas para carreiras policiais: https://vocacaomilitar.com.br`,
-                    });
-                } catch (err) { /* usuário cancelou */ }
-            } else {
-                // fallback: download da imagem + cópia de texto
-                const link = document.createElement("a");
-                link.href = imgData;
-                link.download = "conquista.png";
-                link.click();
-                navigator.clipboard.writeText(
-                    `Conheça a melhor plataforma de questões comentadas para carreiras policiais: https://vocacaomilitar.com.br`
-                );
-                setCopied(conquista.id);
-                setTimeout(() => setCopied(null), 2000);
-            }
-        }
-    }
-
     return (
         <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-8 py-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {conquistas.map((c) => (
                     <div
                         key={c.id}
-                        ref={el => { cardRefs.current[c.id] = el; }}
                         className="relative flex flex-col items-center px-7 py-7 bg-white border border-[#E3E8F3] rounded-2xl shadow-sm transition-all"
                         style={{ minWidth: 310, maxWidth: 340, margin: "0 auto" }}
                     >
@@ -198,21 +141,6 @@ export default function ConquistasPage() {
                             <div className="text-xs text-[#a3adc7] mb-0 text-center">
                                 Conquistada em {c.conquistada_em ? new Date(c.conquistada_em).toLocaleDateString("pt-BR") : ""}
                             </div>
-                        )}
-
-                        {/* Botão compartilhar, não aparece no print */}
-                        <button
-                            className="btn-compartilhar w-full border border-blue-400 bg-[#f9fbff] hover:bg-blue-50 text-blue-700 rounded-lg py-2 mt-6 flex items-center justify-center gap-2 font-semibold text-base transition"
-                            style={{
-                                boxShadow: "0 0 0 1.5px #bfd8ff, 0 1px 10px 0 rgba(75,110,204,0.05)"
-                            }}
-                            onClick={() => handleCompartilhar(c)}
-                        >
-                            <Share2 className="w-5 h-5" />
-                            Compartilhar
-                        </button>
-                        {copied === c.id && (
-                            <span className="text-green-600 text-xs mt-2">Imagem copiada/baixada!</span>
                         )}
                     </div>
                 ))}
