@@ -2,13 +2,14 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Trophy, Medal, Share2 } from "lucide-react";
+import { Trophy, Medal, Download } from "lucide-react";
 import html2canvas from "html2canvas";
 
+// Ícones por título
 const iconeMap: Record<string, React.ReactNode> = {
     Soldado: <Medal className="w-10 h-10" style={{ color: "#64748b" }} />,
     Cabo: <Medal className="w-10 h-10" style={{ color: "#22d3ee" }} />,
-    // ...demais cargos
+    // ...adicione os outros títulos e cores conforme necessário
 };
 
 type Conquista = {
@@ -25,14 +26,14 @@ type Conquista = {
 const conquistasPadrao = [
     { titulo: "Soldado", descricao: "Respondeu 50 questões", tipo: "Comum", xp: 50, progressoMin: 50 },
     { titulo: "Cabo", descricao: "Respondeu 300 questões", tipo: "Comum", xp: 80, progressoMin: 300 },
-    // ... etc
+    // ...etc
 ];
 
 export default function ConquistasPage() {
     const [conquistas, setConquistas] = useState<Conquista[]>([]);
     const [estat, setEstat] = useState<{ questoes_respondidas: number } | null>(null);
     const [userName, setUserName] = useState("");
-    const [copied, setCopied] = useState<number | null>(null);
+    const [baixou, setBaixou] = useState<number | null>(null);
     const cardRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
     useEffect(() => {
@@ -97,14 +98,13 @@ export default function ConquistasPage() {
         ref.style.border = "1.5px solid #E3E8F3";
         ref.style.borderRadius = "18px";
         ref.style.boxShadow = "0 1px 10px 0 rgba(75,110,204,0.06)";
-        // Força cor dos badges também (pode adaptar mais se quiser)
         ref.querySelectorAll("span").forEach(el => {
             (el as HTMLElement).style.background = "#f3f5fa";
             (el as HTMLElement).style.color = "#232939";
         });
     }
 
-    async function handleCompartilhar(conquista: Conquista) {
+    async function handleBaixar(conquista: Conquista) {
         const ref = cardRefs.current[conquista.id];
         if (ref) {
             // Salva estilos antigos
@@ -113,9 +113,9 @@ export default function ConquistasPage() {
             const oldBoxShadow = ref.style.boxShadow;
             patchCardForPrint(ref);
             // Esconde o botão
-            const btn = ref.querySelector(".btn-compartilhar") as HTMLElement;
+            const btn = ref.querySelector(".btn-baixar") as HTMLElement;
             if (btn) btn.style.display = "none";
-            // Tira o print
+            // Faz o print
             const canvas = await html2canvas(ref, {
                 backgroundColor: "#fff",
                 useCORS: true,
@@ -128,30 +128,14 @@ export default function ConquistasPage() {
             if (btn) btn.style.display = "";
 
             const imgData = canvas.toDataURL("image/png");
-            const res = await fetch(imgData);
-            const blob = await res.blob();
+            // Faz o download
+            const link = document.createElement("a");
+            link.href = imgData;
+            link.download = "conquista.png";
+            link.click();
 
-            if (
-                navigator.canShare &&
-                navigator.canShare({ files: [new File([blob], "conquista.png", { type: "image/png" })] })
-            ) {
-                try {
-                    await navigator.share({
-                        files: [new File([blob], "conquista.png", { type: "image/png" })],
-                        text: `Conheça a melhor plataforma de questões comentadas para carreiras policiais: https://vocacaomilitar.com.br`,
-                    });
-                } catch (err) { }
-            } else {
-                const link = document.createElement("a");
-                link.href = imgData;
-                link.download = "conquista.png";
-                link.click();
-                navigator.clipboard.writeText(
-                    `Conheça a melhor plataforma de questões comentadas para carreiras policiais: https://vocacaomilitar.com.br`
-                );
-                setCopied(conquista.id);
-                setTimeout(() => setCopied(null), 2000);
-            }
+            setBaixou(conquista.id);
+            setTimeout(() => setBaixou(null), 1500);
         }
     }
 
@@ -188,19 +172,19 @@ export default function ConquistasPage() {
                             </div>
                         )}
 
-                        {/* Botão compartilhar, não aparece no print */}
+                        {/* Botão baixar, não aparece no print */}
                         <button
-                            className="btn-compartilhar w-full border border-blue-400 bg-[#f9fbff] hover:bg-blue-50 text-blue-700 rounded-lg py-2 mt-6 flex items-center justify-center gap-2 font-semibold text-base transition"
+                            className="btn-baixar w-full border border-blue-400 bg-[#f9fbff] hover:bg-blue-50 text-blue-700 rounded-lg py-2 mt-6 flex items-center justify-center gap-2 font-semibold text-base transition"
                             style={{
                                 boxShadow: "0 0 0 1.5px #bfd8ff, 0 1px 10px 0 rgba(75,110,204,0.05)"
                             }}
-                            onClick={() => handleCompartilhar(c)}
+                            onClick={() => handleBaixar(c)}
                         >
-                            <Share2 className="w-5 h-5" />
-                            Compartilhar
+                            <Download className="w-5 h-5" />
+                            Baixar Conquista
                         </button>
-                        {copied === c.id && (
-                            <span className="text-green-600 text-xs mt-2">Imagem baixada e texto copiado!</span>
+                        {baixou === c.id && (
+                            <span className="text-green-600 text-xs mt-2">Imagem baixada!</span>
                         )}
                     </div>
                 ))}
