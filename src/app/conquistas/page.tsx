@@ -5,12 +5,10 @@ import { supabase } from "@/lib/supabaseClient";
 import { Trophy, Medal, Share2 } from "lucide-react";
 import html2canvas from "html2canvas";
 
-// Ícones conforme cargo
 const iconeMap: Record<string, React.ReactNode> = {
-    Soldado: <Medal className="w-10 h-10 text-[#64748b]" />,
-    Cabo: <Medal className="w-10 h-10 text-[#22d3ee]" />,
-    "Terceiro Sargento": <Medal className="w-10 h-10 text-[#a3e635]" />,
-    // ... continue para os outros cargos, ajuste se quiser
+    Soldado: <Medal className="w-10 h-10" style={{ color: "#64748b" }} />,
+    Cabo: <Medal className="w-10 h-10" style={{ color: "#22d3ee" }} />,
+    // ...demais cargos
 };
 
 type Conquista = {
@@ -27,7 +25,7 @@ type Conquista = {
 const conquistasPadrao = [
     { titulo: "Soldado", descricao: "Respondeu 50 questões", tipo: "Comum", xp: 50, progressoMin: 50 },
     { titulo: "Cabo", descricao: "Respondeu 300 questões", tipo: "Comum", xp: 80, progressoMin: 300 },
-    // ... (adicione todas as outras)
+    // ... etc
 ];
 
 export default function ConquistasPage() {
@@ -37,7 +35,6 @@ export default function ConquistasPage() {
     const [copied, setCopied] = useState<number | null>(null);
     const cardRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
-    // Puxa nome do usuário
     useEffect(() => {
         async function getNome() {
             const { data: { user } } = await supabase.auth.getUser();
@@ -46,7 +43,6 @@ export default function ConquistasPage() {
         getNome();
     }, []);
 
-    // Carrega estatísticas
     useEffect(() => {
         async function fetchEstatisticas() {
             const { data: { user } } = await supabase.auth.getUser();
@@ -61,12 +57,10 @@ export default function ConquistasPage() {
         fetchEstatisticas();
     }, []);
 
-    // Checa e cria conquistas, depois carrega todas para exibir
     useEffect(() => {
         async function checkAndCreateConquistas() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user || !estat) return;
-            // Busca conquistas já conquistadas
             const { data: conquistasExistentes } = await supabase
                 .from("conquistas")
                 .select("titulo")
@@ -87,7 +81,6 @@ export default function ConquistasPage() {
                     }]);
                 }
             }
-            // Agora busca todas as conquistas para exibir
             const { data } = await supabase
                 .from("conquistas")
                 .select("*")
@@ -98,14 +91,28 @@ export default function ConquistasPage() {
         if (estat) checkAndCreateConquistas();
     }, [estat]);
 
-    // Compartilhar imagem do card (apenas o card, SEM o botão)
+    // Corrige cores do card antes do print
+    function patchCardForPrint(ref: HTMLDivElement) {
+        ref.style.background = "#fff";
+        ref.style.border = "1.5px solid #E3E8F3";
+        ref.style.borderRadius = "18px";
+        ref.style.boxShadow = "0 1px 10px 0 rgba(75,110,204,0.06)";
+        // Força cor dos badges também (pode adaptar mais se quiser)
+        ref.querySelectorAll("span").forEach(el => {
+            (el as HTMLElement).style.background = "#f3f5fa";
+            (el as HTMLElement).style.color = "#232939";
+        });
+    }
+
     async function handleCompartilhar(conquista: Conquista) {
         const ref = cardRefs.current[conquista.id];
         if (ref) {
-            // Força bg branco para html2canvas não bugar com transparência ou cores "oklch"
-            ref.style.background = "#fff";
-            ref.style.borderRadius = "18px";
-            // Esconde o botão compartilhar só para a imagem
+            // Salva estilos antigos
+            const oldBg = ref.style.background;
+            const oldBorder = ref.style.border;
+            const oldBoxShadow = ref.style.boxShadow;
+            patchCardForPrint(ref);
+            // Esconde o botão
             const btn = ref.querySelector(".btn-compartilhar") as HTMLElement;
             if (btn) btn.style.display = "none";
             // Tira o print
@@ -113,18 +120,17 @@ export default function ConquistasPage() {
                 backgroundColor: "#fff",
                 useCORS: true,
                 scale: 2,
-                ignoreElements: (el) => {
-                    // Esconde elementos não visuais (ex: botão)
-                    return el.classList?.contains("btn-compartilhar");
-                },
             });
-            // Mostra novamente o botão
+            // Restaura estilos
+            ref.style.background = oldBg;
+            ref.style.border = oldBorder;
+            ref.style.boxShadow = oldBoxShadow;
             if (btn) btn.style.display = "";
+
             const imgData = canvas.toDataURL("image/png");
             const res = await fetch(imgData);
             const blob = await res.blob();
 
-            // Compartilha no mobile se suportado
             if (
                 navigator.canShare &&
                 navigator.canShare({ files: [new File([blob], "conquista.png", { type: "image/png" })] })
@@ -134,9 +140,8 @@ export default function ConquistasPage() {
                         files: [new File([blob], "conquista.png", { type: "image/png" })],
                         text: `Conheça a melhor plataforma de questões comentadas para carreiras policiais: https://vocacaomilitar.com.br`,
                     });
-                } catch (err) { /* usuário pode cancelar */ }
+                } catch (err) { }
             } else {
-                // Fallback: download da imagem + copia texto
                 const link = document.createElement("a");
                 link.href = imgData;
                 link.download = "conquista.png";
@@ -160,15 +165,13 @@ export default function ConquistasPage() {
                         className="relative flex flex-col items-center px-7 py-7 bg-white border border-[#E3E8F3] rounded-2xl shadow-sm transition-all"
                         style={{ minWidth: 310, maxWidth: 340, margin: "0 auto" }}
                     >
-                        {/* Troféu verde de conquistado */}
                         {c.progresso === 100 && (
                             <span className="absolute top-3 right-3 bg-green-500 text-white rounded-full p-1 shadow text-xs">
                                 <Trophy className="w-5 h-5" />
                             </span>
                         )}
-                        <div className="mb-4">{iconeMap[c.titulo] ?? <Medal className="w-10 h-10 text-[#64748b]" />}</div>
+                        <div className="mb-4">{iconeMap[c.titulo] ?? <Medal className="w-10 h-10" style={{ color: "#64748b" }} />}</div>
                         <div className="font-bold text-lg mb-0 text-[#232939] text-center">{c.titulo}</div>
-                        {/* Nome do usuário */}
                         <div className="text-[15px] font-semibold text-[#5d5f6d] mb-1 text-center">{userName}</div>
                         <div className="text-[#a3adc7] text-base text-center mb-2">{c.descricao}</div>
                         <div className="flex gap-2 mb-2 flex-wrap justify-center">
