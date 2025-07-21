@@ -2,8 +2,10 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Trophy, Star, Flame, Zap, Target, Crown, Share2, Medal } from "lucide-react";
+import { Trophy, Star, Flame, Zap, Target, Crown, Share2, Medal, X } from "lucide-react";
 import html2canvas from "html2canvas";
+
+// ... o resto do seu código de mapping e conquistasPadrao não muda ...
 
 // Mapeamento de ícones por título da conquista
 const iconeMap: Record<string, React.ReactNode> = {
@@ -65,6 +67,8 @@ export default function ConquistasPage() {
     const [estat, setEstat] = useState<{ questoes_respondidas: number } | null>(null);
     const [copied, setCopied] = useState<number | null>(null);
     const cardRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+    const [showModal, setShowModal] = useState(false);
+    const [modalImage, setModalImage] = useState<string | null>(null);
 
     // Carrega estatísticas
     useEffect(() => {
@@ -120,34 +124,36 @@ export default function ConquistasPage() {
 
     async function handleCompartilhar(conquista: Conquista) {
         const ref = cardRefs.current[conquista.id];
-        if (ref) {
-            const canvas = await html2canvas(ref);
-            const imgData = canvas.toDataURL("image/png");
-            const res = await fetch(imgData);
-            const blob = await res.blob();
+        if (!ref) return;
+        const canvas = await html2canvas(ref);
+        const imgData = canvas.toDataURL("image/png");
+        const res = await fetch(imgData);
+        const blob = await res.blob();
+        const file = new File([blob], "conquista.png", { type: "image/png" });
 
-            if (
-                navigator.canShare &&
-                navigator.canShare({ files: [new File([blob], "conquista.png", { type: "image/png" })] })
-            ) {
-                try {
-                    await navigator.share({
-                        files: [new File([blob], "conquista.png", { type: "image/png" })],
-                        text: `Conheça a melhor plataforma de questões comentadas para carreiras policiais: https://vocacaomilitar.com.br`,
-                    });
-                } catch (err) { }
-            } else {
-                const link = document.createElement("a");
-                link.href = imgData;
-                link.download = "conquista.png";
-                link.click();
-                navigator.clipboard.writeText(
-                    `Conheça a melhor plataforma de questões comentadas para carreiras policiais: https://vocacaomilitar.com.br`
-                );
-                setCopied(conquista.id);
-                setTimeout(() => setCopied(null), 2000);
+        if (
+            navigator.canShare &&
+            navigator.canShare({ files: [file] })
+        ) {
+            try {
+                await navigator.share({
+                    files: [file],
+                    text: `Conheça a melhor plataforma de questões comentadas para carreiras policiais: https://vocacaomilitar.com.br`,
+                });
+                return;
+            } catch (err) {
+                // Usuário cancelou, cai para fallback/modal
             }
         }
+
+        // Fallback: mostra modal com imagem e instrução de compartilhar manualmente
+        setModalImage(imgData);
+        setShowModal(true);
+        navigator.clipboard.writeText(
+            `Conheça a melhor plataforma de questões comentadas para carreiras policiais: https://vocacaomilitar.com.br`
+        );
+        setCopied(conquista.id);
+        setTimeout(() => setCopied(null), 2000);
     }
 
     return (
@@ -216,6 +222,39 @@ export default function ConquistasPage() {
                     </div>
                 ))}
             </div>
+
+            {/* Modal Fallback Compartilhamento */}
+            {showModal && modalImage && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center px-4">
+                    <div className="bg-white rounded-xl p-7 max-w-md w-full shadow-2xl border border-[#e3e8f3] relative text-center">
+                        <button
+                            onClick={() => setShowModal(false)}
+                            className="absolute top-2 right-2 rounded-full hover:bg-[#f3f5fa] p-1 text-[#425179] font-bold"
+                            aria-label="Fechar"
+                        >
+                            <X size={22} />
+                        </button>
+                        <h3 className="font-bold text-lg text-[#232939] mb-3">
+                            Compartilhamento Manual
+                        </h3>
+                        <img src={modalImage} alt="Print da conquista" className="w-full rounded-lg mb-4" />
+                        <div className="text-sm text-[#232939] mb-2">
+                            Baixe a imagem acima e compartilhe no WhatsApp, Instagram, etc. <br />
+                            <span className="block mt-2 font-semibold text-[#6a88d7]">Mensagem copiada para você colar:</span>
+                            <div className="bg-[#f3f6fa] rounded p-2 text-xs mt-2 break-words">
+                                Conheça a melhor plataforma de questões comentadas para carreiras policiais: https://vocacaomilitar.com.br
+                            </div>
+                        </div>
+                        <a
+                            href={modalImage}
+                            download="conquista.png"
+                            className="inline-block bg-[#6a88d7] hover:bg-[#5272b4] text-white rounded-lg px-5 py-2 font-bold text-sm transition mt-2"
+                        >
+                            Baixar Imagem
+                        </a>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
