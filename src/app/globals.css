@@ -1,8 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+/* cor de fundo dos cards/ferramentas */
 :root {
-  --background: #ffffff;
+  --background: #f3f6fa;
   --foreground: #171717;
 }
 
@@ -15,4 +16,20 @@ body {
   font-feature-settings: "liga", "kern";
   letter-spacing: 0.01em;
   overscroll-behavior-y: contain;
+}
+
+/* Ajuste para que inputs/textareas também fiquem harmônicos no tema */
+input,
+textarea,
+select {
+  background-color: #f5f7fa;
+}
+
+/* (Opcional) Remover fundo dark */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Não muda nada, desativa o dark */
+    --background: #f3f6fa;
+    --foreground: #171717;
+  }
 }
