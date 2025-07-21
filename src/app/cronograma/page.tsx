@@ -119,7 +119,7 @@ export default function CronogramaSemanalPage() {
 
     return (
         <div className="w-full max-w-5xl mx-auto px-2 sm:px-4 py-7 flex flex-col gap-8">
-            <h1 className="text-2xl font-bold mb-4 text-[#232939]">Cronograma Semanal de Estudos</h1>
+            
             {/* Novo bloco */}
             <div className="flex flex-col sm:flex-row items-center gap-3 mb-4">
                 <input
@@ -320,11 +320,7 @@ export default function CronogramaSemanalPage() {
                 </div>
             )}
 
-            <div className="text-xs text-[#7b8bb0] mt-1 ml-1">
-                {modoCards
-                    ? "Arraste para o lado ou use as setas para navegar pelos dias da semana."
-                    : "Toque/click nas células para editar. Suas alterações são salvas automaticamente!"}
-            </div>
+            
             {msg && <div className="text-center text-green-600 mt-2">{msg}</div>}
         </div>
     );
