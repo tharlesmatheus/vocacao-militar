@@ -5,7 +5,9 @@ import { supabase } from "@/lib/supabaseClient";
 export default function NovaQuestaoForm() {
     const [questao, setQuestao] = useState<any>({ alternativas: {} });
     const [msg, setMsg] = useState("");
-    const [lista, setLista] = useState<any>({ instituicao: [], cargo: [], disciplina: [], assunto: [], modalidade: [], banca: [] });
+    const [lista, setLista] = useState<any>({
+        instituicao: [], cargo: [], disciplina: [], assunto: [], modalidade: [], banca: []
+    });
 
     // Carrega todas as opções já usadas no banco
     useEffect(() => {
@@ -28,17 +30,16 @@ export default function NovaQuestaoForm() {
         fetchData();
     }, []);
 
-    // Pesquisa rápida nos selects
+    // Componente para selects inteligentes
     function AutoSelect({ label, name }: { label: string; name: string }) {
         const [search, setSearch] = useState(questao[name] || "");
         const options = (lista[name] || []).filter((o: string) => o?.toLowerCase().includes(search.toLowerCase()));
 
-        // Atualiza o campo no questao apenas ao sair do input (onBlur) ou ao escolher uma opção (onChange), mas não ao digitar a cada letra
         return (
-            <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
-                <label className="font-semibold">{label}</label>
+            <div className="flex flex-col gap-1">
+                <label className="text-[15px] font-semibold mb-1">{label}</label>
                 <input
-                    className="rounded px-4 py-2 border bg-gray-50"
+                    className="rounded-xl px-4 py-2 border border-[#e4e8f3] bg-gray-50 text-base outline-[#7c90d7] transition"
                     placeholder={`Digite ou selecione`}
                     value={search}
                     onChange={e => setSearch(e.target.value)}
@@ -68,68 +69,102 @@ export default function NovaQuestaoForm() {
     }
 
     return (
-        <div className="bg-white rounded-2xl p-6 shadow max-w-2xl mx-auto">
-            <h2 className="text-xl font-bold mb-4">Adicionar Nova Questão</h2>
-            <form className="flex flex-col gap-3" onSubmit={handleNovaQuestao}>
-                <div className="flex flex-wrap gap-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-2xl mx-auto border border-[#e4e8f3]">
+            <h2 className="text-2xl font-extrabold text-[#232939] mb-7 text-center">Adicionar Nova Questão</h2>
+            <form className="flex flex-col gap-5" onSubmit={handleNovaQuestao}>
+                {/* Grid dos campos principais */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <AutoSelect label="Instituição" name="instituicao" />
                     <AutoSelect label="Cargo" name="cargo" />
-                </div>
-                <div className="flex flex-wrap gap-4">
                     <AutoSelect label="Disciplina" name="disciplina" />
                     <AutoSelect label="Assunto" name="assunto" />
-                </div>
-                <div className="flex flex-wrap gap-4">
                     <AutoSelect label="Modalidade" name="modalidade" />
                     <AutoSelect label="Banca" name="banca" />
                 </div>
-                <textarea
-                    required
-                    placeholder="Enunciado"
-                    className="rounded px-4 py-2 border bg-gray-50"
-                    value={questao.enunciado || ""}
-                    onChange={e => setQuestao({ ...questao, enunciado: e.target.value })}
-                />
-                <div className="flex gap-2">
-                    <input className="rounded px-4 py-2 border flex-1" placeholder="Alternativa A"
-                        value={questao.alternativas?.A || ""}
-                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, A: e.target.value } })} />
-                    <input className="rounded px-4 py-2 border flex-1" placeholder="Alternativa B"
-                        value={questao.alternativas?.B || ""}
-                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, B: e.target.value } })} />
-                    <input className="rounded px-4 py-2 border flex-1" placeholder="Alternativa C"
-                        value={questao.alternativas?.C || ""}
-                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, C: e.target.value } })} />
-                    <input className="rounded px-4 py-2 border flex-1" placeholder="Alternativa D"
-                        value={questao.alternativas?.D || ""}
-                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, D: e.target.value } })} />
+
+                <div>
+                    <label className="text-[15px] font-semibold mb-1 block">Enunciado</label>
+                    <textarea
+                        required
+                        placeholder="Digite o enunciado da questão"
+                        className="rounded-xl px-4 py-3 border border-[#e4e8f3] bg-gray-50 text-base w-full min-h-[60px] outline-[#7c90d7]"
+                        value={questao.enunciado || ""}
+                        onChange={e => setQuestao({ ...questao, enunciado: e.target.value })}
+                    />
                 </div>
-                <div className="flex gap-2">
-                    <input className="rounded px-4 py-2 border flex-1" placeholder="Alternativa E"
+
+                {/* Grid de alternativas */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <input
+                        className="rounded-xl px-4 py-2 border border-[#e4e8f3] bg-gray-50 text-base"
+                        placeholder="Alternativa A"
+                        value={questao.alternativas?.A || ""}
+                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, A: e.target.value } })}
+                    />
+                    <input
+                        className="rounded-xl px-4 py-2 border border-[#e4e8f3] bg-gray-50 text-base"
+                        placeholder="Alternativa B"
+                        value={questao.alternativas?.B || ""}
+                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, B: e.target.value } })}
+                    />
+                    <input
+                        className="rounded-xl px-4 py-2 border border-[#e4e8f3] bg-gray-50 text-base"
+                        placeholder="Alternativa C"
+                        value={questao.alternativas?.C || ""}
+                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, C: e.target.value } })}
+                    />
+                    <input
+                        className="rounded-xl px-4 py-2 border border-[#e4e8f3] bg-gray-50 text-base"
+                        placeholder="Alternativa D"
+                        value={questao.alternativas?.D || ""}
+                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, D: e.target.value } })}
+                    />
+                    <input
+                        className="rounded-xl px-4 py-2 border border-[#e4e8f3] bg-gray-50 text-base"
+                        placeholder="Alternativa E"
                         value={questao.alternativas?.E || ""}
-                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, E: e.target.value } })} />
-                    <input className="rounded px-4 py-2 border flex-1" placeholder="Correta (A-E)"
+                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, E: e.target.value } })}
+                    />
+                    <input
+                        className="rounded-xl px-4 py-2 border border-[#e4e8f3] bg-gray-50 text-base"
+                        placeholder="Correta (A-E)"
                         maxLength={1}
                         value={questao.correta || ""}
                         onChange={e => setQuestao({ ...questao, correta: e.target.value.toUpperCase().replace(/[^A-E]/g, "") })}
                     />
                 </div>
-                <textarea
-                    placeholder="Explicação/Comentário (opcional)"
-                    className="rounded px-4 py-2 border bg-gray-50"
-                    value={questao.explicacao || ""}
-                    onChange={e => setQuestao({ ...questao, explicacao: e.target.value })}
-                />
-                <div className="flex gap-4 mt-2">
-                    <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded font-bold hover:bg-blue-700">
+
+                <div>
+                    <label className="text-[15px] font-semibold mb-1 block">Explicação/Comentário (opcional)</label>
+                    <textarea
+                        placeholder="Explicação para o gabarito ou comentário extra"
+                        className="rounded-xl px-4 py-3 border border-[#e4e8f3] bg-gray-50 text-base w-full min-h-[48px] outline-[#7c90d7]"
+                        value={questao.explicacao || ""}
+                        onChange={e => setQuestao({ ...questao, explicacao: e.target.value })}
+                    />
+                </div>
+
+                {/* Botões */}
+                <div className="flex flex-col sm:flex-row gap-3 mt-3">
+                    <button
+                        type="submit"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-extrabold transition text-base w-full sm:w-auto"
+                    >
                         Adicionar Questão
                     </button>
-                    <button type="button" className="bg-gray-200 text-[#232939] px-6 py-2 rounded font-bold hover:bg-gray-300"
-                        onClick={() => setQuestao({ alternativas: {} })}>
+                    <button
+                        type="button"
+                        className="bg-gray-200 hover:bg-gray-300 text-[#232939] px-6 py-3 rounded-xl font-bold transition text-base w-full sm:w-auto"
+                        onClick={() => setQuestao({ alternativas: {} })}
+                    >
                         Limpar Campos
                     </button>
                 </div>
-                {msg && <div className={`text-center mt-2 ${msg.startsWith("Erro") ? "text-red-500" : "text-green-700"}`}>{msg}</div>}
+                {msg && (
+                    <div className={`text-center mt-2 ${msg.startsWith("Erro") ? "text-red-500" : "text-green-700"}`}>
+                        {msg}
+                    </div>
+                )}
             </form>
         </div>
     );

@@ -8,9 +8,7 @@ export default function ClientesList() {
     const [editData, setEditData] = useState<any>({});
     const [msg, setMsg] = useState("");
 
-    useEffect(() => {
-        fetchClientes();
-    }, []);
+    useEffect(() => { fetchClientes(); }, []);
 
     async function fetchClientes() {
         setLoading(true);
@@ -62,76 +60,105 @@ export default function ClientesList() {
         else setMsg("Erro ao excluir: " + error);
     }
 
-    if (loading) return <div className="p-8 text-center">Carregando clientes...</div>;
-
     return (
-        <div className="overflow-x-auto">
-            {msg && <div className="mb-2 text-red-600">{msg}</div>}
-            <table className="w-full min-w-[800px] bg-white rounded-2xl shadow mb-4">
-                <thead>
-                    <tr className="bg-gray-100 text-gray-600">
-                        <th className="p-3 text-left">Nome</th>
-                        <th className="p-3 text-left">E-mail</th>
-                        <th className="p-3 text-left">Telefone</th>
-                        <th className="p-3 text-left">CPF</th>
-                        <th className="p-3 text-left">Criado em</th>
-                        <th className="p-3 text-center">Ações</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {clientes.length === 0 && (
-                        <tr>
-                            <td colSpan={6} className="p-4 text-center text-gray-500">
-                                Nenhum cliente cadastrado.
-                            </td>
-                        </tr>
-                    )}
-                    {clientes.map((cliente) =>
-                        editId === cliente.id ? (
-                            <tr key={cliente.id} className="border-b bg-yellow-50">
-                                <td className="p-3">
-                                    <input className="rounded border px-2 py-1 w-full" value={editData.nome}
-                                        onChange={e => setEditData({ ...editData, nome: e.target.value })} />
-                                </td>
-                                <td className="p-3">{cliente.email}</td>
-                                <td className="p-3">
-                                    <input className="rounded border px-2 py-1 w-full" value={editData.telefone}
-                                        onChange={e => setEditData({ ...editData, telefone: e.target.value })} />
-                                </td>
-                                <td className="p-3">
-                                    <input className="rounded border px-2 py-1 w-full" value={editData.cpf}
-                                        onChange={e => setEditData({ ...editData, cpf: e.target.value })} />
-                                </td>
-                                <td className="p-3">{new Date(cliente.created_at).toLocaleDateString()}</td>
-                                <td className="p-3 flex gap-2 justify-center">
-                                    <button className="bg-green-600 text-white px-3 py-1 rounded font-bold hover:bg-green-700" onClick={() => handleSave(cliente)}>
-                                        Salvar
-                                    </button>
-                                    <button className="bg-gray-300 text-gray-700 px-3 py-1 rounded font-bold hover:bg-gray-400" onClick={() => setEditId(null)}>
-                                        Cancelar
-                                    </button>
-                                </td>
+        <div className="max-w-5xl mx-auto">
+            <div className="bg-white rounded-2xl shadow-xl border border-[#e4e8f3] p-7 mt-4">
+                <h2 className="text-xl md:text-2xl font-extrabold text-[#232939] mb-5 text-center">
+                    Clientes Cadastrados
+                </h2>
+                {msg && <div className="mb-2 text-red-600 text-center">{msg}</div>}
+                <div className="overflow-x-auto">
+                    <table className="w-full min-w-[700px] border-separate border-spacing-0">
+                        <thead>
+                            <tr className="bg-[#f3f6fa] text-[#4e5a7b] text-[16px]">
+                                <th className="px-4 py-3 font-bold text-left rounded-tl-2xl">Nome</th>
+                                <th className="px-4 py-3 font-bold text-left">E-mail</th>
+                                <th className="px-4 py-3 font-bold text-left">Telefone</th>
+                                <th className="px-4 py-3 font-bold text-left">CPF</th>
+                                <th className="px-4 py-3 font-bold text-left">Criado em</th>
+                                <th className="px-4 py-3 font-bold text-center rounded-tr-2xl">Ações</th>
                             </tr>
-                        ) : (
-                            <tr key={cliente.id} className="border-b hover:bg-gray-50 transition">
-                                <td className="p-3">{cliente.user_metadata?.nome || "-"}</td>
-                                <td className="p-3">{cliente.email}</td>
-                                <td className="p-3">{cliente.user_metadata?.telefone || "-"}</td>
-                                <td className="p-3">{cliente.user_metadata?.cpf || "-"}</td>
-                                <td className="p-3">{new Date(cliente.created_at).toLocaleDateString()}</td>
-                                <td className="p-3 flex gap-2 justify-center">
-                                    <button className="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700" onClick={() => handleEdit(cliente)}>
-                                        Editar
-                                    </button>
-                                    <button className="bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700" onClick={() => handleDelete(cliente)}>
-                                        Excluir
-                                    </button>
-                                </td>
-                            </tr>
-                        )
-                    )}
-                </tbody>
-            </table>
+                        </thead>
+                        <tbody>
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={6} className="px-4 py-8 text-center text-[#a3adc7]">
+                                        Carregando clientes...
+                                    </td>
+                                </tr>
+                            ) : clientes.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="px-4 py-8 text-center text-[#a3adc7]">
+                                        Nenhum cliente cadastrado.
+                                    </td>
+                                </tr>
+                            ) : (
+                                clientes.map((cliente) =>
+                                    editId === cliente.id ? (
+                                        <tr key={cliente.id} className="bg-[#fffde7] border-b border-[#e4e8f3] last:border-0">
+                                            <td className="px-4 py-3">
+                                                <input
+                                                    className="rounded-lg border px-3 py-2 w-full"
+                                                    value={editData.nome}
+                                                    onChange={e => setEditData({ ...editData, nome: e.target.value })}
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3 text-[#7b8497]">{cliente.email}</td>
+                                            <td className="px-4 py-3">
+                                                <input
+                                                    className="rounded-lg border px-3 py-2 w-full"
+                                                    value={editData.telefone}
+                                                    onChange={e => setEditData({ ...editData, telefone: e.target.value })}
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <input
+                                                    className="rounded-lg border px-3 py-2 w-full"
+                                                    value={editData.cpf}
+                                                    onChange={e => setEditData({ ...editData, cpf: e.target.value })}
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3 text-[#7b8497]">
+                                                {new Date(cliente.created_at).toLocaleDateString()}
+                                            </td>
+                                            <td className="px-4 py-3 flex gap-2 justify-center">
+                                                <button className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-700 transition"
+                                                    onClick={() => handleSave(cliente)}>
+                                                    Salvar
+                                                </button>
+                                                <button className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg font-bold hover:bg-gray-400 transition"
+                                                    onClick={() => setEditId(null)}>
+                                                    Cancelar
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        <tr key={cliente.id} className="border-b border-[#e4e8f3] last:border-0 hover:bg-[#f7f9fb] transition">
+                                            <td className="px-4 py-3 font-semibold">{cliente.user_metadata?.nome || "-"}</td>
+                                            <td className="px-4 py-3 text-[#3d4762]">{cliente.email}</td>
+                                            <td className="px-4 py-3">{cliente.user_metadata?.telefone || "-"}</td>
+                                            <td className="px-4 py-3">{cliente.user_metadata?.cpf || "-"}</td>
+                                            <td className="px-4 py-3 text-[#7b8497]">
+                                                {new Date(cliente.created_at).toLocaleDateString()}
+                                            </td>
+                                            <td className="px-4 py-3 flex gap-2 justify-center">
+                                                <button className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 transition"
+                                                    onClick={() => handleEdit(cliente)}>
+                                                    Editar
+                                                </button>
+                                                <button className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-700 transition"
+                                                    onClick={() => handleDelete(cliente)}>
+                                                    Excluir
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    )
+                                )
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     );
 }
