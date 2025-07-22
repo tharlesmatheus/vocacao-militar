@@ -91,12 +91,19 @@ export function QuestionCard({
     const [comentarioText, setComentarioText] = useState("");
     const [loadingComentario, setLoadingComentario] = useState(false);
     const [eliminadas, setEliminadas] = useState<number[]>([]);
+    const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     React.useEffect(() => {
         if (showModal) setTimeout(() => textareaRef.current?.focus(), 100);
     }, [showModal]);
+
+    // FEEDBACK POPUP
+    const showFeedback = (msg: string) => {
+        setFeedbackMsg(msg);
+        setTimeout(() => setFeedbackMsg(null), 3000);
+    };
 
     // Eliminar/restaurar alternativa
     const toggleEliminada = (idx: number) => {
@@ -127,7 +134,9 @@ export function QuestionCard({
     const enviarErro = async () => {
         if (!errorText.trim()) return;
         setLoadingErro(true);
-        const novoErro = { mensagem: errorText, data: new Date().toISOString() };
+        const { data: { user } } = await supabase.auth.getUser();
+        let userName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "Usuário";
+        const novoErro = { mensagem: errorText, data: new Date().toISOString(), usuario: userName };
         const novosErros = [...(erros || []), novoErro];
         const { error } = await supabase
             .from("questoes")
@@ -137,6 +146,7 @@ export function QuestionCard({
         if (!error) {
             setShowModal(false);
             setErrorText("");
+            showFeedback("Erro notificado com sucesso!");
             if (onNotificarErro) onNotificarErro(errorText);
         } else {
             alert("Erro ao salvar notificação.");
@@ -147,7 +157,9 @@ export function QuestionCard({
     const enviarComentario = async () => {
         if (!comentarioText.trim()) return;
         setLoadingComentario(true);
-        const novoComentario = { texto: comentarioText, data: new Date().toISOString() };
+        const { data: { user } } = await supabase.auth.getUser();
+        let userName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "Usuário";
+        const novoComentario = { texto: comentarioText, data: new Date().toISOString(), usuario: userName };
         const novosComentarios = [...(comentarios || []), novoComentario];
         const { error } = await supabase
             .from("questoes")
@@ -156,6 +168,7 @@ export function QuestionCard({
         setLoadingComentario(false);
         if (!error) {
             setComentarioText("");
+            showFeedback("Comentário enviado!");
             if (onNovoComentario) onNovoComentario(comentarioText);
         } else {
             alert("Erro ao salvar comentário.");
@@ -163,11 +176,17 @@ export function QuestionCard({
     };
 
     // --------- Lógica para exibir alternativas ---------
-    const qtdAlternativas = options.length;
     const letras = ["A", "B", "C", "D", "E"];
 
     return (
-        <div className="bg-white rounded-2xl p-7 mb-6 shadow border border-[#e3e8f3] max-w-6xl w-full mx-auto transition-all font-inter">
+        <div className="bg-white rounded-2xl p-7 mb-6 shadow border border-[#e3e8f3] max-w-6xl w-full mx-auto transition-all font-inter relative">
+            {/* FEEDBACK TOAST */}
+            {feedbackMsg && (
+                <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-[#6a88d7] text-white rounded-lg px-6 py-3 text-sm shadow-lg z-[200] animate-fade-in">
+                    {feedbackMsg}
+                </div>
+            )}
+
             {/* Tags */}
             <div className="flex flex-wrap gap-2 mb-5">
                 {tags.map((tag, i) => (
@@ -191,7 +210,6 @@ export function QuestionCard({
                     const isCorrect = correct === value;
                     const eliminada = eliminadas.includes(idx);
 
-                    // Lógica do contorno:
                     let btnClass =
                         "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px] relative group";
 
@@ -329,6 +347,7 @@ export function QuestionCard({
                         <ul className="flex flex-col gap-2">
                             {comentarios.map((com, i) => (
                                 <li key={i} className="bg-white rounded-lg px-3 py-2 border text-sm">
+                                    <span className="font-bold text-[#6a88d7] mr-2">{com?.usuario || "Usuário"}</span>
                                     {com?.texto || com?.mensagem || JSON.stringify(com)}
                                     {com?.data && (
                                         <span className="block text-[11px] text-gray-400 mt-1">
