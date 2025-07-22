@@ -2,7 +2,7 @@
 import React, { useState, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-type Option = { letter: string; text: string };
+type Option = { letter?: string; text: string };
 
 interface QuestionCardProps {
     id: string;
@@ -17,12 +17,9 @@ interface QuestionCardProps {
     onNovoComentario?: (comentario: string) => void;
 }
 
-// Função para atualizar estatísticas do aluno (sem o campo "acertos")
 async function atualizarEstatisticasQuestao(acertou: boolean) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-
-    // Busca estatísticas atuais
     const { data, error } = await supabase
         .from("estatisticas")
         .select("*")
@@ -30,12 +27,11 @@ async function atualizarEstatisticasQuestao(acertou: boolean) {
         .single();
 
     if (error || !data) {
-        // Cria novo registro caso não exista
         await supabase.from("estatisticas").insert([{
             user_id: user.id,
             questoes_respondidas: 1,
             taxa_acerto: acertou ? 100 : 0,
-            tempo_estudado: "00:00:00", // ou deixe sem enviar se quiser
+            tempo_estudado: "00:00:00",
             progresso_semanal: [
                 { dia: new Date().toLocaleDateString("pt-BR"), questoes: 1 }
             ],
@@ -44,14 +40,11 @@ async function atualizarEstatisticasQuestao(acertou: boolean) {
         return;
     }
 
-    // Calcula novos valores
     const novasQuestoes = (data.questoes_respondidas ?? 0) + 1;
-    // Calcula quantos acertos existiam (baseado na taxa_acerto antiga)
     const acertosAnteriores = Math.round((data.taxa_acerto ?? 0) / 100 * (data.questoes_respondidas ?? 0));
     const novosAcertos = acertosAnteriores + (acertou ? 1 : 0);
     const taxa_acerto = Math.round((novosAcertos / novasQuestoes) * 100);
 
-    // Atualiza progresso semanal
     const hoje = new Date().toLocaleDateString("pt-BR");
     let progresso = Array.isArray(data.progresso_semanal) ? [...data.progresso_semanal] : [];
     const idx = progresso.findIndex((d: any) => d.dia === hoje);
@@ -90,22 +83,20 @@ export function QuestionCard({
     const [showComentarios, setShowComentarios] = useState(false);
     const [errorText, setErrorText] = useState("");
     const [loadingErro, setLoadingErro] = useState(false);
-
     const [comentarioText, setComentarioText] = useState("");
     const [loadingComentario, setLoadingComentario] = useState(false);
-
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     React.useEffect(() => {
-        if (showModal) {
-            setTimeout(() => textareaRef.current?.focus(), 100);
-        }
+        if (showModal) setTimeout(() => textareaRef.current?.focus(), 100);
     }, [showModal]);
 
     // Função de compartilhamento
     const compartilharQuestao = () => {
         const texto =
-            `${statement}\n\n${options.map(opt => `${opt.letter}) ${opt.text}`).join('\n')}\n\nConheça a melhor plataforma de questões comentadas para concursos policiais:\n`;
+            `${statement}\n\n${options.map((opt, idx) =>
+                (opt.letter ? `${opt.letter}) ` : "") + opt.text
+            ).join('\n')}\n\nConheça a melhor plataforma de questões comentadas para concursos policiais:\n`;
         if (navigator.share) {
             navigator.share({
                 title: "Questão para Concursos Policiais",
@@ -169,6 +160,19 @@ export function QuestionCard({
         }
     };
 
+    // --------- Lógica para exibir alternativas ---------
+    const qtdAlternativas = options.length;
+    const isCertoErrado = qtdAlternativas === 2;
+
+    // Letras: A, B, C, D, E (só se 3 ou mais alternativas)
+    const letras = ["A", "B", "C", "D", "E"];
+
+    // Para questões de certo/errado, mostrar Certo e Errado
+    const opcoesCertErrado = [
+        { value: "C", label: "Certo" },
+        { value: "E", label: "Errado" }
+    ];
+
     return (
         <div className="bg-white rounded-2xl p-7 mb-6 shadow border border-[#e3e8f3] max-w-6xl w-full mx-auto transition-all font-inter">
             {/* Tags */}
@@ -188,44 +192,85 @@ export function QuestionCard({
             </h2>
             {/* Alternativas */}
             <div className="flex flex-col gap-2 mb-5">
-                {options.map((opt) => {
-                    const isSelected = selected === opt.letter;
-                    const isCorrect = correct === opt.letter;
-                    let btnClass =
-                        "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px]";
-                    if (showResult && isSelected) {
-                        btnClass += isCorrect
-                            ? " bg-green-50 border-green-600 text-green-900"
-                            : " bg-red-50 border-red-400 text-red-900";
-                    } else if (isSelected) {
-                        btnClass += " bg-[#e9effd] border-[#6a88d7] text-[#232939]";
-                    } else {
-                        btnClass += " bg-white border-[#e3e8f3] hover:bg-[#f6faff]";
-                    }
-                    return (
-                        <button
-                            key={opt.letter}
-                            type="button"
-                            className={btnClass}
-                            disabled={showResult}
-                            onClick={() => setSelected(opt.letter)}
-                        >
-                            <span className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
-                                ${showResult && isSelected
-                                    ? isCorrect
-                                        ? "bg-green-600 text-white"
-                                        : "bg-red-500 text-white"
-                                    : isSelected
-                                        ? "bg-[#6a88d7] text-white"
-                                        : "bg-[#f3f5fa] text-[#232939]"
-                                }
-                            `}>
-                                {opt.letter}
-                            </span>
-                            <span className="text-[#232939] text-[15px]">{opt.text}</span>
-                        </button>
-                    );
-                })}
+                {isCertoErrado ? (
+                    opcoesCertErrado.map(opt => {
+                        const isSelected = selected === opt.value;
+                        const isCorrect = correct === opt.value;
+                        let btnClass =
+                            "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px]";
+                        if (showResult && isSelected) {
+                            btnClass += isCorrect
+                                ? " bg-green-50 border-green-600 text-green-900"
+                                : " bg-red-50 border-red-400 text-red-900";
+                        } else if (isSelected) {
+                            btnClass += " bg-[#e9effd] border-[#6a88d7] text-[#232939]";
+                        } else {
+                            btnClass += " bg-white border-[#e3e8f3] hover:bg-[#f6faff]";
+                        }
+                        return (
+                            <button
+                                key={opt.value}
+                                type="button"
+                                className={btnClass}
+                                disabled={showResult}
+                                onClick={() => setSelected(opt.value)}
+                            >
+                                <span className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
+                                    ${showResult && isSelected
+                                        ? isCorrect
+                                            ? "bg-green-600 text-white"
+                                            : "bg-red-500 text-white"
+                                        : isSelected
+                                            ? "bg-[#6a88d7] text-white"
+                                            : "bg-[#f3f5fa] text-[#232939]"
+                                    }
+                                `}>
+                                    {opt.label[0]}
+                                </span>
+                                <span className="text-[#232939] text-[15px]">{opt.label}</span>
+                            </button>
+                        );
+                    })
+                ) : (
+                    options.map((opt, idx) => {
+                        const isSelected = selected === (opt.letter || letras[idx]);
+                        const isCorrect = correct === (opt.letter || letras[idx]);
+                        let btnClass =
+                            "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px]";
+                        if (showResult && isSelected) {
+                            btnClass += isCorrect
+                                ? " bg-green-50 border-green-600 text-green-900"
+                                : " bg-red-50 border-red-400 text-red-900";
+                        } else if (isSelected) {
+                            btnClass += " bg-[#e9effd] border-[#6a88d7] text-[#232939]";
+                        } else {
+                            btnClass += " bg-white border-[#e3e8f3] hover:bg-[#f6faff]";
+                        }
+                        return (
+                            <button
+                                key={opt.letter || letras[idx]}
+                                type="button"
+                                className={btnClass}
+                                disabled={showResult}
+                                onClick={() => setSelected(opt.letter || letras[idx])}
+                            >
+                                <span className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
+                                    ${showResult && isSelected
+                                        ? isCorrect
+                                            ? "bg-green-600 text-white"
+                                            : "bg-red-500 text-white"
+                                        : isSelected
+                                            ? "bg-[#6a88d7] text-white"
+                                            : "bg-[#f3f5fa] text-[#232939]"
+                                    }
+                                `}>
+                                    {opt.letter || letras[idx]}
+                                </span>
+                                <span className="text-[#232939] text-[15px]">{opt.text}</span>
+                            </button>
+                        );
+                    })
+                )}
             </div>
             {/* Ações */}
             <div className="flex flex-wrap gap-2 mb-4">
@@ -283,11 +328,10 @@ export function QuestionCard({
                 </div>
             )}
 
-            {/* Comentários - Expande */}
+            {/* Comentários */}
             {showComentarios && (
                 <div className="bg-[#f3f5fa] rounded-xl px-4 py-3 mt-3 text-[#232939]">
                     <div className="font-bold mb-2">Comentários</div>
-                    {/* Caixa para novo comentário */}
                     <div className="mb-3 flex items-end gap-2">
                         <textarea
                             rows={2}
@@ -305,7 +349,6 @@ export function QuestionCard({
                             {loadingComentario ? "Enviando..." : "Comentar"}
                         </button>
                     </div>
-                    {/* Lista de comentários */}
                     {comentarios?.length ? (
                         <ul className="flex flex-col gap-2">
                             {comentarios.map((com, i) => (
