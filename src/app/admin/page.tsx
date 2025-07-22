@@ -1,5 +1,7 @@
 "use client";
-import React, { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 import ClientesList from "./components/ClientesList";
 import QuestoesList from "./components/QuestoesList";
 import NovoClienteForm from "./components/NovoClienteForm";
@@ -7,7 +9,31 @@ import NovaQuestaoForm from "./components/NovaQuestaoForm";
 import { User, BookOpen, PlusCircle } from "lucide-react";
 
 export default function AdminDashboard() {
+    const router = useRouter();
+    const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState("clientes");
+
+    useEffect(() => {
+        async function checkAuth() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user || !user.user_metadata?.is_admin) {
+                await supabase.auth.signOut();
+                router.replace("/admin/login");
+                return;
+            }
+            setLoading(false);
+        }
+        checkAuth();
+    }, [router]);
+
+    if (loading) {
+        return (
+            <div className="w-full h-screen flex items-center justify-center bg-[#f3f6fa]">
+                <div className="text-xl">Carregando...</div>
+            </div>
+        );
+    }
+
     return (
         <div className="w-full max-w-6xl mx-auto px-2 py-8">
             <h1 className="text-3xl font-bold mb-8 text-center">Painel Administrativo</h1>
