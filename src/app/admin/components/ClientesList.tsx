@@ -1,65 +1,66 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function ClientesList() {
-    const [users, setUsers] = useState<any[]>([]);
-    const [planos, setPlanos] = useState<any[]>([]);
+    const [clientes, setClientes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        async function fetchData() {
-            setLoading(true);
-            const { data: usersData } = await supabase.from("users").select("*");
-            const { data: planosData } = await supabase.from("planos").select("*");
-            setUsers(usersData || []);
-            setPlanos(planosData || []);
+        async function fetchClientes() {
+            // Busca usuários do Auth (via função RPC)
+            const { data: users, error } = await supabase.rpc("listar_usuarios");
+            if (users) {
+                // Buscar planos ativos (tabela planos)
+                const { data: planos } = await supabase.from("planos").select("*");
+                const clientesComPlano = users.map((user: any) => {
+                    const plano = planos?.find((p: any) => p.user_id === user.id);
+                    return {
+                        ...user,
+                        planoAtivo: plano ? plano.nome_plano : "Nenhum",
+                        dataPlano: plano ? plano.inicio_vigencia : null,
+                    };
+                });
+                setClientes(clientesComPlano);
+            }
             setLoading(false);
         }
-        fetchData();
+        fetchClientes();
     }, []);
 
-    function statusPlano(user_id: string) {
-        const plano = planos.find((p) => p.user_id === user_id && p.status === "ativo");
-        return plano ? "Ativo" : "Inativo";
-    }
-
-    if (loading) return <div>Carregando...</div>;
+    if (loading) return <div className="p-8 text-center">Carregando clientes...</div>;
 
     return (
-        <div className="bg-white rounded-2xl p-6 shadow">
-            <h2 className="text-xl font-bold mb-4">Clientes ({users.length})</h2>
-            <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px] bg-white rounded-2xl shadow mb-4">
                 <thead>
-                    <tr className="text-left text-[#5d5f6d]">
-                        <th className="p-2">Nome</th>
-                        <th className="p-2">E-mail</th>
-                        <th className="p-2">CPF</th>
-                        <th className="p-2">Telefone</th>
-                        <th className="p-2">Plano</th>
-                        <th className="p-2">Criado em</th>
+                    <tr className="bg-gray-100 text-gray-600">
+                        <th className="p-3 text-left">Nome</th>
+                        <th className="p-3 text-left">E-mail</th>
+                        <th className="p-3 text-left">Telefone</th>
+                        <th className="p-3 text-left">CPF</th>
+                        <th className="p-3 text-left">Plano</th>
+                        <th className="p-3 text-left">Início Plano</th>
+                        <th className="p-3 text-left">Criado em</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {users.map((u) => (
-                        <tr key={u.id} className="border-b last:border-none hover:bg-[#f3f6fa] transition">
-                            <td className="p-2">{u.nome}</td>
-                            <td className="p-2">{u.email}</td>
-                            <td className="p-2">{u.cpf}</td>
-                            <td className="p-2">{u.telefone}</td>
-                            <td className="p-2">
-                                <span
-                                    className={`px-3 py-1 rounded-full text-xs font-bold ${statusPlano(u.id) === "Ativo"
-                                            ? "bg-green-100 text-green-700"
-                                            : "bg-red-100 text-red-700"
-                                        }`}
-                                >
-                                    {statusPlano(u.id)}
-                                </span>
+                    {clientes.length === 0 && (
+                        <tr>
+                            <td colSpan={7} className="p-4 text-center text-gray-500">
+                                Nenhum cliente cadastrado.
                             </td>
-                            <td className="p-2">
-                                {u.created_at && new Date(u.created_at).toLocaleDateString("pt-BR")}
-                            </td>
+                        </tr>
+                    )}
+                    {clientes.map((cliente) => (
+                        <tr key={cliente.id} className="border-b hover:bg-gray-50 transition">
+                            <td className="p-3">{cliente.user_metadata?.nome || "-"}</td>
+                            <td className="p-3">{cliente.email}</td>
+                            <td className="p-3">{cliente.user_metadata?.telefone || "-"}</td>
+                            <td className="p-3">{cliente.user_metadata?.cpf || "-"}</td>
+                            <td className="p-3">{cliente.planoAtivo}</td>
+                            <td className="p-3">{cliente.dataPlano ? new Date(cliente.dataPlano).toLocaleDateString() : "-"}</td>
+                            <td className="p-3">{new Date(cliente.created_at).toLocaleDateString()}</td>
                         </tr>
                     ))}
                 </tbody>
