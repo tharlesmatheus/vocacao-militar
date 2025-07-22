@@ -2,7 +2,6 @@
 import React, { useState, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-// Tesoura SVG (inline, para não depender de biblioteca externa)
 function TesouraIcon({ className = "" }: { className?: string }) {
     return (
         <svg viewBox="0 0 20 20" fill="none" width={22} height={22}
@@ -192,19 +191,16 @@ export function QuestionCard({
                     const isCorrect = correct === value;
                     const eliminada = eliminadas.includes(idx);
 
-                    // Lógica para mostrar contorno verde na correta se o usuário errar:
+                    // Lógica do contorno:
                     let btnClass =
                         "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px] relative group";
 
                     if (showResult) {
                         if (isSelected && selected !== correct) {
-                            // O usuário ERROU esta opção
                             btnClass += " bg-red-50 border-red-400 text-red-900";
                         } else if (isCorrect && selected !== correct) {
-                            // Mostrar contorno verde NA CORRETA, pois o usuário ERROU
                             btnClass += " bg-green-50 border-green-600 text-green-900";
                         } else if (isSelected && selected === correct) {
-                            // Acertou: só verde na selecionada
                             btnClass += " bg-green-50 border-green-600 text-green-900";
                         } else {
                             btnClass += " bg-white border-[#e3e8f3]";
@@ -300,19 +296,9 @@ export function QuestionCard({
                 )}
             </div>
 
-            {/* Explicação + alternativa correta */}
+            {/* Só a explicação, SEM "Resposta correta" */}
             {showResult && selected && (
                 <div className="bg-[#e8f7ea] rounded-lg p-4 mt-2 text-green-900 text-sm">
-                    {/* Mostra alternativa correta se errou */}
-                    {selected !== correct && (
-                        <div className="mb-2 text-red-700 font-semibold">
-                            Resposta correta:{" "}
-                            <span className="bg-green-600 text-white px-2 py-1 rounded-lg font-bold mx-1">{correct}</span>
-                            - {
-                                options.find((opt, idx) => (opt.letter || letras[idx]) === correct)?.text
-                            }
-                        </div>
-                    )}
                     <span className="font-bold text-green-700">Explicação:</span>
                     <p className="mt-1">{explanation}</p>
                 </div>
