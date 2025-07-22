@@ -334,9 +334,19 @@ export function QuestionCard({
                 )}
             </div>
 
-            {/* Explicação */}
+            {/* Explicação + alternativa correta */}
             {showResult && selected && (
                 <div className="bg-[#e8f7ea] rounded-lg p-4 mt-2 text-green-900 text-sm">
+                    {/* Mostra alternativa correta se errou */}
+                    {selected !== correct && (
+                        <div className="mb-2 text-red-700 font-semibold">
+                            Resposta correta:{" "}
+                            <span className="bg-green-600 text-white px-2 py-1 rounded-lg font-bold mx-1">{correct}</span>
+                            - {
+                                options.find((opt, idx) => (opt.letter || letras[idx]) === correct)?.text
+                            }
+                        </div>
+                    )}
                     <span className="font-bold text-green-700">Explicação:</span>
                     <p className="mt-1">{explanation}</p>
                 </div>
