@@ -2,15 +2,17 @@
 import React, { useState } from "react";
 import AdminSidebar from "./components/AdminSidebar";
 
-
+// Esse layout só para o admin (sem Header/Menu principal)
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     return (
         <div className="flex min-h-screen bg-[#f3f6fa]">
+            {/* Lateral Sidebar */}
             <AdminSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            {/* Conteúdo principal */}
             <div className="flex-1 flex flex-col min-h-screen">
-                {/* Mobile: menu button */}
+                {/* Botão de menu no mobile */}
                 <div className="md:hidden p-2 bg-[#f3f6fa]">
                     <button
                         onClick={() => setSidebarOpen(true)}
