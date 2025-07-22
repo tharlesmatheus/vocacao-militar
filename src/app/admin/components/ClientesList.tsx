@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
 
 export default function ClientesList() {
     const [clientes, setClientes] = useState<any[]>([]);
@@ -8,21 +7,10 @@ export default function ClientesList() {
 
     useEffect(() => {
         async function fetchClientes() {
-            // Busca usuários do Auth (via função RPC)
-            const { data: users, error } = await supabase.rpc("listar_usuarios");
-            if (users) {
-                // Buscar planos ativos (tabela planos)
-                const { data: planos } = await supabase.from("planos").select("*");
-                const clientesComPlano = users.map((user: any) => {
-                    const plano = planos?.find((p: any) => p.user_id === user.id);
-                    return {
-                        ...user,
-                        planoAtivo: plano ? plano.nome_plano : "Nenhum",
-                        dataPlano: plano ? plano.inicio_vigencia : null,
-                    };
-                });
-                setClientes(clientesComPlano);
-            }
+            setLoading(true);
+            const resp = await fetch("/api/admin-users");
+            const data = await resp.json();
+            setClientes(data);
             setLoading(false);
         }
         fetchClientes();
@@ -39,15 +27,13 @@ export default function ClientesList() {
                         <th className="p-3 text-left">E-mail</th>
                         <th className="p-3 text-left">Telefone</th>
                         <th className="p-3 text-left">CPF</th>
-                        <th className="p-3 text-left">Plano</th>
-                        <th className="p-3 text-left">Início Plano</th>
                         <th className="p-3 text-left">Criado em</th>
                     </tr>
                 </thead>
                 <tbody>
                     {clientes.length === 0 && (
                         <tr>
-                            <td colSpan={7} className="p-4 text-center text-gray-500">
+                            <td colSpan={5} className="p-4 text-center text-gray-500">
                                 Nenhum cliente cadastrado.
                             </td>
                         </tr>
@@ -58,8 +44,6 @@ export default function ClientesList() {
                             <td className="p-3">{cliente.email}</td>
                             <td className="p-3">{cliente.user_metadata?.telefone || "-"}</td>
                             <td className="p-3">{cliente.user_metadata?.cpf || "-"}</td>
-                            <td className="p-3">{cliente.planoAtivo}</td>
-                            <td className="p-3">{cliente.dataPlano ? new Date(cliente.dataPlano).toLocaleDateString() : "-"}</td>
                             <td className="p-3">{new Date(cliente.created_at).toLocaleDateString()}</td>
                         </tr>
                     ))}
