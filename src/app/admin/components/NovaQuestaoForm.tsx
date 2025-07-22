@@ -1,14 +1,60 @@
 "use client";
-import React, { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function NovaQuestaoForm() {
-    const [questao, setQuestao] = useState<any>({
-        alternativas: {},
-    });
+    const [questao, setQuestao] = useState<any>({ alternativas: {} });
     const [msg, setMsg] = useState("");
+    const [lista, setLista] = useState<any>({ instituicao: [], cargo: [], disciplina: [], assunto: [], modalidade: [], banca: [] });
 
-    async function handleNovaQuestao(e: React.FormEvent) {
+    // Carrega todas as opções já usadas no banco
+    useEffect(() => {
+        async function fetchData() {
+            const { data, error } = await supabase
+                .from("questoes")
+                .select("instituicao, cargo, disciplina, assunto, modalidade, banca");
+            if (!error && data) {
+                const uniq = (arr: string[]) => [...new Set(arr.filter(Boolean))];
+                setLista({
+                    instituicao: uniq(data.map(q => q.instituicao)),
+                    cargo: uniq(data.map(q => q.cargo)),
+                    disciplina: uniq(data.map(q => q.disciplina)),
+                    assunto: uniq(data.map(q => q.assunto)),
+                    modalidade: uniq(data.map(q => q.modalidade)),
+                    banca: uniq(data.map(q => q.banca)),
+                });
+            }
+        }
+        fetchData();
+    }, []);
+
+    // Pesquisa rápida nos selects
+    function AutoSelect({ label, name }: { label: string; name: string }) {
+        const [search, setSearch] = useState("");
+        const options = (lista[name] || []).filter((o: string) => o?.toLowerCase().includes(search.toLowerCase()));
+        return (
+            <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+                <label className="font-semibold">{label}</label>
+                <input
+                    className="rounded px-4 py-2 border bg-gray-50"
+                    placeholder={`Digite ou selecione`}
+                    value={questao[name] || search}
+                    onChange={e => {
+                        setSearch(e.target.value);
+                        setQuestao({ ...questao, [name]: e.target.value });
+                    }}
+                    list={name + "-list"}
+                />
+                <datalist id={name + "-list"}>
+                    {options.map((o: string, i: number) =>
+                        <option key={i} value={o} />
+                    )}
+                </datalist>
+            </div>
+        );
+    }
+
+    async function handleNovaQuestao(e: any) {
         e.preventDefault();
         setMsg("");
         if (!questao.enunciado || !questao.correta || !questao.alternativas) {
@@ -22,107 +68,68 @@ export default function NovaQuestaoForm() {
     }
 
     return (
-        <div className="bg-white rounded-2xl p-6 shadow max-w-lg mx-auto">
+        <div className="bg-white rounded-2xl p-6 shadow max-w-2xl mx-auto">
             <h2 className="text-xl font-bold mb-4">Adicionar Nova Questão</h2>
             <form className="flex flex-col gap-3" onSubmit={handleNovaQuestao}>
-                <input
-                    required
-                    placeholder="Instituição"
-                    className="rounded px-4 py-2 border"
-                    value={questao.instituicao || ""}
-                    onChange={(e) =>
-                        setQuestao({ ...questao, instituicao: e.target.value })
-                    }
-                />
-                <input
-                    required
-                    placeholder="Cargo"
-                    className="rounded px-4 py-2 border"
-                    value={questao.cargo || ""}
-                    onChange={(e) => setQuestao({ ...questao, cargo: e.target.value })}
-                />
-                <input
-                    required
-                    placeholder="Disciplina"
-                    className="rounded px-4 py-2 border"
-                    value={questao.disciplina || ""}
-                    onChange={(e) =>
-                        setQuestao({ ...questao, disciplina: e.target.value })
-                    }
-                />
-                <input
-                    required
-                    placeholder="Assunto"
-                    className="rounded px-4 py-2 border"
-                    value={questao.assunto || ""}
-                    onChange={(e) => setQuestao({ ...questao, assunto: e.target.value })}
-                />
-                <input
-                    required
-                    placeholder="Modalidade"
-                    className="rounded px-4 py-2 border"
-                    value={questao.modalidade || ""}
-                    onChange={(e) =>
-                        setQuestao({ ...questao, modalidade: e.target.value })
-                    }
-                />
-                <input
-                    required
-                    placeholder="Banca"
-                    className="rounded px-4 py-2 border"
-                    value={questao.banca || ""}
-                    onChange={(e) => setQuestao({ ...questao, banca: e.target.value })}
-                />
+                <div className="flex flex-wrap gap-4">
+                    <AutoSelect label="Instituição" name="instituicao" />
+                    <AutoSelect label="Cargo" name="cargo" />
+                </div>
+                <div className="flex flex-wrap gap-4">
+                    <AutoSelect label="Disciplina" name="disciplina" />
+                    <AutoSelect label="Assunto" name="assunto" />
+                </div>
+                <div className="flex flex-wrap gap-4">
+                    <AutoSelect label="Modalidade" name="modalidade" />
+                    <AutoSelect label="Banca" name="banca" />
+                </div>
                 <textarea
                     required
                     placeholder="Enunciado"
-                    className="rounded px-4 py-2 border"
+                    className="rounded px-4 py-2 border bg-gray-50"
                     value={questao.enunciado || ""}
-                    onChange={(e) =>
-                        setQuestao({ ...questao, enunciado: e.target.value })
-                    }
+                    onChange={e => setQuestao({ ...questao, enunciado: e.target.value })}
                 />
-                <div className="flex flex-col gap-1">
-                    <label className="font-semibold">Alternativas</label>
-                    {["A", "B", "C", "D", "E"].map((letra) => (
-                        <input
-                            key={letra}
-                            placeholder={`Alternativa ${letra}`}
-                            className="rounded px-4 py-2 border"
-                            value={questao.alternativas?.[letra] || ""}
-                            onChange={(e) =>
-                                setQuestao({
-                                    ...questao,
-                                    alternativas: { ...questao.alternativas, [letra]: e.target.value },
-                                })
-                            }
-                        />
-                    ))}
+                <div className="flex gap-2">
+                    <input className="rounded px-4 py-2 border flex-1" placeholder="Alternativa A"
+                        value={questao.alternativas?.A || ""}
+                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, A: e.target.value } })} />
+                    <input className="rounded px-4 py-2 border flex-1" placeholder="Alternativa B"
+                        value={questao.alternativas?.B || ""}
+                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, B: e.target.value } })} />
+                    <input className="rounded px-4 py-2 border flex-1" placeholder="Alternativa C"
+                        value={questao.alternativas?.C || ""}
+                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, C: e.target.value } })} />
+                    <input className="rounded px-4 py-2 border flex-1" placeholder="Alternativa D"
+                        value={questao.alternativas?.D || ""}
+                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, D: e.target.value } })} />
                 </div>
-                <input
-                    required
-                    placeholder="Alternativa Correta (A, B, C, D ou E)"
-                    className="rounded px-4 py-2 border"
-                    value={questao.correta || ""}
-                    onChange={(e) =>
-                        setQuestao({ ...questao, correta: e.target.value.toUpperCase() })
-                    }
-                />
+                <div className="flex gap-2">
+                    <input className="rounded px-4 py-2 border flex-1" placeholder="Alternativa E"
+                        value={questao.alternativas?.E || ""}
+                        onChange={e => setQuestao({ ...questao, alternativas: { ...questao.alternativas, E: e.target.value } })} />
+                    <input className="rounded px-4 py-2 border flex-1" placeholder="Correta (A-E)"
+                        maxLength={1}
+                        value={questao.correta || ""}
+                        onChange={e => setQuestao({ ...questao, correta: e.target.value.toUpperCase().replace(/[^A-E]/g, "") })}
+                    />
+                </div>
                 <textarea
-                    placeholder="Explicação"
-                    className="rounded px-4 py-2 border"
+                    placeholder="Explicação/Comentário (opcional)"
+                    className="rounded px-4 py-2 border bg-gray-50"
                     value={questao.explicacao || ""}
-                    onChange={(e) =>
-                        setQuestao({ ...questao, explicacao: e.target.value })
-                    }
+                    onChange={e => setQuestao({ ...questao, explicacao: e.target.value })}
                 />
-                <button
-                    type="submit"
-                    className="bg-blue-600 text-white rounded font-bold py-2 hover:bg-blue-700 transition"
-                >
-                    Adicionar
-                </button>
-                {msg && <div className="text-green-700 font-bold mt-2">{msg}</div>}
+                <div className="flex gap-4 mt-2">
+                    <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded font-bold hover:bg-blue-700">
+                        Adicionar Questão
+                    </button>
+                    <button type="button" className="bg-gray-200 text-[#232939] px-6 py-2 rounded font-bold hover:bg-gray-300"
+                        onClick={() => setQuestao({ alternativas: {} })}>
+                        Limpar Campos
+                    </button>
+                </div>
+                {msg && <div className={`text-center mt-2 ${msg.startsWith("Erro") ? "text-red-500" : "text-green-700"}`}>{msg}</div>}
             </form>
         </div>
     );
