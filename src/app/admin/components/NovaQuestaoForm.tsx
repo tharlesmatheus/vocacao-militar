@@ -30,19 +30,19 @@ export default function NovaQuestaoForm() {
 
     // Pesquisa rápida nos selects
     function AutoSelect({ label, name }: { label: string; name: string }) {
-        const [search, setSearch] = useState("");
+        const [search, setSearch] = useState(questao[name] || "");
         const options = (lista[name] || []).filter((o: string) => o?.toLowerCase().includes(search.toLowerCase()));
+
+        // Atualiza o campo no questao apenas ao sair do input (onBlur) ou ao escolher uma opção (onChange), mas não ao digitar a cada letra
         return (
             <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
                 <label className="font-semibold">{label}</label>
                 <input
                     className="rounded px-4 py-2 border bg-gray-50"
                     placeholder={`Digite ou selecione`}
-                    value={questao[name] || search}
-                    onChange={e => {
-                        setSearch(e.target.value);
-                        setQuestao({ ...questao, [name]: e.target.value });
-                    }}
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    onBlur={() => setQuestao((q: any) => ({ ...q, [name]: search }))}
                     list={name + "-list"}
                 />
                 <datalist id={name + "-list"}>
