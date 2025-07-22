@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import ClientesList from "./components/ClientesList";
 import QuestoesList from "./components/QuestoesList";
@@ -10,16 +10,16 @@ import { User, BookOpen, PlusCircle } from "lucide-react";
 
 export default function AdminDashboard() {
     const router = useRouter();
-    const searchParams = useSearchParams();
+    const [tab, setTab] = useState("clientes");
     const [loading, setLoading] = useState(true);
 
-    // Agora pegamos o tab pela URL, default = "clientes"
-    const [tab, setTab] = useState("clientes");
-
+    // Pega o tab da URL só no client
     useEffect(() => {
-        const t = searchParams.get("tab");
-        setTab(t || "clientes");
-    }, [searchParams]);
+        if (typeof window !== "undefined") {
+            const params = new URLSearchParams(window.location.search);
+            setTab(params.get("tab") || "clientes");
+        }
+    }, []);
 
     // Proteção da rota admin
     useEffect(() => {
@@ -41,11 +41,6 @@ export default function AdminDashboard() {
                 <div className="animate-pulse text-xl">Carregando...</div>
             </div>
         );
-    }
-
-    // Navegação alterando a URL (para funcionar com Sidebar)
-    function handleTabChange(tabName: string) {
-        router.replace(`/admin?tab=${tabName}`);
     }
 
     return (
