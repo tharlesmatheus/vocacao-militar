@@ -2,6 +2,19 @@
 import React, { useState, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 
+// Tesoura SVG (inline, para não depender de biblioteca externa)
+function TesouraIcon({ className = "" }: { className?: string }) {
+    return (
+        <svg viewBox="0 0 20 20" fill="none" width={22} height={22}
+            className={className + " pointer-events-none"}
+        >
+            <path d="M7.5 8.5L3 3M12.5 8.5L17 3M3 17l7-7 7 7" stroke="#9ca3af" strokeWidth={2} strokeLinecap="round" />
+            <circle cx={4.5} cy={15.5} r={1.2} fill="#bbb" />
+            <circle cx={15.5} cy={15.5} r={1.2} fill="#bbb" />
+        </svg>
+    );
+}
+
 type Option = { letter?: string; text: string };
 
 interface QuestionCardProps {
@@ -25,21 +38,17 @@ async function atualizarEstatisticasQuestao(acertou: boolean) {
         .select("*")
         .eq("user_id", user.id)
         .single();
-
     if (error || !data) {
         await supabase.from("estatisticas").insert([{
             user_id: user.id,
             questoes_respondidas: 1,
             taxa_acerto: acertou ? 100 : 0,
             tempo_estudado: "00:00:00",
-            progresso_semanal: [
-                { dia: new Date().toLocaleDateString("pt-BR"), questoes: 1 }
-            ],
+            progresso_semanal: [{ dia: new Date().toLocaleDateString("pt-BR"), questoes: 1 }],
             atualizado_em: new Date().toISOString(),
         }]);
         return;
     }
-
     const novasQuestoes = (data.questoes_respondidas ?? 0) + 1;
     const acertosAnteriores = Math.round((data.taxa_acerto ?? 0) / 100 * (data.questoes_respondidas ?? 0));
     const novosAcertos = acertosAnteriores + (acertou ? 1 : 0);
@@ -48,11 +57,8 @@ async function atualizarEstatisticasQuestao(acertou: boolean) {
     const hoje = new Date().toLocaleDateString("pt-BR");
     let progresso = Array.isArray(data.progresso_semanal) ? [...data.progresso_semanal] : [];
     const idx = progresso.findIndex((d: any) => d.dia === hoje);
-    if (idx > -1) {
-        progresso[idx].questoes += 1;
-    } else {
-        progresso.push({ dia: hoje, questoes: 1 });
-    }
+    if (idx > -1) progresso[idx].questoes += 1;
+    else progresso.push({ dia: hoje, questoes: 1 });
 
     await supabase
         .from("estatisticas")
@@ -85,11 +91,22 @@ export function QuestionCard({
     const [loadingErro, setLoadingErro] = useState(false);
     const [comentarioText, setComentarioText] = useState("");
     const [loadingComentario, setLoadingComentario] = useState(false);
+    const [eliminadas, setEliminadas] = useState<number[]>([]); // <-- controla eliminadas
+
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     React.useEffect(() => {
         if (showModal) setTimeout(() => textareaRef.current?.focus(), 100);
     }, [showModal]);
+
+    // Eliminar/restaurar alternativa
+    const toggleEliminada = (idx: number) => {
+        setEliminadas((prev) =>
+            prev.includes(idx)
+                ? prev.filter((i) => i !== idx)
+                : [...prev, idx]
+        );
+    };
 
     // Função de compartilhamento
     const compartilharQuestao = () => {
@@ -111,18 +128,12 @@ export function QuestionCard({
     const enviarErro = async () => {
         if (!errorText.trim()) return;
         setLoadingErro(true);
-
-        const novoErro = {
-            mensagem: errorText,
-            data: new Date().toISOString()
-        };
+        const novoErro = { mensagem: errorText, data: new Date().toISOString() };
         const novosErros = [...(erros || []), novoErro];
-
         const { error } = await supabase
             .from("questoes")
             .update({ erros: novosErros })
             .eq("id", id);
-
         setLoadingErro(false);
         if (!error) {
             setShowModal(false);
@@ -137,18 +148,12 @@ export function QuestionCard({
     const enviarComentario = async () => {
         if (!comentarioText.trim()) return;
         setLoadingComentario(true);
-
-        const novoComentario = {
-            texto: comentarioText,
-            data: new Date().toISOString()
-        };
+        const novoComentario = { texto: comentarioText, data: new Date().toISOString() };
         const novosComentarios = [...(comentarios || []), novoComentario];
-
         const { error } = await supabase
             .from("questoes")
             .update({ comentarios: novosComentarios })
             .eq("id", id);
-
         setLoadingComentario(false);
         if (!error) {
             setComentarioText("");
@@ -182,13 +187,14 @@ export function QuestionCard({
             {/* Alternativas */}
             <div className="flex flex-col gap-2 mb-5">
                 {qtdAlternativas === 2 ? (
-                    // Apenas exibe o texto, sem letras
                     options.map((opt, idx) => {
                         const value = opt.letter || opt.text;
                         const isSelected = selected === value;
                         const isCorrect = correct === value;
+                        const eliminada = eliminadas.includes(idx);
+
                         let btnClass =
-                            "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px]";
+                            "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px] relative group";
                         if (showResult && isSelected) {
                             btnClass += isCorrect
                                 ? " bg-green-50 border-green-600 text-green-900"
@@ -197,6 +203,9 @@ export function QuestionCard({
                             btnClass += " bg-[#e9effd] border-[#6a88d7] text-[#232939]";
                         } else {
                             btnClass += " bg-white border-[#e3e8f3] hover:bg-[#f6faff]";
+                        }
+                        if (eliminada) {
+                            btnClass += " text-gray-400 opacity-60 line-through";
                         }
                         return (
                             <button
@@ -206,6 +215,16 @@ export function QuestionCard({
                                 disabled={showResult}
                                 onClick={() => setSelected(value)}
                             >
+                                {/* Botão eliminar */}
+                                <span
+                                    onClick={e => { e.stopPropagation(); toggleEliminada(idx); }}
+                                    title={eliminada ? "Restaurar alternativa" : "Eliminar alternativa"}
+                                    className={`mr-3 transition cursor-pointer rounded-full p-1 hover:bg-gray-100 border border-transparent hover:border-gray-200
+                                        ${eliminada ? "opacity-40" : ""}
+                                    `}
+                                >
+                                    <TesouraIcon />
+                                </span>
                                 <span className="text-[#232939] text-[15px]">{opt.text}</span>
                             </button>
                         );
@@ -215,8 +234,10 @@ export function QuestionCard({
                         const value = opt.letter || letras[idx];
                         const isSelected = selected === value;
                         const isCorrect = correct === value;
+                        const eliminada = eliminadas.includes(idx);
+
                         let btnClass =
-                            "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px]";
+                            "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px] relative group";
                         if (showResult && isSelected) {
                             btnClass += isCorrect
                                 ? " bg-green-50 border-green-600 text-green-900"
@@ -226,6 +247,9 @@ export function QuestionCard({
                         } else {
                             btnClass += " bg-white border-[#e3e8f3] hover:bg-[#f6faff]";
                         }
+                        if (eliminada) {
+                            btnClass += " text-gray-400 opacity-60 line-through";
+                        }
                         return (
                             <button
                                 key={value}
@@ -234,6 +258,16 @@ export function QuestionCard({
                                 disabled={showResult}
                                 onClick={() => setSelected(value)}
                             >
+                                {/* Botão eliminar */}
+                                <span
+                                    onClick={e => { e.stopPropagation(); toggleEliminada(idx); }}
+                                    title={eliminada ? "Restaurar alternativa" : "Eliminar alternativa"}
+                                    className={`mr-3 transition cursor-pointer rounded-full p-1 hover:bg-gray-100 border border-transparent hover:border-gray-200
+                                        ${eliminada ? "opacity-40" : ""}
+                                    `}
+                                >
+                                    <TesouraIcon />
+                                </span>
                                 <span className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
                                     ${showResult && isSelected
                                         ? isCorrect
