@@ -94,9 +94,7 @@ export function QuestionCard({
     // Função de compartilhamento
     const compartilharQuestao = () => {
         const texto =
-            `${statement}\n\n${options.map((opt, idx) =>
-                (opt.letter ? `${opt.letter}) ` : "") + opt.text
-            ).join('\n')}\n\nConheça a melhor plataforma de questões comentadas para concursos policiais:\n`;
+            `${statement}\n\n${options.map((opt) => opt.text).join('\n')}\n\nConheça a melhor plataforma de questões comentadas para concursos policiais:\n`;
         if (navigator.share) {
             navigator.share({
                 title: "Questão para Concursos Policiais",
@@ -162,16 +160,7 @@ export function QuestionCard({
 
     // --------- Lógica para exibir alternativas ---------
     const qtdAlternativas = options.length;
-    const isCertoErrado = qtdAlternativas === 2;
-
-    // Letras: A, B, C, D, E (só se 3 ou mais alternativas)
     const letras = ["A", "B", "C", "D", "E"];
-
-    // Para questões de certo/errado, mostrar Certo e Errado
-    const opcoesCertErrado = [
-        { value: "C", label: "Certo" },
-        { value: "E", label: "Errado" }
-    ];
 
     return (
         <div className="bg-white rounded-2xl p-7 mb-6 shadow border border-[#e3e8f3] max-w-6xl w-full mx-auto transition-all font-inter">
@@ -192,10 +181,12 @@ export function QuestionCard({
             </h2>
             {/* Alternativas */}
             <div className="flex flex-col gap-2 mb-5">
-                {isCertoErrado ? (
-                    opcoesCertErrado.map(opt => {
-                        const isSelected = selected === opt.value;
-                        const isCorrect = correct === opt.value;
+                {qtdAlternativas === 2 ? (
+                    // Apenas exibe o texto, sem letras
+                    options.map((opt, idx) => {
+                        const value = opt.letter || opt.text;
+                        const isSelected = selected === value;
+                        const isCorrect = correct === value;
                         let btnClass =
                             "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px]";
                         if (showResult && isSelected) {
@@ -209,32 +200,21 @@ export function QuestionCard({
                         }
                         return (
                             <button
-                                key={opt.value}
+                                key={idx}
                                 type="button"
                                 className={btnClass}
                                 disabled={showResult}
-                                onClick={() => setSelected(opt.value)}
+                                onClick={() => setSelected(value)}
                             >
-                                <span className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
-                                    ${showResult && isSelected
-                                        ? isCorrect
-                                            ? "bg-green-600 text-white"
-                                            : "bg-red-500 text-white"
-                                        : isSelected
-                                            ? "bg-[#6a88d7] text-white"
-                                            : "bg-[#f3f5fa] text-[#232939]"
-                                    }
-                                `}>
-                                    {opt.label[0]}
-                                </span>
-                                <span className="text-[#232939] text-[15px]">{opt.label}</span>
+                                <span className="text-[#232939] text-[15px]">{opt.text}</span>
                             </button>
                         );
                     })
                 ) : (
                     options.map((opt, idx) => {
-                        const isSelected = selected === (opt.letter || letras[idx]);
-                        const isCorrect = correct === (opt.letter || letras[idx]);
+                        const value = opt.letter || letras[idx];
+                        const isSelected = selected === value;
+                        const isCorrect = correct === value;
                         let btnClass =
                             "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px]";
                         if (showResult && isSelected) {
@@ -248,11 +228,11 @@ export function QuestionCard({
                         }
                         return (
                             <button
-                                key={opt.letter || letras[idx]}
+                                key={value}
                                 type="button"
                                 className={btnClass}
                                 disabled={showResult}
-                                onClick={() => setSelected(opt.letter || letras[idx])}
+                                onClick={() => setSelected(value)}
                             >
                                 <span className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
                                     ${showResult && isSelected
@@ -264,7 +244,7 @@ export function QuestionCard({
                                             : "bg-[#f3f5fa] text-[#232939]"
                                     }
                                 `}>
-                                    {opt.letter || letras[idx]}
+                                    {value}
                                 </span>
                                 <span className="text-[#232939] text-[15px]">{opt.text}</span>
                             </button>
