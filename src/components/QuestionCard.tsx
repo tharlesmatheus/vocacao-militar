@@ -91,7 +91,7 @@ export function QuestionCard({
     const [loadingErro, setLoadingErro] = useState(false);
     const [comentarioText, setComentarioText] = useState("");
     const [loadingComentario, setLoadingComentario] = useState(false);
-    const [eliminadas, setEliminadas] = useState<number[]>([]); // <-- controla eliminadas
+    const [eliminadas, setEliminadas] = useState<number[]>([]);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -186,105 +186,71 @@ export function QuestionCard({
             </h2>
             {/* Alternativas */}
             <div className="flex flex-col gap-2 mb-5">
-                {qtdAlternativas === 2 ? (
-                    options.map((opt, idx) => {
-                        const value = opt.letter || opt.text;
-                        const isSelected = selected === value;
-                        const isCorrect = correct === value;
-                        const eliminada = eliminadas.includes(idx);
+                {options.map((opt, idx) => {
+                    const value = opt.letter || letras[idx];
+                    const isSelected = selected === value;
+                    const isCorrect = correct === value;
+                    const eliminada = eliminadas.includes(idx);
 
-                        let btnClass =
-                            "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px] relative group";
-                        if (showResult && isSelected) {
-                            btnClass += isCorrect
-                                ? " bg-green-50 border-green-600 text-green-900"
-                                : " bg-red-50 border-red-400 text-red-900";
-                        } else if (isSelected) {
-                            btnClass += " bg-[#e9effd] border-[#6a88d7] text-[#232939]";
+                    // Lógica para mostrar contorno verde na correta se o usuário errar:
+                    let btnClass =
+                        "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px] relative group";
+
+                    if (showResult) {
+                        if (isSelected && selected !== correct) {
+                            // O usuário ERROU esta opção
+                            btnClass += " bg-red-50 border-red-400 text-red-900";
+                        } else if (isCorrect && selected !== correct) {
+                            // Mostrar contorno verde NA CORRETA, pois o usuário ERROU
+                            btnClass += " bg-green-50 border-green-600 text-green-900";
+                        } else if (isSelected && selected === correct) {
+                            // Acertou: só verde na selecionada
+                            btnClass += " bg-green-50 border-green-600 text-green-900";
                         } else {
-                            btnClass += " bg-white border-[#e3e8f3] hover:bg-[#f6faff]";
+                            btnClass += " bg-white border-[#e3e8f3]";
                         }
-                        if (eliminada) {
-                            btnClass += " text-gray-400 opacity-60 line-through";
-                        }
-                        return (
-                            <button
-                                key={idx}
-                                type="button"
-                                className={btnClass}
-                                disabled={showResult}
-                                onClick={() => setSelected(value)}
-                            >
-                                {/* Botão eliminar */}
-                                <span
-                                    onClick={e => { e.stopPropagation(); toggleEliminada(idx); }}
-                                    title={eliminada ? "Restaurar alternativa" : "Eliminar alternativa"}
-                                    className={`mr-3 transition cursor-pointer rounded-full p-1 hover:bg-gray-100 border border-transparent hover:border-gray-200
+                    } else if (isSelected) {
+                        btnClass += " bg-[#e9effd] border-[#6a88d7] text-[#232939]";
+                    } else {
+                        btnClass += " bg-white border-[#e3e8f3] hover:bg-[#f6faff]";
+                    }
+                    if (eliminada) {
+                        btnClass += " text-gray-400 opacity-60 line-through";
+                    }
+                    return (
+                        <button
+                            key={value}
+                            type="button"
+                            className={btnClass}
+                            disabled={showResult}
+                            onClick={() => setSelected(value)}
+                        >
+                            {/* Botão eliminar */}
+                            <span
+                                onClick={e => { e.stopPropagation(); toggleEliminada(idx); }}
+                                title={eliminada ? "Restaurar alternativa" : "Eliminar alternativa"}
+                                className={`mr-3 transition cursor-pointer rounded-full p-1 hover:bg-gray-100 border border-transparent hover:border-gray-200
                                         ${eliminada ? "opacity-40" : ""}
                                     `}
-                                >
-                                    <TesouraIcon />
-                                </span>
-                                <span className="text-[#232939] text-[15px]">{opt.text}</span>
-                            </button>
-                        );
-                    })
-                ) : (
-                    options.map((opt, idx) => {
-                        const value = opt.letter || letras[idx];
-                        const isSelected = selected === value;
-                        const isCorrect = correct === value;
-                        const eliminada = eliminadas.includes(idx);
-
-                        let btnClass =
-                            "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px] relative group";
-                        if (showResult && isSelected) {
-                            btnClass += isCorrect
-                                ? " bg-green-50 border-green-600 text-green-900"
-                                : " bg-red-50 border-red-400 text-red-900";
-                        } else if (isSelected) {
-                            btnClass += " bg-[#e9effd] border-[#6a88d7] text-[#232939]";
-                        } else {
-                            btnClass += " bg-white border-[#e3e8f3] hover:bg-[#f6faff]";
-                        }
-                        if (eliminada) {
-                            btnClass += " text-gray-400 opacity-60 line-through";
-                        }
-                        return (
-                            <button
-                                key={value}
-                                type="button"
-                                className={btnClass}
-                                disabled={showResult}
-                                onClick={() => setSelected(value)}
                             >
-                                {/* Botão eliminar */}
-                                <span
-                                    onClick={e => { e.stopPropagation(); toggleEliminada(idx); }}
-                                    title={eliminada ? "Restaurar alternativa" : "Eliminar alternativa"}
-                                    className={`mr-3 transition cursor-pointer rounded-full p-1 hover:bg-gray-100 border border-transparent hover:border-gray-200
-                                        ${eliminada ? "opacity-40" : ""}
-                                    `}
-                                >
-                                    <TesouraIcon />
-                                </span>
-                                <span className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
+                                <TesouraIcon />
+                            </span>
+                            <span className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
                                     ${showResult && isSelected
-                                        ? isCorrect
-                                            ? "bg-green-600 text-white"
-                                            : "bg-red-500 text-white"
-                                        : isSelected
-                                            ? "bg-[#6a88d7] text-white"
-                                            : "bg-[#f3f5fa] text-[#232939]"
-                                    }
+                                    ? isCorrect
+                                        ? "bg-green-600 text-white"
+                                        : "bg-red-500 text-white"
+                                    : isSelected
+                                        ? "bg-[#6a88d7] text-white"
+                                        : "bg-[#f3f5fa] text-[#232939]"
+                                }
                                 `}>
-                                    {value}
-                                </span>
-                                <span className="text-[#232939] text-[15px]">{opt.text}</span>
-                            </button>
-                        );
-                    })
-                )}
+                                {value}
+                            </span>
+                            <span className="text-[#232939] text-[15px]">{opt.text}</span>
+                        </button>
+                    );
+                })}
             </div>
             {/* Ações */}
             <div className="flex flex-wrap gap-2 mb-4">
