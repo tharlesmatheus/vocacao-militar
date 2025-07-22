@@ -93,19 +93,20 @@ export function QuestionCard({
     const [eliminadas, setEliminadas] = useState<number[]>([]);
     const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
+    // Novo estado local para comentários
+    const [comentariosState, setComentariosState] = useState<any[]>(comentarios || []);
+
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     React.useEffect(() => {
         if (showModal) setTimeout(() => textareaRef.current?.focus(), 100);
     }, [showModal]);
 
-    // FEEDBACK POPUP
     const showFeedback = (msg: string) => {
         setFeedbackMsg(msg);
         setTimeout(() => setFeedbackMsg(null), 3000);
     };
 
-    // Eliminar/restaurar alternativa
     const toggleEliminada = (idx: number) => {
         setEliminadas((prev) =>
             prev.includes(idx)
@@ -114,7 +115,6 @@ export function QuestionCard({
         );
     };
 
-    // Função de compartilhamento
     const compartilharQuestao = () => {
         const texto =
             `${statement}\n\n${options.map((opt) => opt.text).join('\n')}\n\nConheça a melhor plataforma de questões comentadas para concursos policiais:\n`;
@@ -130,7 +130,6 @@ export function QuestionCard({
         }
     };
 
-    // Notificar erro
     const enviarErro = async () => {
         if (!errorText.trim()) return;
         setLoadingErro(true);
@@ -153,14 +152,14 @@ export function QuestionCard({
         }
     };
 
-    // Adicionar novo comentário
+    // **MODIFICADO**: Adiciona no estado local o novo comentário!
     const enviarComentario = async () => {
         if (!comentarioText.trim()) return;
         setLoadingComentario(true);
         const { data: { user } } = await supabase.auth.getUser();
         let userName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "Usuário";
         const novoComentario = { texto: comentarioText, data: new Date().toISOString(), usuario: userName };
-        const novosComentarios = [...(comentarios || []), novoComentario];
+        const novosComentarios = [...comentariosState, novoComentario];
         const { error } = await supabase
             .from("questoes")
             .update({ comentarios: novosComentarios })
@@ -168,6 +167,7 @@ export function QuestionCard({
         setLoadingComentario(false);
         if (!error) {
             setComentarioText("");
+            setComentariosState(novosComentarios); // <-- aqui!
             showFeedback("Comentário enviado!");
             if (onNovoComentario) onNovoComentario(comentarioText);
         } else {
@@ -175,7 +175,6 @@ export function QuestionCard({
         }
     };
 
-    // --------- Lógica para exibir alternativas ---------
     const letras = ["A", "B", "C", "D", "E"];
 
     return (
@@ -239,7 +238,6 @@ export function QuestionCard({
                             disabled={showResult}
                             onClick={() => setSelected(value)}
                         >
-                            {/* Botão eliminar */}
                             <span
                                 onClick={e => { e.stopPropagation(); toggleEliminada(idx); }}
                                 title={eliminada ? "Restaurar alternativa" : "Eliminar alternativa"}
@@ -285,7 +283,7 @@ export function QuestionCard({
                     type="button"
                     onClick={() => setShowComentarios(v => !v)}
                 >
-                    Comentários ({comentarios?.length ?? 0})
+                    Comentários ({comentariosState.length ?? 0})
                 </button>
                 <button
                     className="bg-white border border-[#e3e8f3] text-[#425179] py-2 px-5 rounded-xl text-sm transition hover:bg-[#f3f5fa] font-medium"
@@ -343,9 +341,9 @@ export function QuestionCard({
                             {loadingComentario ? "Enviando..." : "Comentar"}
                         </button>
                     </div>
-                    {comentarios?.length ? (
+                    {comentariosState.length ? (
                         <ul className="flex flex-col gap-2">
-                            {comentarios.map((com, i) => (
+                            {comentariosState.map((com, i) => (
                                 <li key={i} className="bg-white rounded-lg px-3 py-2 border text-sm">
                                     <span className="font-bold text-[#6a88d7] mr-2">{com?.usuario || "Usuário"}</span>
                                     {com?.texto || com?.mensagem || JSON.stringify(com)}
