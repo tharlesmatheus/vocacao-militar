@@ -94,10 +94,10 @@ export default function EstatisticasPage() {
 
             {/* Carregando ou erro */}
             {loading && (
-                <div className="text-center text-[#7b8bb0] font-semibold">Carregando estatísticas...</div>
+                <div className="text-center text-muted-foreground font-semibold">Carregando estatísticas...</div>
             )}
             {erro && (
-                <div className="text-center text-red-500 font-semibold">{erro}</div>
+                <div className="text-center text-destructive font-semibold">{erro}</div>
             )}
 
             {!loading && !erro && estat && (
@@ -107,12 +107,12 @@ export default function EstatisticasPage() {
                         {cards.map((item, i) => (
                             <div
                                 key={i}
-                                className="rounded-2xl bg-white border border-[#E3E8F3] py-6 px-2 flex flex-col items-center shadow-sm"
+                                className="rounded-2xl bg-card border border-border py-6 px-2 flex flex-col items-center shadow-sm"
                             >
-                                <span className="text-xs sm:text-sm text-[#7b8bb0] mb-1 font-medium">
+                                <span className="text-xs sm:text-sm text-muted-foreground mb-1 font-medium">
                                     {item.label}
                                 </span>
-                                <span className="text-xl sm:text-2xl font-bold text-[#232939] tracking-tight">
+                                <span className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
                                     {item.valor}
                                 </span>
                             </div>
@@ -120,28 +120,28 @@ export default function EstatisticasPage() {
                     </div>
 
                     {/* Progresso semanal */}
-                    <div className="bg-white rounded-2xl shadow-lg border border-[#E3E8F3] px-4 sm:px-8 py-6 flex flex-col items-center mb-2">
-                        <h2 className="text-base sm:text-lg font-bold mb-4 text-[#232939]">
+                    <div className="bg-card rounded-2xl shadow-lg border border-border px-4 sm:px-8 py-6 flex flex-col items-center mb-2">
+                        <h2 className="text-base sm:text-lg font-bold mb-4 text-foreground">
                             Progresso semanal
                         </h2>
                         <div className="w-full h-48 sm:h-64">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={estat.progresso_semanal ?? []}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#E3E8F3" />
-                                    <XAxis dataKey="dia" stroke="#aab6cf" fontSize={13} />
-                                    <YAxis stroke="#aab6cf" fontSize={13} allowDecimals={false} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                                    <XAxis dataKey="dia" stroke="var(--muted-foreground)" fontSize={13} />
+                                    <YAxis stroke="var(--muted-foreground)" fontSize={13} allowDecimals={false} />
                                     <Tooltip
                                         contentStyle={{
-                                            background: "#f8fafc",
-                                            border: "1px solid #E3E8F3",
-                                            color: "#232939",
+                                            background: "var(--muted)",
+                                            border: "1px solid var(--border)",
+                                            color: "var(--foreground)",
                                             fontFamily: "inherit",
                                             borderRadius: 12,
                                         }}
-                                        itemStyle={{ color: "#3b82f6" }}
-                                        cursor={{ fill: "#e7efff", opacity: 0.16 }}
+                                        itemStyle={{ color: "var(--primary)" }}
+                                        cursor={{ fill: "var(--primary)", opacity: 0.1 }}
                                     />
-                                    <Bar dataKey="questoes" fill="#6a88d7" radius={[8, 8, 0, 0]} />
+                                    <Bar dataKey="questoes" fill="var(--primary)" radius={[8, 8, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
