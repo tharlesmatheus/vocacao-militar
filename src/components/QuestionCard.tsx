@@ -173,10 +173,10 @@ export function QuestionCard({
     const letras = ["A", "B", "C", "D", "E"];
 
     return (
-        <div className="bg-white rounded-2xl p-7 mb-6 shadow border border-[#e3e8f3] max-w-6xl w-full mx-auto transition-all font-inter relative">
+        <div className="bg-card rounded-2xl p-7 mb-6 shadow border border-border max-w-6xl w-full mx-auto transition-all font-inter relative">
             {/* FEEDBACK TOAST */}
             {feedbackMsg && (
-                <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-[#6a88d7] text-white rounded-lg px-6 py-3 text-sm shadow-lg z-[200] animate-fade-in">
+                <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground rounded-lg px-6 py-3 text-sm shadow-lg z-[200] animate-fade-in">
                     {feedbackMsg}
                 </div>
             )}
@@ -186,14 +186,14 @@ export function QuestionCard({
                 {tags.map((tag, i) => (
                     <span
                         key={i}
-                        className="bg-[#f3f5fa] text-[#425179] text-xs font-semibold rounded px-3 py-1"
+                        className="bg-accent text-accent-foreground text-xs font-semibold rounded px-3 py-1"
                     >
                         {tag}
                     </span>
                 ))}
             </div>
             {/* Enunciado */}
-            <h2 className="text-base sm:text-lg font-bold mb-5 text-[#181F2C]">
+            <h2 className="text-base sm:text-lg font-bold mb-5 text-foreground">
                 {statement}
             </h2>
             {/* Alternativas */}
@@ -209,21 +209,21 @@ export function QuestionCard({
 
                     if (showResult) {
                         if (isSelected && selected !== correct) {
-                            btnClass += " bg-red-50 border-red-400 text-red-900";
+                            btnClass += " bg-destructive/10 border-destructive text-destructive";
                         } else if (isCorrect && selected !== correct) {
                             btnClass += " bg-green-50 border-green-600 text-green-900";
                         } else if (isSelected && selected === correct) {
                             btnClass += " bg-green-50 border-green-600 text-green-900";
                         } else {
-                            btnClass += " bg-white border-[#e3e8f3]";
+                            btnClass += " bg-card border-border";
                         }
                     } else if (isSelected) {
-                        btnClass += " bg-[#e9effd] border-[#6a88d7] text-[#232939]";
+                        btnClass += " bg-primary/10 border-primary text-foreground";
                     } else {
-                        btnClass += " bg-white border-[#e3e8f3] hover:bg-[#f6faff]";
+                        btnClass += " bg-card border-border hover:bg-muted";
                     }
                     if (eliminada) {
-                        btnClass += " text-gray-400 opacity-60 line-through";
+                        btnClass += " text-muted-foreground opacity-60 line-through";
                     }
                     return (
                         <button
@@ -236,7 +236,7 @@ export function QuestionCard({
                             <span
                                 onClick={e => { e.stopPropagation(); toggleEliminada(idx); }}
                                 title={eliminada ? "Restaurar alternativa" : "Eliminar alternativa"}
-                                className={`mr-3 transition cursor-pointer rounded-full p-1 hover:bg-gray-100 border border-transparent hover:border-gray-200 ${eliminada ? "opacity-40" : ""}`}
+                                className={`mr-3 transition cursor-pointer rounded-full p-1 hover:bg-muted border border-transparent hover:border-border ${eliminada ? "opacity-40" : ""}`}
                             >
                                 <TesouraIcon />
                             </span>
@@ -244,15 +244,15 @@ export function QuestionCard({
                                 ${showResult && isSelected
                                     ? isCorrect
                                         ? "bg-green-600 text-white"
-                                        : "bg-red-500 text-white"
+                                        : "bg-destructive text-white"
                                     : isSelected
-                                        ? "bg-[#6a88d7] text-white"
-                                        : "bg-[#f3f5fa] text-[#232939]"
+                                        ? "bg-primary text-primary-foreground"
+                                        : "bg-muted text-foreground"
                                 }
                                 `}>
                                 {value}
                             </span>
-                            <span className="text-[#232939] text-[15px]">{opt.text}</span>
+                            <span className="text-foreground text-[15px]">{opt.text}</span>
                         </button>
                     );
                 })}
@@ -260,7 +260,7 @@ export function QuestionCard({
             {/* Ações */}
             <div className="flex flex-wrap gap-2 mb-4">
                 <button
-                    className="bg-[#6a88d7] hover:bg-[#5272b4] text-white font-bold py-2 px-5 rounded-xl text-sm transition"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-5 rounded-xl text-sm transition"
                     onClick={async () => {
                         setShowResult(true);
                         if (selected) {
@@ -272,21 +272,21 @@ export function QuestionCard({
                     Conferir Resposta
                 </button>
                 <button
-                    className="bg-white border border-[#e3e8f3] text-[#425179] py-2 px-5 rounded-xl text-sm transition hover:bg-[#f3f5fa] font-medium"
+                    className="bg-card border border-border text-muted-foreground py-2 px-5 rounded-xl text-sm transition hover:bg-muted font-medium"
                     type="button"
                     onClick={() => setShowComentarios(v => !v)}
                 >
                     Comentários ({comentariosState.length ?? 0})
                 </button>
                 <button
-                    className="bg-white border border-[#e3e8f3] text-[#425179] py-2 px-5 rounded-xl text-sm transition hover:bg-[#f3f5fa] font-medium"
+                    className="bg-card border border-border text-muted-foreground py-2 px-5 rounded-xl text-sm transition hover:bg-muted font-medium"
                     type="button"
                     onClick={compartilharQuestao}
                 >
                     Compartilhar
                 </button>
                 <button
-                    className="bg-white border border-[#ffd3c4] text-[#e2735e] py-2 px-5 rounded-xl text-sm transition hover:bg-[#fff6f5] font-medium"
+                    className="bg-card border border-destructive text-destructive py-2 px-5 rounded-xl text-sm transition hover:bg-destructive/10 font-medium"
                     type="button"
                     onClick={() => setShowModal(true)}
                 >
@@ -294,7 +294,7 @@ export function QuestionCard({
                 </button>
                 {showResult && (
                     <button
-                        className="ml-2 text-xs text-[#6a88d7] underline"
+                        className="ml-2 text-xs text-primary underline"
                         onClick={() => {
                             setShowResult(false);
                             setSelected(null);
@@ -307,27 +307,27 @@ export function QuestionCard({
 
             {/* Explicação */}
             {showResult && selected && (
-                <div className="bg-[#e8f7ea] rounded-lg p-4 mt-2 text-green-900 text-sm">
-                    <span className="font-bold text-green-700">Explicação:</span>
+                <div className="bg-green-50 dark:bg-green-950 rounded-lg p-4 mt-2 text-green-900 dark:text-green-200 text-sm">
+                    <span className="font-bold text-green-700 dark:text-green-300">Explicação:</span>
                     <p className="mt-1">{explanation}</p>
                 </div>
             )}
 
             {/* Comentários */}
             {showComentarios && (
-                <div className="bg-[#f3f5fa] rounded-xl px-4 py-3 mt-3 text-[#232939]">
+                <div className="bg-muted rounded-xl px-4 py-3 mt-3 text-foreground">
                     <div className="font-bold mb-2">Comentários</div>
                     <div className="mb-3 flex items-end gap-2">
                         <textarea
                             rows={2}
-                            className="w-full border border-[#e3e8f3] rounded-lg px-3 py-2 text-sm text-[#232939] bg-[#f9fafb] resize-none outline-none focus:ring-2 focus:ring-[#6a88d7]"
+                            className="w-full border border-border rounded-lg px-3 py-2 text-sm text-foreground bg-card resize-none outline-none focus:ring-2 focus:ring-primary"
                             placeholder="Digite um comentário..."
                             value={comentarioText}
                             onChange={e => setComentarioText(e.target.value)}
                             disabled={loadingComentario}
                         />
                         <button
-                            className="bg-[#6a88d7] hover:bg-[#5272b4] text-white font-bold px-4 py-2 rounded-lg text-sm transition"
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-4 py-2 rounded-lg text-sm transition"
                             onClick={enviarComentario}
                             disabled={loadingComentario || !comentarioText.trim()}
                         >
@@ -337,11 +337,11 @@ export function QuestionCard({
                     {comentariosState.length ? (
                         <ul className="flex flex-col gap-2">
                             {comentariosState.map((com, i) => (
-                                <li key={i} className="bg-white rounded-lg px-3 py-2 border text-sm">
-                                    <span className="font-bold text-[#6a88d7] mr-2">{com?.usuario || "Usuário"}</span>
+                                <li key={i} className="bg-card rounded-lg px-3 py-2 border text-sm">
+                                    <span className="font-bold text-primary mr-2">{com?.usuario || "Usuário"}</span>
                                     {com?.texto || com?.mensagem || JSON.stringify(com)}
                                     {com?.data && (
-                                        <span className="block text-[11px] text-gray-400 mt-1">
+                                        <span className="block text-[11px] text-muted-foreground mt-1">
                                             {new Date(com.data).toLocaleString()}
                                         </span>
                                     )}
@@ -349,7 +349,7 @@ export function QuestionCard({
                             ))}
                         </ul>
                     ) : (
-                        <div className="text-sm text-[#65749b]">Nenhum comentário ainda.</div>
+                        <div className="text-sm text-muted-foreground">Nenhum comentário ainda.</div>
                     )}
                 </div>
             )}
@@ -357,28 +357,28 @@ export function QuestionCard({
             {/* MODAL NOTIFICAR ERRO */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-                    <div className="bg-white rounded-xl p-7 max-w-md w-full shadow-2xl border border-[#e3e8f3] relative">
+                    <div className="bg-card rounded-xl p-7 max-w-md w-full shadow-2xl border border-border relative">
                         <button
                             onClick={() => setShowModal(false)}
-                            className="absolute top-2 right-2 rounded-full hover:bg-[#f3f5fa] p-1 text-[#425179] font-bold"
+                            className="absolute top-2 right-2 rounded-full hover:bg-muted p-1 text-muted-foreground font-bold"
                             aria-label="Fechar"
                         >
                             ×
                         </button>
-                        <h3 className="font-bold text-lg text-[#232939] mb-3">
+                        <h3 className="font-bold text-lg text-foreground mb-3">
                             Notificar erro na questão
                         </h3>
                         <textarea
                             ref={textareaRef}
                             rows={4}
-                            className="w-full border border-[#e3e8f3] rounded-lg px-3 py-2 mb-3 text-sm text-[#232939] bg-[#f9fafb] resize-none outline-none focus:ring-2 focus:ring-[#6a88d7]"
+                            className="w-full border border-border rounded-lg px-3 py-2 mb-3 text-sm text-foreground bg-card resize-none outline-none focus:ring-2 focus:ring-primary"
                             placeholder="Descreva o erro encontrado..."
                             value={errorText}
                             onChange={e => setErrorText(e.target.value)}
                         />
                         <button
                             onClick={enviarErro}
-                            className="bg-[#6a88d7] hover:bg-[#5272b4] text-white font-bold px-5 py-2 rounded-lg text-sm w-full transition"
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-5 py-2 rounded-lg text-sm w-full transition"
                             disabled={loadingErro || !errorText.trim()}
                         >
                             {loadingErro ? "Enviando..." : "Enviar Notificação"}
