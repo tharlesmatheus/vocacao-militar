@@ -17,7 +17,7 @@ interface QuestionFiltersProps {
 }
 
 export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
-    // Estados para cada lista de opções únicas
+    // Estados para listas únicas
     const [instituicoes, setInstituicoes] = useState<string[]>([]);
     const [cargos, setCargos] = useState<string[]>([]);
     const [disciplinas, setDisciplinas] = useState<string[]>([]);
@@ -26,7 +26,7 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
     const [bancas, setBancas] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // Estados para o filtro selecionado
+    // Estado dos filtros
     const [selected, setSelected] = useState<Filters>({
         instituicao: "",
         cargo: "",
@@ -37,24 +37,29 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
         excluirRespondidas: false,
     });
 
-    // Busca valores únicos para cada filtro
+    // Buscar opções únicas no banco
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
 
-            // Busca todos os campos únicos da tabela questoes
-            const { data, error } = await supabase.from("questoes").select(
-                "instituicao, cargo, disciplina, assunto, modalidade, banca"
-            );
+            const { data, error } = await supabase
+                .from("questoes")
+                .select("instituicao, cargo, disciplina, assunto, modalidade, banca");
 
             if (!data || error) {
                 setLoading(false);
                 return;
             }
 
-            // Função para pegar valores distintos (elimina nulos e repetidos)
+            // Função para pegar valores distintos
             const getDistinct = (field: keyof Filters) =>
-                Array.from(new Set(data.map((q: any) => q[field]).filter((v: string) => !!v)));
+                Array.from(
+                    new Set(
+                        data
+                            .map((q: any) => q[field])
+                            .filter((v: string) => !!v)
+                    )
+                );
 
             setInstituicoes(getDistinct("instituicao"));
             setCargos(getDistinct("cargo"));
@@ -68,21 +73,24 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
         fetchData();
     }, []);
 
-    const handleChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
-        const target = e.target as HTMLInputElement | HTMLSelectElement;
-        const { name, value, type } = target;
+    function handleChange(
+        e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>
+    ) {
+        const { name, value, type } = e.target;
         setSelected((prev) => ({
             ...prev,
-            [name]: type === "checkbox" ? (target as HTMLInputElement).checked : value,
+            [name]: type === "checkbox"
+                ? (e.target as HTMLInputElement).checked
+                : value,
         }));
-    };
+    }
 
-    const handleFiltrar = (e: React.FormEvent) => {
+    function handleFiltrar(e: React.FormEvent) {
         e.preventDefault();
-        if (onFiltrar) onFiltrar(selected);
-    };
+        onFiltrar?.(selected);
+    }
 
-    const handleLimpar = () => {
+    function handleLimpar() {
         setSelected({
             instituicao: "",
             cargo: "",
@@ -92,8 +100,8 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
             banca: "",
             excluirRespondidas: false,
         });
-        if (onFiltrar) onFiltrar({});
-    };
+        onFiltrar?.({});
+    }
 
     return (
         <div className="bg-white border border-[#E3E8F3] rounded-2xl shadow-sm p-6 md:p-8 my-2 max-w-full">
@@ -103,7 +111,9 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
             >
                 {/* Instituição */}
                 <div>
-                    <label className="block mb-2 text-sm font-medium text-[#425179]">Instituição</label>
+                    <label className="block mb-2 text-sm font-medium text-[#425179]">
+                        Instituição
+                    </label>
                     <select
                         name="instituicao"
                         className="w-full bg-white border border-[#D8DFEA] rounded-lg px-4 py-3 text-[#232939] text-base focus:ring-2 focus:ring-[#6a88d7] outline-none shadow-sm transition"
@@ -113,13 +123,17 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                     >
                         <option value="">Selecione</option>
                         {instituicoes.map((nome) => (
-                            <option key={nome} value={nome}>{nome}</option>
+                            <option key={nome} value={nome}>
+                                {nome}
+                            </option>
                         ))}
                     </select>
                 </div>
                 {/* Cargo */}
                 <div>
-                    <label className="block mb-2 text-sm font-medium text-[#425179]">Cargo</label>
+                    <label className="block mb-2 text-sm font-medium text-[#425179]">
+                        Cargo
+                    </label>
                     <select
                         name="cargo"
                         className="w-full bg-white border border-[#D8DFEA] rounded-lg px-4 py-3 text-[#232939] text-base focus:ring-2 focus:ring-[#6a88d7] outline-none shadow-sm transition"
@@ -129,13 +143,17 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                     >
                         <option value="">Selecione</option>
                         {cargos.map((nome) => (
-                            <option key={nome} value={nome}>{nome}</option>
+                            <option key={nome} value={nome}>
+                                {nome}
+                            </option>
                         ))}
                     </select>
                 </div>
                 {/* Disciplina */}
                 <div>
-                    <label className="block mb-2 text-sm font-medium text-[#425179]">Disciplina</label>
+                    <label className="block mb-2 text-sm font-medium text-[#425179]">
+                        Disciplina
+                    </label>
                     <select
                         name="disciplina"
                         className="w-full bg-white border border-[#D8DFEA] rounded-lg px-4 py-3 text-[#232939] text-base focus:ring-2 focus:ring-[#6a88d7] outline-none shadow-sm transition"
@@ -145,13 +163,17 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                     >
                         <option value="">Selecione</option>
                         {disciplinas.map((nome) => (
-                            <option key={nome} value={nome}>{nome}</option>
+                            <option key={nome} value={nome}>
+                                {nome}
+                            </option>
                         ))}
                     </select>
                 </div>
                 {/* Assunto */}
                 <div>
-                    <label className="block mb-2 text-sm font-medium text-[#425179]">Assunto</label>
+                    <label className="block mb-2 text-sm font-medium text-[#425179]">
+                        Assunto
+                    </label>
                     <select
                         name="assunto"
                         className="w-full bg-white border border-[#D8DFEA] rounded-lg px-4 py-3 text-[#232939] text-base focus:ring-2 focus:ring-[#6a88d7] outline-none shadow-sm transition"
@@ -161,13 +183,17 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                     >
                         <option value="">Selecione</option>
                         {assuntos.map((nome) => (
-                            <option key={nome} value={nome}>{nome}</option>
+                            <option key={nome} value={nome}>
+                                {nome}
+                            </option>
                         ))}
                     </select>
                 </div>
                 {/* Modalidade */}
                 <div>
-                    <label className="block mb-2 text-sm font-medium text-[#425179]">Modalidade</label>
+                    <label className="block mb-2 text-sm font-medium text-[#425179]">
+                        Modalidade
+                    </label>
                     <select
                         name="modalidade"
                         className="w-full bg-white border border-[#D8DFEA] rounded-lg px-4 py-3 text-[#232939] text-base focus:ring-2 focus:ring-[#6a88d7] outline-none shadow-sm transition"
@@ -177,13 +203,17 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                     >
                         <option value="">Selecione</option>
                         {modalidades.map((nome) => (
-                            <option key={nome} value={nome}>{nome}</option>
+                            <option key={nome} value={nome}>
+                                {nome}
+                            </option>
                         ))}
                     </select>
                 </div>
                 {/* Banca */}
                 <div>
-                    <label className="block mb-2 text-sm font-medium text-[#425179]">Banca</label>
+                    <label className="block mb-2 text-sm font-medium text-[#425179]">
+                        Banca
+                    </label>
                     <select
                         name="banca"
                         className="w-full bg-white border border-[#D8DFEA] rounded-lg px-4 py-3 text-[#232939] text-base focus:ring-2 focus:ring-[#6a88d7] outline-none shadow-sm transition"
@@ -193,12 +223,13 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                     >
                         <option value="">Selecione</option>
                         {bancas.map((nome) => (
-                            <option key={nome} value={nome}>{nome}</option>
+                            <option key={nome} value={nome}>
+                                {nome}
+                            </option>
                         ))}
                     </select>
                 </div>
-
-                {/* Excluir Questões */}
+                {/* Excluir Questões Respondidas */}
                 <div className="col-span-full mt-2">
                     <fieldset className="flex items-center gap-4 border border-[#E3E8F3] bg-[#f9fbfd] rounded-xl px-4 py-3">
                         <legend className="text-[#425179] text-sm font-semibold mr-3">
@@ -216,7 +247,6 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                         </label>
                     </fieldset>
                 </div>
-
                 {/* Botões */}
                 <div className="col-span-full flex flex-wrap gap-3 mt-4 justify-end">
                     <button
