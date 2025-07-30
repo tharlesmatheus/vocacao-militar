@@ -1,25 +1,25 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Trophy, Medal } from "lucide-react";
 
-// Ícones por título
+// Ícones por título (ajuste as cores aqui se quiser personalizar mais)
 const iconeMap: Record<string, React.ReactNode> = {
-    Soldado: <Medal className="w-10 h-10" style={{ color: "#64748b" }} />,
-    Cabo: <Medal className="w-10 h-10" style={{ color: "#22d3ee" }} />,
-    "Terceiro Sargento": <Medal className="w-10 h-10" style={{ color: "#a3e635" }} />,
-    "Segundo Sargento": <Medal className="w-10 h-10" style={{ color: "#16a34a" }} />,
-    "Primeiro Sargento": <Medal className="w-10 h-10" style={{ color: "#ea580c" }} />,
-    Subtenente: <Medal className="w-10 h-10" style={{ color: "#fde68a" }} />,
-    Aspirante: <Medal className="w-10 h-10" style={{ color: "#fbbf24" }} />,
-    "Segundo Tenente": <Medal className="w-10 h-10" style={{ color: "#ef4444" }} />,
-    "Primeiro Tenente": <Medal className="w-10 h-10" style={{ color: "#7c3aed" }} />,
-    Capitão: <Medal className="w-10 h-10" style={{ color: "#eab308" }} />,
-    Major: <Medal className="w-10 h-10" style={{ color: "#818cf8" }} />,
-    "Tenente Coronel": <Medal className="w-10 h-10" style={{ color: "#6366f1" }} />,
-    Coronel: <Medal className="w-10 h-10" style={{ color: "#f59e42" }} />,
-    General: <Medal className="w-10 h-10" style={{ color: "#eab308" }} />,
+    Soldado: <Medal className="w-10 h-10 text-slate-400" />,
+    Cabo: <Medal className="w-10 h-10 text-cyan-400" />,
+    "Terceiro Sargento": <Medal className="w-10 h-10 text-lime-400" />,
+    "Segundo Sargento": <Medal className="w-10 h-10 text-green-600" />,
+    "Primeiro Sargento": <Medal className="w-10 h-10 text-orange-600" />,
+    Subtenente: <Medal className="w-10 h-10 text-yellow-200" />,
+    Aspirante: <Medal className="w-10 h-10 text-yellow-400" />,
+    "Segundo Tenente": <Medal className="w-10 h-10 text-red-500" />,
+    "Primeiro Tenente": <Medal className="w-10 h-10 text-violet-700" />,
+    Capitão: <Medal className="w-10 h-10 text-yellow-500" />,
+    Major: <Medal className="w-10 h-10 text-indigo-400" />,
+    "Tenente Coronel": <Medal className="w-10 h-10 text-indigo-600" />,
+    Coronel: <Medal className="w-10 h-10 text-orange-400" />,
+    General: <Medal className="w-10 h-10 text-yellow-500" />,
 };
 
 type Conquista = {
@@ -117,28 +117,28 @@ export default function ConquistasPage() {
                 {conquistas.map((c) => (
                     <div
                         key={c.id}
-                        className="relative flex flex-col items-center px-7 py-7 bg-white border border-[#E3E8F3] rounded-2xl shadow-sm transition-all"
+                        className="relative flex flex-col items-center px-7 py-7 bg-card border border-border rounded-2xl shadow-sm transition-all"
                         style={{ minWidth: 310, maxWidth: 340, margin: "0 auto" }}
                     >
                         {c.progresso === 100 && (
-                            <span className="absolute top-3 right-3 bg-green-500 text-white rounded-full p-1 shadow text-xs">
+                            <span className="absolute top-3 right-3 bg-emerald-500 text-white rounded-full p-1 shadow text-xs">
                                 <Trophy className="w-5 h-5" />
                             </span>
                         )}
-                        <div className="mb-4">{iconeMap[c.titulo] ?? <Medal className="w-10 h-10" style={{ color: "#64748b" }} />}</div>
-                        <div className="font-bold text-lg mb-0 text-[#232939] text-center">{c.titulo}</div>
-                        <div className="text-[15px] font-semibold text-[#5d5f6d] mb-1 text-center">{userName}</div>
-                        <div className="text-[#a3adc7] text-base text-center mb-2">{c.descricao}</div>
+                        <div className="mb-4">{iconeMap[c.titulo] ?? <Medal className="w-10 h-10 text-slate-400" />}</div>
+                        <div className="font-bold text-lg mb-0 text-foreground text-center">{c.titulo}</div>
+                        <div className="text-[15px] font-semibold text-muted-foreground mb-1 text-center">{userName}</div>
+                        <div className="text-muted-foreground text-base text-center mb-2">{c.descricao}</div>
                         <div className="flex gap-2 mb-2 flex-wrap justify-center">
-                            <span className="rounded-full px-3 py-1 text-xs font-semibold bg-gray-100 text-[#7582a2] border border-[#e3e8f3]">
+                            <span className="rounded-full px-3 py-1 text-xs font-semibold bg-muted text-muted-foreground border border-border">
                                 {c.tipo}
                             </span>
-                            <span className="rounded-full bg-[#f3f5fa] text-[#232939] px-3 py-1 text-xs font-semibold border border-[#e3e8f3]">
+                            <span className="rounded-full bg-accent text-foreground px-3 py-1 text-xs font-semibold border border-border">
                                 +{c.xp} XP
                             </span>
                         </div>
                         {c.progresso === 100 && (
-                            <div className="text-xs text-[#a3adc7] mb-0 text-center">
+                            <div className="text-xs text-muted-foreground mb-0 text-center">
                                 Conquistada em {c.conquistada_em ? new Date(c.conquistada_em).toLocaleDateString("pt-BR") : ""}
                             </div>
                         )}
