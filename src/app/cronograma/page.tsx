@@ -28,7 +28,7 @@ export default function CronogramaSemanalPage() {
     const [loading, setLoading] = useState(true);
     const [msg, setMsg] = useState("");
     const [cronogramaId, setCronogramaId] = useState<string | null>(null);
-    const [modoCards, setModoCards] = useState(false); // true = mobile/carrossel
+    const [modoCards, setModoCards] = useState(false);
     const [cardDiaAtivo, setCardDiaAtivo] = useState(0);
 
     // Detectar modo mobile
@@ -119,12 +119,11 @@ export default function CronogramaSemanalPage() {
 
     return (
         <div className="w-full max-w-5xl mx-auto px-2 sm:px-4 py-7 flex flex-col gap-8">
-            
             {/* Novo bloco */}
             <div className="flex flex-col sm:flex-row items-center gap-3 mb-4">
                 <input
                     type="text"
-                    className="border border-[#e3e8f3] rounded-lg px-3 py-2 text-sm w-56 focus:ring-2 focus:ring-[#6a88d7] outline-none shadow-sm"
+                    className="border border-border rounded-lg px-3 py-2 text-sm w-56 focus:ring-2 focus:ring-primary outline-none shadow-sm bg-input text-foreground"
                     placeholder="Ex: 18:00 - 19:00"
                     value={novoBloco}
                     onChange={e => setNovoBloco(e.target.value)}
@@ -132,7 +131,7 @@ export default function CronogramaSemanalPage() {
                     disabled={loading}
                 />
                 <button
-                    className="flex items-center gap-2 bg-[#6a88d7] hover:bg-[#5272b4] text-white font-bold px-4 py-2 rounded-lg text-sm shadow transition"
+                    className="flex items-center gap-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold px-4 py-2 rounded-lg text-sm shadow transition"
                     onClick={handleAddBloco}
                     disabled={loading}
                 >
@@ -145,38 +144,38 @@ export default function CronogramaSemanalPage() {
                 <div className="w-full flex flex-col items-center">
                     <div className="flex items-center justify-center gap-1 mb-4">
                         <button
-                            className="p-2 rounded-full bg-[#f5f7fa] border border-[#e3e8f3] hover:bg-[#e3e8f3] transition"
+                            className="p-2 rounded-full bg-muted border border-border hover:bg-muted/80 transition"
                             onClick={prevCard}
                         >
-                            <ChevronLeft className="w-5 h-5 text-[#6a88d7]" />
+                            <ChevronLeft className="w-5 h-5 text-primary" />
                         </button>
-                        <span className="text-lg font-bold text-[#232939] w-32 text-center">
+                        <span className="text-lg font-bold text-foreground w-32 text-center">
                             {diasDaSemana[cardDiaAtivo].nome}
                         </span>
                         <button
-                            className="p-2 rounded-full bg-[#f5f7fa] border border-[#e3e8f3] hover:bg-[#e3e8f3] transition"
+                            className="p-2 rounded-full bg-muted border border-border hover:bg-muted/80 transition"
                             onClick={nextCard}
                         >
-                            <ChevronRight className="w-5 h-5 text-[#6a88d7]" />
+                            <ChevronRight className="w-5 h-5 text-primary" />
                         </button>
                     </div>
-                    <div className="w-full max-w-md mx-auto bg-white rounded-2xl border border-[#e3e8f3] shadow-lg p-3 transition-all">
+                    <div className="w-full max-w-md mx-auto bg-card rounded-2xl border border-border shadow-lg p-3 transition-all">
                         <table className="w-full text-xs">
                             <thead>
                                 <tr>
-                                    <th className="bg-[#f3f6fa] text-[#232939] font-bold px-2 py-2 rounded-tl-2xl text-center min-w-[70px]">
+                                    <th className="bg-muted text-foreground font-bold px-2 py-2 rounded-tl-2xl text-center min-w-[70px]">
                                         Horário
                                     </th>
-                                    <th className="bg-[#f3f6fa] text-[#232939] font-bold px-2 py-2 rounded-tr-2xl text-center">
+                                    <th className="bg-muted text-foreground font-bold px-2 py-2 rounded-tr-2xl text-center">
                                         Atividade
                                     </th>
-                                    <th className="bg-[#f3f6fa] px-1 py-2"></th>
+                                    <th className="bg-muted px-1 py-2"></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {blocos.map((bloco, i) => (
-                                    <tr key={i} className="border-b border-[#f3f6fa]">
-                                        <td className="px-2 py-2 text-[#6a88d7] font-semibold text-center bg-[#f8fafc] whitespace-nowrap rounded-l-2xl text-xs">
+                                    <tr key={i} className="border-b border-muted">
+                                        <td className="px-2 py-2 text-primary font-semibold text-center bg-input whitespace-nowrap rounded-l-2xl text-xs">
                                             {bloco.hora}
                                         </td>
                                         <td
@@ -185,7 +184,7 @@ export default function CronogramaSemanalPage() {
                                         >
                                             {edit && edit.i === i && edit.j === cardDiaAtivo ? (
                                                 <input
-                                                    className="w-full rounded px-1 py-1 border border-[#6a88d7] text-xs outline-none"
+                                                    className="w-full rounded px-1 py-1 border border-primary text-xs outline-none"
                                                     autoFocus
                                                     value={bloco.atividades[cardDiaAtivo]}
                                                     onChange={e => handleCellEdit(i, cardDiaAtivo, e.target.value)}
@@ -195,13 +194,13 @@ export default function CronogramaSemanalPage() {
                                                     maxLength={32}
                                                 />
                                             ) : (
-                                                <div className="transition-colors px-1 py-2 rounded group-hover:bg-[#eaf0fc] text-[#232939] min-h-[20px]">
+                                                <div className="transition-colors px-1 py-2 rounded group-hover:bg-muted text-foreground min-h-[20px]">
                                                     {bloco.atividades[cardDiaAtivo] || (
-                                                        <span className="text-[#b1bad3] italic">—</span>
+                                                        <span className="text-muted-foreground italic">—</span>
                                                     )}
                                                     {bloco.atividades[cardDiaAtivo] && (
                                                         <button
-                                                            className="absolute top-1 right-1 text-xs text-[#b1bad3] hover:text-red-400"
+                                                            className="absolute top-1 right-1 text-xs text-muted-foreground hover:text-destructive"
                                                             onClick={e => { e.stopPropagation(); handleCellEdit(i, cardDiaAtivo, ""); }}
                                                             tabIndex={-1}
                                                             aria-label="Limpar"
@@ -215,7 +214,7 @@ export default function CronogramaSemanalPage() {
                                         {/* Remover linha */}
                                         <td className="pl-1 pr-1 text-center align-middle">
                                             <button
-                                                className="bg-red-50 hover:bg-red-100 border border-red-100 text-red-400 rounded p-1 transition"
+                                                className="bg-destructive/10 hover:bg-destructive/20 border border-destructive/10 text-destructive rounded p-1 transition"
                                                 title="Remover Bloco"
                                                 onClick={() => handleRemoveBloco(i)}
                                                 disabled={loading}
@@ -233,7 +232,7 @@ export default function CronogramaSemanalPage() {
                         {diasDaSemana.map((_, idx) => (
                             <button
                                 key={idx}
-                                className={`w-2.5 h-2.5 rounded-full transition ${cardDiaAtivo === idx ? "bg-[#6a88d7]" : "bg-[#e3e8f3]"}`}
+                                className={`w-2.5 h-2.5 rounded-full transition ${cardDiaAtivo === idx ? "bg-primary" : "bg-border"}`}
                                 onClick={() => setCardDiaAtivo(idx)}
                                 aria-label={`Ir para ${diasDaSemana[idx].nome}`}
                             />
@@ -242,29 +241,29 @@ export default function CronogramaSemanalPage() {
                 </div>
             ) : (
                 // DESKTOP/TABLET: tabela original
-                <div className="w-full overflow-x-auto rounded-2xl border border-[#e3e8f3] shadow bg-white scrollbar-thin scrollbar-thumb-[#cdd3eb] scrollbar-track-transparent">
+                <div className="w-full overflow-x-auto rounded-2xl border border-border shadow bg-card scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
                     <table className="min-w-[700px] sm:min-w-full text-xs sm:text-sm">
                         <thead>
                             <tr>
-                                <th className="bg-[#f3f6fa] text-[#232939] font-bold px-2 py-2 rounded-tl-2xl text-center min-w-[70px] sm:min-w-[110px]">
+                                <th className="bg-muted text-foreground font-bold px-2 py-2 rounded-tl-2xl text-center min-w-[70px] sm:min-w-[110px]">
                                     Horário
                                 </th>
                                 {diasDaSemana.map((dia) => (
                                     <th
                                         key={dia.nome}
-                                        className="bg-[#f3f6fa] text-[#232939] font-bold px-2 py-2 text-center min-w-[64px] sm:min-w-[110px]"
+                                        className="bg-muted text-foreground font-bold px-2 py-2 text-center min-w-[64px] sm:min-w-[110px]"
                                     >
                                         <span className="block sm:hidden">{dia.abrev}</span>
                                         <span className="hidden sm:block">{dia.nome}</span>
                                     </th>
                                 ))}
-                                <th className="bg-[#f3f6fa] px-1 py-2 rounded-tr-2xl"></th>
+                                <th className="bg-muted px-1 py-2 rounded-tr-2xl"></th>
                             </tr>
                         </thead>
                         <tbody>
                             {blocos.map((bloco, i) => (
-                                <tr key={i} className="border-b border-[#f3f6fa]">
-                                    <td className="px-2 py-2 text-[#6a88d7] font-semibold text-center bg-[#f8fafc] whitespace-nowrap rounded-l-2xl text-xs sm:text-sm">
+                                <tr key={i} className="border-b border-muted">
+                                    <td className="px-2 py-2 text-primary font-semibold text-center bg-input whitespace-nowrap rounded-l-2xl text-xs sm:text-sm">
                                         {bloco.hora}
                                     </td>
                                     {diasDaSemana.map((_, j) => (
@@ -275,7 +274,7 @@ export default function CronogramaSemanalPage() {
                                         >
                                             {edit && edit.i === i && edit.j === j ? (
                                                 <input
-                                                    className="w-full rounded px-1 py-1 border border-[#6a88d7] text-xs sm:text-sm outline-none"
+                                                    className="w-full rounded px-1 py-1 border border-primary text-xs sm:text-sm outline-none"
                                                     autoFocus
                                                     value={bloco.atividades[j]}
                                                     onChange={e => handleCellEdit(i, j, e.target.value)}
@@ -285,13 +284,13 @@ export default function CronogramaSemanalPage() {
                                                     maxLength={32}
                                                 />
                                             ) : (
-                                                <div className="transition-colors px-1 py-2 rounded group-hover:bg-[#eaf0fc] text-[#232939] min-h-[20px]">
+                                                <div className="transition-colors px-1 py-2 rounded group-hover:bg-muted text-foreground min-h-[20px]">
                                                     {bloco.atividades[j] || (
-                                                        <span className="text-[#b1bad3] italic">—</span>
+                                                        <span className="text-muted-foreground italic">—</span>
                                                     )}
                                                     {bloco.atividades[j] && (
                                                         <button
-                                                            className="absolute top-1 right-1 text-xs text-[#b1bad3] hover:text-red-400"
+                                                            className="absolute top-1 right-1 text-xs text-muted-foreground hover:text-destructive"
                                                             onClick={e => { e.stopPropagation(); handleCellEdit(i, j, ""); }}
                                                             tabIndex={-1}
                                                             aria-label="Limpar"
@@ -305,7 +304,7 @@ export default function CronogramaSemanalPage() {
                                     ))}
                                     <td className="pl-1 pr-1 text-center align-middle rounded-r-2xl">
                                         <button
-                                            className="bg-red-50 hover:bg-red-100 border border-red-100 text-red-400 rounded p-1 transition"
+                                            className="bg-destructive/10 hover:bg-destructive/20 border border-destructive/10 text-destructive rounded p-1 transition"
                                             title="Remover Bloco"
                                             onClick={() => handleRemoveBloco(i)}
                                             disabled={loading}
@@ -320,7 +319,6 @@ export default function CronogramaSemanalPage() {
                 </div>
             )}
 
-            
             {msg && <div className="text-center text-green-600 mt-2">{msg}</div>}
         </div>
     );
