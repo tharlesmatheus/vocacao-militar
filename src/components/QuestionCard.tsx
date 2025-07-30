@@ -4,9 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 
 function TesouraIcon({ className = "" }: { className?: string }) {
     return (
-        <svg viewBox="0 0 20 20" fill="none" width={22} height={22}
-            className={className + " pointer-events-none"}
-        >
+        <svg viewBox="0 0 20 20" fill="none" width={22} height={22} className={className + " pointer-events-none"}>
             <path d="M7.5 8.5L3 3M12.5 8.5L17 3M3 17l7-7 7 7" stroke="#9ca3af" strokeWidth={2} strokeLinecap="round" />
             <circle cx={4.5} cy={15.5} r={1.2} fill="#bbb" />
             <circle cx={15.5} cy={15.5} r={1.2} fill="#bbb" />
@@ -93,9 +91,7 @@ export function QuestionCard({
     const [eliminadas, setEliminadas] = useState<number[]>([]);
     const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
-    // Novo estado local para comentários
     const [comentariosState, setComentariosState] = useState<any[]>(comentarios || []);
-
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     React.useEffect(() => {
@@ -146,13 +142,12 @@ export function QuestionCard({
             setShowModal(false);
             setErrorText("");
             showFeedback("Erro notificado com sucesso!");
-            if (onNotificarErro) onNotificarErro(errorText);
+            onNotificarErro?.(errorText);
         } else {
             alert("Erro ao salvar notificação.");
         }
     };
 
-    // **MODIFICADO**: Adiciona no estado local o novo comentário!
     const enviarComentario = async () => {
         if (!comentarioText.trim()) return;
         setLoadingComentario(true);
@@ -167,9 +162,9 @@ export function QuestionCard({
         setLoadingComentario(false);
         if (!error) {
             setComentarioText("");
-            setComentariosState(novosComentarios); // <-- aqui!
+            setComentariosState(novosComentarios);
             showFeedback("Comentário enviado!");
-            if (onNovoComentario) onNovoComentario(comentarioText);
+            onNovoComentario?.(comentarioText);
         } else {
             alert("Erro ao salvar comentário.");
         }
@@ -241,14 +236,12 @@ export function QuestionCard({
                             <span
                                 onClick={e => { e.stopPropagation(); toggleEliminada(idx); }}
                                 title={eliminada ? "Restaurar alternativa" : "Eliminar alternativa"}
-                                className={`mr-3 transition cursor-pointer rounded-full p-1 hover:bg-gray-100 border border-transparent hover:border-gray-200
-                                        ${eliminada ? "opacity-40" : ""}
-                                    `}
+                                className={`mr-3 transition cursor-pointer rounded-full p-1 hover:bg-gray-100 border border-transparent hover:border-gray-200 ${eliminada ? "opacity-40" : ""}`}
                             >
                                 <TesouraIcon />
                             </span>
                             <span className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
-                                    ${showResult && isSelected
+                                ${showResult && isSelected
                                     ? isCorrect
                                         ? "bg-green-600 text-white"
                                         : "bg-red-500 text-white"
@@ -312,7 +305,7 @@ export function QuestionCard({
                 )}
             </div>
 
-            {/* Só a explicação, SEM "Resposta correta" */}
+            {/* Explicação */}
             {showResult && selected && (
                 <div className="bg-[#e8f7ea] rounded-lg p-4 mt-2 text-green-900 text-sm">
                     <span className="font-bold text-green-700">Explicação:</span>
