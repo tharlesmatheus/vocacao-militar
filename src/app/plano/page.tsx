@@ -14,13 +14,14 @@ interface PlanoInfo {
 export default function PlanoPage() {
     const [status, setStatus] = useState<PlanoStatus>("inativo");
     const [proximoPagamento, setProximoPagamento] = useState<string | null>(null);
+    const [metodoPagamento, setMetodoPagamento] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         async function fetchPlano() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from("planos")
                 .select("*")
                 .eq("user_id", user.id)
@@ -29,6 +30,7 @@ export default function PlanoPage() {
             if (data) {
                 setStatus(data.status as PlanoStatus);
                 setProximoPagamento(data.proximo_pagamento);
+                setMetodoPagamento(data.metodo_pagamento ?? null);
             }
         }
         fetchPlano();
@@ -109,14 +111,14 @@ export default function PlanoPage() {
 
     return (
         <div className="w-full max-w-5xl mx-auto px-2 sm:px-4 md:px-8 py-8 flex flex-col gap-8">
-            <div className="bg-white rounded-2xl shadow border border-[#E3E8F3] px-6 py-7 flex flex-col gap-5 relative transition">
+            <div className="bg-card rounded-2xl shadow border border-border px-6 py-7 flex flex-col gap-5 relative transition">
                 {/* Selo de status */}
                 <span className={`absolute top-5 right-6 flex items-center gap-2 rounded-full px-4 py-1 shadow-sm font-bold text-xs
                     ${status === "ativo"
                         ? "bg-green-100 border border-green-200 text-green-600"
                         : status === "pendente"
                             ? "bg-yellow-100 border border-yellow-300 text-yellow-600"
-                            : "bg-gray-100 border border-gray-300 text-gray-500"
+                            : "bg-muted border border-border text-muted-foreground"
                     }`
                 }>
                     <CheckCircle className="w-4 h-4" />
@@ -130,12 +132,12 @@ export default function PlanoPage() {
                 <div className="flex flex-col md:flex-row items-center md:items-start gap-7">
                     {/* Plano */}
                     <div className="flex flex-row md:flex-col items-center md:items-start gap-4 md:gap-3 w-full md:w-1/3">
-                        <span className="rounded-xl bg-[#e8f0fd] p-4">
-                            <Star className="w-10 h-10 text-[#6a88d7]" />
+                        <span className="rounded-xl bg-primary/10 p-4">
+                            <Star className="w-10 h-10 text-primary" />
                         </span>
                         <div>
-                            <h2 className="font-bold text-xl text-[#232939] mb-1">Plano Premium</h2>
-                            <div className="text-[#65749b] text-sm">
+                            <h2 className="font-bold text-xl text-foreground mb-1">Plano Premium</h2>
+                            <div className="text-muted-foreground text-sm">
                                 Acesso completo à plataforma
                             </div>
                         </div>
@@ -143,8 +145,8 @@ export default function PlanoPage() {
 
                     {/* Pagamento */}
                     <div className="flex-1">
-                        <div className="rounded-xl border border-[#E3E8F3] bg-[#f5f7fa] p-5 mb-2">
-                            <div className="flex items-center gap-2 font-semibold text-base mb-2 text-[#232939]">
+                        <div className="rounded-xl border border-border bg-muted p-5 mb-2">
+                            <div className="flex items-center gap-2 font-semibold text-base mb-2 text-foreground">
                                 <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
                                     <rect x="3" y="4" width="18" height="18" rx="4" stroke="#6a88d7" strokeWidth="2" />
                                     <path d="M16 2v4M8 2v4" stroke="#6a88d7" strokeWidth="2" strokeLinecap="round" />
@@ -152,26 +154,28 @@ export default function PlanoPage() {
                                 </svg>
                                 Próximo Pagamento
                             </div>
-                            <div className="text-2xl font-bold mb-2 text-[#232939]">
+                            <div className="text-2xl font-bold mb-2 text-foreground">
                                 {status === "ativo" && proximoPagamento
                                     ? new Date(proximoPagamento).toLocaleDateString("pt-BR")
                                     : "—"}
                             </div>
-                            <div className="text-sm text-[#7b8bb0]">Valor: <b>R$ 7,00</b>/mês</div>
+                            <div className="text-sm text-muted-foreground">Valor: <b>R$ 7,00</b>/mês</div>
                         </div>
                     </div>
 
                     {/* Ações de Pagamento */}
                     <div className="flex flex-col gap-2 w-full md:w-1/3">
-                        <div className="rounded-xl border border-[#E3E8F3] bg-[#f5f7fa] p-5 mb-2">
-                            <div className="flex items-center gap-2 font-semibold text-base mb-2 text-[#232939]">
+                        <div className="rounded-xl border border-border bg-muted p-5 mb-2">
+                            <div className="flex items-center gap-2 font-semibold text-base mb-2 text-foreground">
                                 <CreditCard className="w-5 h-5" />
                                 Método de Pagamento
                             </div>
-                            <div className="text-sm text-[#232939] mb-2">
-                                {status === "ativo" ? "Cartão de Crédito •••• 1234" : "Nenhum cadastrado"}
+                            <div className="text-sm text-foreground mb-2">
+                                {status === "ativo" && metodoPagamento
+                                    ? metodoPagamento
+                                    : "Nenhum cadastrado"}
                             </div>
-                            <button className="bg-[#6a88d7] hover:bg-[#5272b4] text-white px-4 py-2 rounded-lg font-semibold text-sm shadow border border-[#6a88d7] transition w-full"
+                            <button className="bg-primary hover:bg-primary/80 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow border border-primary transition w-full"
                                 onClick={handleBillingPortal}
                                 disabled={loading}
                             >
@@ -180,7 +184,7 @@ export default function PlanoPage() {
                         </div>
 
                         <div>
-                            <div className="font-bold mb-1 text-[#232939] text-sm">Ações</div>
+                            <div className="font-bold mb-1 text-foreground text-sm">Ações</div>
                             {status === "ativo" ? (
                                 <button
                                     className="block w-full rounded-lg bg-red-50 text-red-500 font-bold px-4 py-2 border border-red-200 hover:bg-red-100 transition text-sm"
@@ -191,7 +195,7 @@ export default function PlanoPage() {
                                 </button>
                             ) : (
                                 <button
-                                    className={`block w-full rounded-lg bg-[#6a88d7] hover:bg-[#5272b4] text-white font-bold px-4 py-2 border border-[#6a88d7] transition text-sm ${loading && "opacity-60 pointer-events-none"}`}
+                                    className={`block w-full rounded-lg bg-primary hover:bg-primary/80 text-white font-bold px-4 py-2 border border-primary transition text-sm ${loading && "opacity-60 pointer-events-none"}`}
                                     onClick={handleCheckout}
                                     disabled={loading}
                                 >
@@ -204,10 +208,10 @@ export default function PlanoPage() {
             </div>
 
             {/* Recursos Inclusos */}
-            <div className="bg-white rounded-2xl shadow border border-[#E3E8F3] px-6 py-7 mt-2">
-                <h2 className="font-bold text-lg mb-4 text-[#232939]">Recursos Inclusos no Seu Plano</h2>
+            <div className="bg-card rounded-2xl shadow border border-border px-6 py-7 mt-2">
+                <h2 className="font-bold text-lg mb-4 text-foreground">Recursos Inclusos no Seu Plano</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <ul className="flex flex-col gap-3 text-[#232939] text-base">
+                    <ul className="flex flex-col gap-3 text-foreground text-base">
                         <li className="flex items-center gap-3">
                             <CheckCircle className="w-5 h-5 text-green-500" />
                             Acesso ilimitado a todas as questões
@@ -225,7 +229,7 @@ export default function PlanoPage() {
                             Suporte prioritário
                         </li>
                     </ul>
-                    <ul className="flex flex-col gap-3 text-[#232939] text-base">
+                    <ul className="flex flex-col gap-3 text-foreground text-base">
                         <li className="flex items-center gap-3">
                             <CheckCircle className="w-5 h-5 text-green-500" />
                             Estatísticas detalhadas de desempenho
