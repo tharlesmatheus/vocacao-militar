@@ -1,4 +1,3 @@
-// src/app/page.tsx
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -24,7 +23,7 @@ export default function Home() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center">
-        <span className="text-lg text-[#232939]">Carregando...</span>
+        <span className="text-lg text-foreground">Carregando...</span>
       </main>
     );
   }
