@@ -207,12 +207,12 @@ export function QuestionCard({
                     let btnClass =
                         "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px] relative group";
 
-                    // Corrigido: exibir texto da correta mesmo não selecionada
+                    // Verde fraquinho/quase transparente para correta
                     if (showResult) {
                         if (isSelected && selected !== correct) {
                             btnClass += " bg-destructive/10 border-destructive text-destructive";
                         } else if (isCorrect) {
-                            btnClass += " bg-green-50 dark:bg-green-950 border-green-600 text-green-900 dark:text-green-200";
+                            btnClass += " bg-green-100/60 border-green-300 text-green-900";
                         } else {
                             btnClass += " bg-card border-border";
                         }
@@ -307,8 +307,8 @@ export function QuestionCard({
 
             {/* Explicação */}
             {showResult && selected && (
-                <div className="bg-green-50 dark:bg-green-950 rounded-lg p-4 mt-2 text-green-900 dark:text-green-200 text-sm">
-                    <span className="font-bold text-green-700 dark:text-green-300">Explicação:</span>
+                <div className="bg-green-100/60 rounded-lg p-4 mt-2 text-green-900 text-sm">
+                    <span className="font-bold text-green-700">Explicação:</span>
                     <p className="mt-1">{explanation}</p>
                 </div>
             )}
