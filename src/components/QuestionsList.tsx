@@ -55,9 +55,9 @@ export function QuestionsList({ filters = {} }: QuestionsListProps) {
             }
         });
 
-        // Filtro especial: excluir já respondidas (ajuste o campo conforme seu banco)
+        // Filtro especial: excluir já respondidas
         if (filters.excluirRespondidas) {
-            query = query.eq("respondida", false); // Altere "respondida" conforme o seu campo!
+            query = query.eq("respondida", false); // Ajuste esse campo se necessário!
         }
 
         query.order("created_at", { ascending: false })
@@ -90,17 +90,17 @@ export function QuestionsList({ filters = {} }: QuestionsListProps) {
 
     return (
         <div className="mt-2">
-            <div className="bg-white rounded-2xl p-8 shadow-xl mb-8 transition-colors border border-[#e3e8f3]">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#e3e8f3] pb-3 mb-4">
-                    <span className="text-sm font-medium text-[#8694ad] tracking-tight">
+            <div className="bg-card rounded-2xl p-8 shadow-xl mb-8 transition-colors border border-border">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border pb-3 mb-4">
+                    <span className="text-sm font-medium text-muted-foreground tracking-tight">
                         Questões encontradas
                     </span>
                     <div className="flex items-center gap-4">
-                        <span className="text-[#65749b] text-xs">
+                        <span className="text-muted-foreground text-xs">
                             Mostrando {paginated.length} de {questoes.length} questões
                         </span>
                         <select
-                            className="bg-[#f3f5fa] border border-[#e3e8f3] rounded px-3 py-1 text-xs text-[#232939]"
+                            className="bg-muted border border-border rounded px-3 py-1 text-xs text-foreground"
                             value={perPage}
                             onChange={e => { setPerPage(Number(e.target.value)); setPage(1); }}
                         >
@@ -112,7 +112,7 @@ export function QuestionsList({ filters = {} }: QuestionsListProps) {
                 </div>
                 <div className="flex flex-col gap-7">
                     {loading ? (
-                        <div>Carregando questões...</div>
+                        <div className="text-muted-foreground py-8 text-center">Carregando questões...</div>
                     ) : paginated.length === 0 ? (
                         <div className="min-h-[120px] flex items-center justify-center text-[#a8b1c6]">
                             Nenhuma questão encontrada.
