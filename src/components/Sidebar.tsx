@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-// Menu sem "Meus Resumos"
 const MENU = [
     { name: "Resolver Questões", href: "/", icon: Home },
     { name: "Cronograma Semanal", href: "/cronograma", icon: CalendarDays },
@@ -31,18 +30,18 @@ export function Sidebar() {
         <>
             {/* Botão para abrir menu (mobile) */}
             <button
-                className="fixed top-5 left-4 z-40 md:hidden bg-white rounded-lg p-2 shadow border border-[#ececec]"
+                className="fixed top-5 left-4 z-40 md:hidden bg-sidebar rounded-lg p-2 shadow border border-sidebar-border"
                 aria-label="Abrir menu"
                 onClick={() => setOpen(true)}
             >
-                <MenuIcon className="w-6 h-6 text-[#232939]" />
+                <MenuIcon className="w-6 h-6 text-sidebar-foreground" />
             </button>
 
             {/* Sidebar - Desktop: fixa, Mobile: drawer */}
             <aside
                 className={`
           z-30 font-sans
-          bg-white px-4 pt-6 pb-4 shadow-lg border-r border-[#ececec]
+          bg-sidebar px-4 pt-6 pb-4 shadow-lg border-r border-sidebar-border
           w-[250px] min-h-screen flex flex-col
           transition-transform duration-200
           md:sticky md:top-0 md:left-0 md:translate-x-0
@@ -55,15 +54,15 @@ export function Sidebar() {
                     aria-label="Fechar menu"
                     onClick={() => setOpen(false)}
                 >
-                    <CloseIcon className="w-6 h-6 text-[#232939]" />
+                    <CloseIcon className="w-6 h-6 text-sidebar-foreground" />
                 </button>
 
                 {/* Logo */}
                 <div className="flex items-center gap-3 mb-10 select-none">
-                    <div className="w-11 h-11 rounded-xl bg-[#232939] flex items-center justify-center text-white font-black text-xl shadow">
+                    <div className="w-11 h-11 rounded-xl bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-black text-xl shadow">
                         VM
                     </div>
-                    <span className="font-black text-xl leading-6 text-[#232939] tracking-tight">
+                    <span className="font-black text-xl leading-6 text-sidebar-foreground tracking-tight">
                         Vocação<br />Militar
                     </span>
                 </div>
@@ -79,13 +78,13 @@ export function Sidebar() {
                   flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-[15px]
                   transition-all
                   ${active
-                                        ? "bg-[#f5f6fa] text-[#232939] font-bold"
-                                        : "text-[#656b7b] hover:bg-[#f2f5fa] hover:text-[#232939]"
+                                        ? "bg-muted text-sidebar-foreground font-bold"
+                                        : "text-muted-foreground hover:bg-muted hover:text-sidebar-foreground"
                                     }
                 `}
                                 onClick={() => setOpen(false)} // Fecha menu ao clicar (mobile)
                             >
-                                <item.icon size={20} className={active ? "text-[#232939]" : "text-[#b1bad3]"} />
+                                <item.icon size={20} className={active ? "text-sidebar-foreground" : "text-muted-foreground"} />
                                 <span className="whitespace-pre-line">{item.name}</span>
                             </Link>
                         );
