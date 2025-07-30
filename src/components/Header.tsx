@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabaseClient"; // ajuste o caminho se necessário
+import { ModeToggle } from "@/components/mode-toggle"; // ajuste o caminho se necessário
 
 export function Header() {
     const [menuAberto, setMenuAberto] = useState(false);
@@ -13,8 +14,11 @@ export function Header() {
         async function fetchAluno() {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-                // Ajuste a chave caso use outro campo
-                setAluno(user.user_metadata?.nome || user.user_metadata?.name || user.email);
+                setAluno(
+                    user.user_metadata?.nome ||
+                    user.user_metadata?.name ||
+                    user.email
+                );
             }
         }
         fetchAluno();
@@ -45,6 +49,10 @@ export function Header() {
                 <span className="text-sm md:text-base font-medium text-[#232939]/80 font-sans">
                     {aluno ? `Bem-vindo, ${aluno}!` : "Bem-vindo!"}
                 </span>
+
+                {/* Botão de alternar tema (dark/light/system) */}
+                <ModeToggle />
+
                 <div className="relative" ref={menuRef}>
                     <button
                         className="w-9 h-9 rounded-full bg-[#dde3ef] flex items-center justify-center font-bold text-[#232939] text-base focus:outline-none"

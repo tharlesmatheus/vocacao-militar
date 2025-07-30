@@ -3,6 +3,7 @@ import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { usePathname } from "next/navigation";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -22,6 +23,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 : "flex-1 w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-8 py-5 md:py-8"
             }>
               {children}
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                {children}
+              </ThemeProvider>
             </main>
           </div>
         </div>
