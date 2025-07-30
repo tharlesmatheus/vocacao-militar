@@ -8,8 +8,7 @@ module.exports = {
         extend: {},
     },
     plugins: [],
-    // 👇 Adicione isso aqui!
     experimental: {
-        disableColorOkLCH: true
-    }
-}
+        disableColorOkLCH: true,
+    },
+};

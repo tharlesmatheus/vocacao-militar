@@ -2,9 +2,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
-
-/* cor de fundo dos cards/ferramentas */
+/* Remove @custom-variant dark (&:is(.dark *)) porque não é necessário para Tailwind */
 
 html,
 body {
@@ -17,20 +15,27 @@ body {
   overscroll-behavior-y: contain;
 }
 
-/* Ajuste para que inputs/textareas também fiquem harmônicos no tema */
+/* Inputs e selects SEMPRE respeitam tema */
 input,
 textarea,
 select {
-  background-color: #f5f7fa;
+  background-color: var(--muted);
+  color: var(--foreground);
+  border-color: var(--border);
+  /* Usando inherit faz as fontes ficarem iguais ao resto */
+  font-family: inherit;
+  font-size: inherit;
 }
 
-/* (Opcional) Remover fundo dark */
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Não muda nada, desativa o dark */
-  }
+/* Remove fundo default de autocomplete do Chrome */
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--muted) inset !important;
+  -webkit-text-fill-color: var(--foreground) !important;
 }
 
+/* Tailwind Theme Token Mapping */
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -69,79 +74,83 @@ select {
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* === TEMA CLARO === */
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #f5f6fa;
+  --foreground: #232939;
+  --card: #fff;
+  --card-foreground: #232939;
+  --popover: #fff;
+  --popover-foreground: #232939;
+  --primary: #6a88d7;
+  --primary-foreground: #fff;
+  --secondary: #e3e8f3;
+  --secondary-foreground: #232939;
+  --muted: #f5f7fa;
+  --muted-foreground: #65749b;
+  --accent: #f3f5fa;
+  --accent-foreground: #232939;
+  --destructive: #e2735e;
+  --border: #e3e8f3;
+  --input: #e3e8f3;
+  --ring: #b1bad3;
+  --chart-1: #6a88d7;
+  --chart-2: #90caf9;
+  --chart-3: #ffd700;
+  --chart-4: #76c7c0;
+  --chart-5: #e57373;
+  --sidebar: #fff;
+  --sidebar-foreground: #232939;
+  --sidebar-primary: #6a88d7;
+  --sidebar-primary-foreground: #fff;
+  --sidebar-accent: #f5f6fa;
+  --sidebar-accent-foreground: #232939;
+  --sidebar-border: #e3e8f3;
+  --sidebar-ring: #b1bad3;
 }
 
+/* === TEMA ESCURO === */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #181a1b;
+  --foreground: #f1f2f6;
+  --card: #232323;
+  --card-foreground: #fff;
+  --popover: #232323;
+  --popover-foreground: #fff;
+  --primary: #6a88d7;
+  --primary-foreground: #fff;
+  --secondary: #232939;
+  --secondary-foreground: #fff;
+  --muted: #232323;
+  --muted-foreground: #b1bad3;
+  --accent: #181a1b;
+  --accent-foreground: #f1f2f6;
+  --destructive: #ffb4a8;
+  --border: #343a4f;
+  --input: #343a4f;
+  --ring: #343a4f;
+  --chart-1: #82b1ff;
+  --chart-2: #ffd700;
+  --chart-3: #90caf9;
+  --chart-4: #76c7c0;
+  --chart-5: #ffb4a8;
+  --sidebar: #181a1b;
+  --sidebar-foreground: #f1f2f6;
+  --sidebar-primary: #6a88d7;
+  --sidebar-primary-foreground: #fff;
+  --sidebar-accent: #232939;
+  --sidebar-accent-foreground: #fff;
+  --sidebar-border: #343a4f;
+  --sidebar-ring: #343a4f;
 }
 
+/* Tailwind base layer para variáveis utilitárias */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
