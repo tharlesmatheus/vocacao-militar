@@ -9,7 +9,6 @@ export function Header() {
     const menuRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
 
-    // Buscar nome do aluno ao carregar o componente
     useEffect(() => {
         async function fetchAluno() {
             const { data: { user } } = await supabase.auth.getUser();
@@ -44,9 +43,9 @@ export function Header() {
     }
 
     return (
-        <header className="w-full px-4 md:px-8 py-4 border-b border-gray-200 bg-white flex items-center justify-end">
+        <header className="w-full px-4 md:px-8 py-4 border-b border-border bg-card flex items-center justify-end">
             <div className="flex items-center gap-3 md:gap-6">
-                <span className="text-sm md:text-base font-medium text-[#232939]/80 font-sans">
+                <span className="text-sm md:text-base font-medium text-foreground/80 font-sans">
                     {aluno ? `Bem-vindo, ${aluno}!` : "Bem-vindo!"}
                 </span>
 
@@ -55,7 +54,7 @@ export function Header() {
 
                 <div className="relative" ref={menuRef}>
                     <button
-                        className="w-9 h-9 rounded-full bg-[#dde3ef] flex items-center justify-center font-bold text-[#232939] text-base focus:outline-none"
+                        className="w-9 h-9 rounded-full bg-muted flex items-center justify-center font-bold text-foreground text-base focus:outline-none"
                         onClick={() => setMenuAberto((v) => !v)}
                         aria-haspopup="true"
                         aria-expanded={menuAberto}
@@ -64,9 +63,9 @@ export function Header() {
                         VM
                     </button>
                     {menuAberto && (
-                        <div className="absolute right-0 mt-2 w-36 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-2">
+                        <div className="absolute right-0 mt-2 w-36 bg-card border border-border rounded-xl shadow-lg z-50 py-2">
                             <button
-                                className="w-full text-left px-4 py-2 text-[#232939] hover:bg-gray-100 rounded-lg transition-colors"
+                                className="w-full text-left px-4 py-2 text-foreground hover:bg-muted rounded-lg transition-colors"
                                 onClick={logout}
                             >
                                 Sair da conta
