@@ -207,13 +207,12 @@ export function QuestionCard({
                     let btnClass =
                         "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px] relative group";
 
+                    // Corrigido: exibir texto da correta mesmo não selecionada
                     if (showResult) {
                         if (isSelected && selected !== correct) {
                             btnClass += " bg-destructive/10 border-destructive text-destructive";
-                        } else if (isCorrect && selected !== correct) {
-                            btnClass += " bg-green-50 border-green-600 text-green-900";
-                        } else if (isSelected && selected === correct) {
-                            btnClass += " bg-green-50 border-green-600 text-green-900";
+                        } else if (isCorrect) {
+                            btnClass += " bg-green-50 dark:bg-green-950 border-green-600 text-green-900 dark:text-green-200";
                         } else {
                             btnClass += " bg-card border-border";
                         }
@@ -240,19 +239,20 @@ export function QuestionCard({
                             >
                                 <TesouraIcon />
                             </span>
-                            <span className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
-                                ${showResult && isSelected
-                                    ? isCorrect
-                                        ? "bg-green-600 text-white"
-                                        : "bg-destructive text-white"
-                                    : isSelected
-                                        ? "bg-primary text-primary-foreground"
-                                        : "bg-muted text-foreground"
+                            <span className={`
+                                mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
+                                ${showResult && isCorrect
+                                    ? "bg-green-600 text-white"
+                                    : showResult && isSelected && selected !== correct
+                                        ? "bg-destructive text-white"
+                                        : isSelected
+                                            ? "bg-primary text-primary-foreground"
+                                            : "bg-muted text-foreground"
                                 }
-                                `}>
+                            `}>
                                 {value}
                             </span>
-                            <span className="text-foreground text-[15px]">{opt.text}</span>
+                            <span className="text-[15px]">{opt.text}</span>
                         </button>
                     );
                 })}
