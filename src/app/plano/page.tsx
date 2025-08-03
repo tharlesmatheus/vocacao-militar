@@ -5,16 +5,9 @@ import { supabase } from "@/lib/supabaseClient";
 
 type PlanoStatus = "ativo" | "inativo" | "pendente";
 
-interface PlanoInfo {
-    status: PlanoStatus;
-    proximo_pagamento: string | null;
-    metodo_pagamento?: string | null;
-}
-
 export default function PlanoPage() {
     const [status, setStatus] = useState<PlanoStatus>("inativo");
     const [proximoPagamento, setProximoPagamento] = useState<string | null>(null);
-    const [metodoPagamento, setMetodoPagamento] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -30,83 +23,22 @@ export default function PlanoPage() {
             if (data) {
                 setStatus(data.status as PlanoStatus);
                 setProximoPagamento(data.proximo_pagamento);
-                setMetodoPagamento(data.metodo_pagamento ?? null);
             }
         }
         fetchPlano();
     }, []);
 
-    // Checkout Stripe
+    // Checkout Kiwify
     async function handleCheckout() {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
+        if (!user || !user.email) {
             alert("Faça login para assinar!");
             setLoading(false);
             return;
         }
-
-        const resp = await fetch("/api/checkout", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                userId: user.id,
-                email: user.email,
-            }),
-        });
-
-        const { url, error: apiError } = await resp.json();
+        window.location.href = `https://pay.kiwify.com.br/ptQ62f5?email=${encodeURIComponent(user.email)}`;
         setLoading(false);
-        if (url) {
-            window.location.href = url;
-        } else {
-            alert("Erro ao criar checkout: " + (apiError || "Erro desconhecido"));
-        }
-    }
-
-    // Billing Portal Stripe (alterar/cadastrar cartão)
-    async function handleBillingPortal() {
-        setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-            alert("Faça login!");
-            setLoading(false);
-            return;
-        }
-        const resp = await fetch("/api/stripe/portal", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: user.id }),
-        });
-        const { url, error } = await resp.json();
-        setLoading(false);
-        if (url) window.location.href = url;
-        else alert("Erro ao abrir portal: " + (error || "Erro desconhecido"));
-    }
-
-    // Cancelar assinatura Stripe
-    async function handleCancelar() {
-        if (!confirm("Tem certeza que deseja cancelar seu plano?")) return;
-        setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-            alert("Faça login!");
-            setLoading(false);
-            return;
-        }
-        const resp = await fetch("/api/stripe/cancel", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: user.id }),
-        });
-        const { success, error } = await resp.json();
-        setLoading(false);
-        if (success) {
-            alert("Plano cancelado! Você manterá acesso até o fim do período já pago.");
-            setStatus("inativo");
-        } else {
-            alert("Erro ao cancelar: " + (error || "Erro desconhecido"));
-        }
     }
 
     return (
@@ -171,28 +103,21 @@ export default function PlanoPage() {
                                 Método de Pagamento
                             </div>
                             <div className="text-sm text-foreground mb-2">
-                                {status === "ativo" && metodoPagamento
-                                    ? metodoPagamento
+                                {status === "ativo"
+                                    ? "Pagamento pela Kiwify"
                                     : "Nenhum cadastrado"}
                             </div>
-                            <button className="bg-primary hover:bg-primary/80 text-white px-4 py-2 rounded-lg font-semibold text-sm shadow border border-primary transition w-full"
-                                onClick={handleBillingPortal}
-                                disabled={loading}
-                            >
-                                {status === "ativo" ? "Alterar" : "Cadastrar"}
-                            </button>
+                            <div className="p-3 rounded border text-sm bg-muted text-muted-foreground">
+                                Alterações e cancelamentos devem ser feitos pelo painel do comprador da Kiwify. Em caso de dúvida, contate nosso suporte.
+                            </div>
                         </div>
 
                         <div>
                             <div className="font-bold mb-1 text-foreground text-sm">Ações</div>
                             {status === "ativo" ? (
-                                <button
-                                    className="block w-full rounded-lg bg-red-50 text-red-500 font-bold px-4 py-2 border border-red-200 hover:bg-red-100 transition text-sm"
-                                    onClick={handleCancelar}
-                                    disabled={loading}
-                                >
-                                    Cancelar Plano
-                                </button>
+                                <div className="p-3 rounded border text-sm bg-muted text-muted-foreground">
+                                    Seu plano está ativo! Para cancelar ou alterar sua assinatura, acesse o painel do cliente da Kiwify ou utilize o link enviado por e-mail na compra.
+                                </div>
                             ) : (
                                 <button
                                     className={`block w-full rounded-lg bg-primary hover:bg-primary/80 text-white font-bold px-4 py-2 border border-primary transition text-sm ${loading && "opacity-60 pointer-events-none"}`}
