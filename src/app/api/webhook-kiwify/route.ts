@@ -38,16 +38,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ message: "Evento ignorado" });
     }
 
-    // upsert usando string no onConflict
+    // Faz upsert: cria se não existe, atualiza se já existe (pelo email)
     const { error } = await supabase
         .from("planos")
         .upsert(
             [{ email, status }],
-            { onConflict: 'email' } // <- aqui o ajuste!
+            { onConflict: 'email' } // <- aqui está o ajuste!
         );
 
     if (error) {
-        console.log("Erro ao atualizar Supabase:", error);
+        console.log("Erro ao atualizar Supabase:", error); // Vai mostrar erro detalhado nos logs!
         return NextResponse.json({ message: "Erro ao atualizar status no Supabase", error }, { status: 500 });
     }
 
