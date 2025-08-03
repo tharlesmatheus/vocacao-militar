@@ -4,17 +4,15 @@ import { supabase } from "@/lib/supabaseClient";
 const KIWIFY_TOKEN = "lapn096tst4";
 
 export async function POST(req: NextRequest) {
-    const body = await req.json();
-    console.log("Webhook recebido!", { body });
+    const json = await req.json();
+    const body = json.body || json; // PEGA O OBJETO CERTO!
+    console.log("Webhook recebido!", body);
 
-    // Token pode vir nos headers
-    const tokenRecebido =
-        req.headers.get("x-kiwify-token") ||
-        req.headers.get("X-Kiwify-Token") ||
-        body.token;
-    if (tokenRecebido !== KIWIFY_TOKEN) {
-        return NextResponse.json({ message: "Token inválido!" }, { status: 403 });
-    }
+    // Validação do token (opcional)
+    // const tokenRecebido = req.headers.get("x-kiwify-token") || req.headers.get("X-Kiwify-Token") || body.token;
+    // if (tokenRecebido !== KIWIFY_TOKEN) {
+    //     return NextResponse.json({ message: "Token inválido!" }, { status: 403 });
+    // }
 
     const event = body.webhook_event_type;
     const email = body.Customer?.email;
@@ -54,7 +52,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "Status atualizado com sucesso" });
 }
 
-// Para outros métodos:
 export function GET() {
     return NextResponse.json({ message: "Método não permitido" }, { status: 405 });
 }
