@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const body = json.body || json; // PEGA O OBJETO CERTO!
     console.log("Webhook recebido!", body);
 
-    // Validação do token (opcional)
+    // (Se quiser, ative a validação do token!)
     // const tokenRecebido = req.headers.get("x-kiwify-token") || req.headers.get("X-Kiwify-Token") || body.token;
     // if (tokenRecebido !== KIWIFY_TOKEN) {
     //     return NextResponse.json({ message: "Token inválido!" }, { status: 403 });
@@ -38,18 +38,21 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ message: "Evento ignorado" });
     }
 
+    // upsert usando string no onConflict
     const { error } = await supabase
         .from("planos")
-        .update({ status })
-        .eq("email", email);
+        .upsert(
+            [{ email, status }],
+            { onConflict: 'email' } // <- aqui o ajuste!
+        );
 
     if (error) {
         console.log("Erro ao atualizar Supabase:", error);
         return NextResponse.json({ message: "Erro ao atualizar status no Supabase", error }, { status: 500 });
     }
 
-    console.log(`Status do plano de ${email} atualizado para ${status}`);
-    return NextResponse.json({ message: "Status atualizado com sucesso" });
+    console.log(`Status do plano de ${email} atualizado/criado para ${status}`);
+    return NextResponse.json({ message: "Status atualizado/criado com sucesso" });
 }
 
 export function GET() {
