@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-background text-foreground min-h-screen font-sans antialiased">
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme="light"    // <- Alterado para iniciar sempre claro!
           enableSystem
           disableTransitionOnChange
         >
