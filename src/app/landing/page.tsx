@@ -28,10 +28,11 @@ Apenas responda com o JSON. NÃO inclua explicação extra, markdown, texto ante
 Questão:
 `;
 
+// Força a modalidade a ser só "Multipla Escolha" ou "Certo ou Errado"
 function detectarModalidade(alternativas: any, enunciado: string): string {
-    if (!alternativas) return "";
+    if (!alternativas) return "Multipla Escolha";
     const letras = Object.keys(alternativas).filter(l => alternativas[l]?.trim());
-    // Se tiver A e B apenas, e o enunciado fala em “certo ou errado” ou “verdadeiro ou falso”
+    // Se só tem A e B, e fala em certo/errado/verdadeiro/falso, ou alternativas são "Certo", "Errado"...
     if (letras.length === 2 && (
         /certo.*errado|errado.*certo|verdadeiro.*falso|falso.*verdadeiro/i.test(enunciado) ||
         (alternativas['A'] && alternativas['B'] &&
@@ -39,11 +40,12 @@ function detectarModalidade(alternativas: any, enunciado: string): string {
     )) {
         return "Certo ou Errado";
     }
-    // Se tiver A a E, é multipla escolha
-    if (letras.length >= 4) {
+    // Se tem pelo menos 3 opções (A, B, C...) já trata como multipla escolha
+    if (letras.length >= 3) {
         return "Multipla Escolha";
     }
-    return ""; // caso queira tratar outros tipos no futuro
+    // Valor padrão
+    return "Multipla Escolha";
 }
 
 export default function NovaQuestaoGemini() {
@@ -78,7 +80,7 @@ export default function NovaQuestaoGemini() {
                 ""
             ).trim();
 
-            // Tenta parsear o JSON (Gemini pode devolver blocos com ```json)
+            // Limpa possíveis blocos markdown
             jsonStr = jsonStr.replace(/```json|```/g, "").trim();
             let obj = null;
             try {
@@ -89,8 +91,8 @@ export default function NovaQuestaoGemini() {
                 return;
             }
 
-            // Ajusta modalidade automaticamente
-            obj.modalidade = detectarModalidade(obj.alternativas, obj.enunciado) || obj.modalidade || "";
+            // FORÇA modalidade para nunca ser outro valor além dos permitidos:
+            obj.modalidade = detectarModalidade(obj.alternativas, obj.enunciado);
 
             setRespostaJson(obj);
 
