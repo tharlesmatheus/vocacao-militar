@@ -3,15 +3,33 @@
 import React, { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-// ... seu PROMPT_PREFIX e funções detectarModalidade/separarQuestoes exatamente como estão
-
 const GEMINI_API_KEY = "AIzaSyC-3CWT9uBxdEw8qdmZ9Vma0F6-iV0To88";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 const PROMPT_PREFIX = `
-// ... (mantenha seu prompt original aqui)
+Receba a seguinte questão de concurso e extraia os campos:
+instituicao, cargo, disciplina, assunto, modalidade, banca, enunciado, alternativas, correta, explicacao
+Retorne como objeto JSON, exemplo:
+{
+  "instituicao": "...",
+  "cargo": "...",
+  "disciplina": "...",
+  "assunto": "...",
+  "modalidade": "...",
+  "banca": "...",
+  "enunciado": "...",
+  "alternativas": { "A": "...", "B": "...", "C": "...", "D": "...", "E": "..." },
+  "correta": "...",
+  "explicacao": "..."
+}
+Se a questão já possuir explicação ou comentário, REESCREVA esse comentário de forma clara, didática e formal, corrigindo eventuais erros, mas sem inventar novas informações.
+Se não houver explicação, GERE uma explicação didática para o gabarito.
+Apenas responda com o JSON. NÃO inclua explicação extra, markdown, texto antes ou depois.
+
+Questão:
 `;
 
+// Detecção de modalidade (sempre força "Multipla Escolha" ou "Certo ou Errado")
 function detectarModalidade(alternativas: any, enunciado: string): string {
     if (!alternativas) return "Multipla Escolha";
     const letras = Object.keys(alternativas).filter(l => alternativas[l]?.trim());
@@ -28,11 +46,13 @@ function detectarModalidade(alternativas: any, enunciado: string): string {
     return "Multipla Escolha";
 }
 
+// Função para separar cada questão pelo padrão mais comum (ajuste o regex se precisar!)
 function separarQuestoes(texto: string): string[] {
+    // Tenta dividir por "1)", "2)", ... ou "QUESTÃO 1", etc.
     const blocos = texto
         .split(/(?:^|\n)(?:\d{1,2}\)|QUESTÃO ?\d{1,2}|Questão ?\d{1,2})[\.: \-]*/i)
         .map(q => q.trim())
-        .filter(q => q.length > 20);
+        .filter(q => q.length > 20); // ignora blocos muito curtos
     return blocos;
 }
 
@@ -42,11 +62,12 @@ export default function NovaQuestaoGeminiLote() {
     const [erro, setErro] = useState("");
     const [msg, setMsg] = useState("");
     const [resultados, setResultados] = useState<any[]>([]);
-    const [pdfLoading, setPdfLoading] = useState(false);
 
     async function handleProcessarLote() {
         setLoading(true);
-        setErro(""); setMsg(""); setResultados([]);
+        setErro("");
+        setMsg("");
+        setResultados([]);
         try {
             const questoesSeparadas = separarQuestoes(input);
 
@@ -59,6 +80,7 @@ export default function NovaQuestaoGeminiLote() {
             let questoesProntas: any[] = [];
             let falhas: any[] = [];
 
+            // Processa uma a uma (pode ser paralelizado, mas para não sobrecarregar a API, vai sequencial)
             for (let [i, questaoTxt] of questoesSeparadas.entries()) {
                 const prompt = PROMPT_PREFIX + questaoTxt;
                 let obj = null;
@@ -83,6 +105,7 @@ export default function NovaQuestaoGeminiLote() {
                     jsonStr = jsonStr.replace(/```json|```/g, "").trim();
                     obj = JSON.parse(jsonStr);
                     obj.modalidade = detectarModalidade(obj.alternativas, obj.enunciado);
+                    // Validação mínima
                     if (!obj.enunciado || !obj.correta || !obj.alternativas) {
                         throw new Error("Faltou campo obrigatório");
                     }
@@ -92,6 +115,7 @@ export default function NovaQuestaoGeminiLote() {
                 }
             }
 
+            // Salva as válidas no banco
             if (questoesProntas.length) {
                 const { error } = await supabase.from("questoes").insert(questoesProntas);
                 if (error) {
@@ -111,49 +135,9 @@ export default function NovaQuestaoGeminiLote() {
         setLoading(false);
     }
 
-    // NOVO: upload PDF
-    async function handlePDF(e: React.FormEvent) {
-        e.preventDefault();
-        setPdfLoading(true);
-        setErro(""); setMsg(""); setResultados([]);
-        const fileInput = (e.target as any).arquivo;
-        if (!fileInput?.files?.[0]) {
-            setErro("Selecione um PDF!");
-            setPdfLoading(false);
-            return;
-        }
-        const formData = new FormData();
-        formData.append("file", fileInput.files[0]);
-        const resp = await fetch("/api/pdf-to-questoes", {
-            method: "POST",
-            body: formData,
-        });
-        const json = await resp.json();
-        if (json.error) {
-            setErro("Erro: " + json.error);
-            setPdfLoading(false);
-            return;
-        }
-        if (json.questoesProntas?.length) {
-            const { error } = await supabase.from("questoes").insert(json.questoesProntas);
-            if (error) {
-                setErro("Erro ao salvar no banco: " + error.message);
-                setPdfLoading(false);
-                return;
-            }
-            setMsg(`Foram cadastradas ${json.questoesProntas.length} questão(ões) do PDF!`);
-        }
-        setResultados([
-            ...(json.questoesProntas || []).map((q: any) => ({ status: "OK", ...q })),
-            ...(json.falhas || []).map((f: any) => ({ status: "ERRO", ...f }))
-        ]);
-        setPdfLoading(false);
-    }
-
     return (
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-3xl mx-auto border border-[#e4e8f3] my-6">
             <h2 className="text-xl font-extrabold text-[#232939] mb-4 text-center">Cadastrar Múltiplas Questões (IA + Supabase)</h2>
-
             <textarea
                 className="w-full h-40 p-2 border rounded mb-4"
                 placeholder={`Cole várias questões, separadas por "1)", "2)", "QUESTÃO 3", etc...`}
@@ -161,23 +145,12 @@ export default function NovaQuestaoGeminiLote() {
                 onChange={e => setInput(e.target.value)}
             />
             <button
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold mr-2"
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
                 onClick={handleProcessarLote}
                 disabled={loading || !input}
             >
                 {loading ? "Processando..." : "Processar e Cadastrar Todas"}
             </button>
-            {/* Upload PDF */}
-            <form onSubmit={handlePDF} className="inline-block ml-2">
-                <input type="file" name="arquivo" accept="application/pdf" className="inline-block border p-2 rounded" />
-                <button
-                    className="ml-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold"
-                    type="submit"
-                    disabled={pdfLoading}
-                >
-                    {pdfLoading ? "Processando PDF..." : "Processar PDF"}
-                </button>
-            </form>
             {erro && <div className="text-red-600 mt-4">{erro}</div>}
             {msg && <div className="text-green-700 mt-4">{msg}</div>}
             {resultados.length > 0 && (
