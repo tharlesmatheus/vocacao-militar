@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 
 const GEMINI_API_KEY = "AIzaSyC-3CWT9uBxdEw8qdmZ9Vma0F6-iV0To88";
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + GEMINI_API_KEY;
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=" + GEMINI_API_KEY;
 
 const PROMPT_PREFIX = `
 Sua tarefa é receber uma questão de concurso (em português), extrair os campos especificados e retornar exatamente uma linha CSV com esses campos, na ordem e formato abaixo. NÃO inclua cabeçalho, NÃO explique nada, NÃO pule linhas. Apenas retorne a linha CSV conforme o exemplo.
@@ -44,7 +44,6 @@ export default function Page() {
                 throw new Error("Falha ao chamar a API do Gemini.");
             }
             const data = await res.json();
-            // Pode vir como data.candidates[0].content.parts[0].text ou similar
             const csvText =
                 data.candidates?.[0]?.content?.parts?.[0]?.text ||
                 data.candidates?.[0]?.content?.text ||
@@ -60,7 +59,7 @@ export default function Page() {
     return (
         <main className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100">
             <div className="w-full max-w-2xl bg-white shadow-xl rounded-2xl p-6">
-                <h1 className="text-2xl font-bold mb-4">Gerador de CSV para Supabase (Questões de Concurso + Gemini AI)</h1>
+                <h1 className="text-2xl font-bold mb-4">Gerador de CSV para Supabase (Questões + Gemini)</h1>
                 <textarea
                     className="w-full h-40 p-2 border rounded mb-4"
                     placeholder="Cole a questão aqui (com enunciado, alternativas, etc)..."
