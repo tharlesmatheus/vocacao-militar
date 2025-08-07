@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 
 const GEMINI_API_KEY = "AIzaSyC-3CWT9uBxdEw8qdmZ9Vma0F6-iV0To88";
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=" + GEMINI_API_KEY;
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 const PROMPT_PREFIX = `
 Sua tarefa é receber uma questão de concurso (em português), extrair os campos especificados e retornar exatamente uma linha CSV com esses campos, na ordem e formato abaixo. NÃO inclua cabeçalho, NÃO explique nada, NÃO pule linhas. Apenas retorne a linha CSV conforme o exemplo.
@@ -33,7 +33,8 @@ export default function Page() {
             const res = await fetch(GEMINI_URL, {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "X-goog-api-key": GEMINI_API_KEY,
                 },
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: PROMPT_PREFIX + input }] }]
