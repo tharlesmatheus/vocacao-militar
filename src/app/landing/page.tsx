@@ -22,11 +22,29 @@ Retorne como objeto JSON, exemplo:
   "correta": "...",
   "explicacao": "..."
 }
-Se algum campo não existir, deixe em branco. Se não houver explicação, gere uma didática.
+Se a questão já possuir explicação, utilize-a exatamente como informada. Se não houver explicação ou comentário, gere uma explicação didática.
 Apenas responda com o JSON. NÃO inclua explicação extra, markdown, texto antes ou depois.
 
 Questão:
 `;
+
+function detectarModalidade(alternativas: any, enunciado: string): string {
+    if (!alternativas) return "";
+    const letras = Object.keys(alternativas).filter(l => alternativas[l]?.trim());
+    // Se tiver A e B apenas, e o enunciado fala em “certo ou errado” ou “verdadeiro ou falso”
+    if (letras.length === 2 && (
+        /certo.*errado|errado.*certo|verdadeiro.*falso|falso.*verdadeiro/i.test(enunciado) ||
+        (alternativas['A'] && alternativas['B'] &&
+            (/certo|errado|verdadeiro|falso/i.test(alternativas['A'] + alternativas['B'])))
+    )) {
+        return "Certo ou Errado";
+    }
+    // Se tiver A a E, é multipla escolha
+    if (letras.length >= 4) {
+        return "Multipla Escolha";
+    }
+    return ""; // caso queira tratar outros tipos no futuro
+}
 
 export default function NovaQuestaoGemini() {
     const [input, setInput] = useState("");
@@ -71,6 +89,9 @@ export default function NovaQuestaoGemini() {
                 return;
             }
 
+            // Ajusta modalidade automaticamente
+            obj.modalidade = detectarModalidade(obj.alternativas, obj.enunciado) || obj.modalidade || "";
+
             setRespostaJson(obj);
 
             // Validação básica dos campos obrigatórios
@@ -100,7 +121,7 @@ export default function NovaQuestaoGemini() {
             <h2 className="text-xl font-extrabold text-[#232939] mb-4 text-center">Cadastrar Questão Automática (com Gemini)</h2>
             <textarea
                 className="w-full h-32 p-2 border rounded mb-4"
-                placeholder="Cole a questão aqui (enunciado, alternativas, correta, etc)..."
+                placeholder="Cole a questão aqui (enunciado, alternativas, correta, explicação se quiser)..."
                 value={input}
                 onChange={e => setInput(e.target.value)}
             />
