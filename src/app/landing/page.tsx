@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 const GEMINI_API_KEY = "AIzaSyC-3CWT9uBxdEw8qdmZ9Vma0F6-iV0To88";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
+// PROMPT para Gemini: padroniza explicação se existir, senão gera.
 const PROMPT_PREFIX = `
 Receba a seguinte questão de concurso e extraia os campos:
 instituicao, cargo, disciplina, assunto, modalidade, banca, enunciado, alternativas, correta, explicacao
@@ -22,7 +23,8 @@ Retorne como objeto JSON, exemplo:
   "correta": "...",
   "explicacao": "..."
 }
-Se a questão já possuir explicação, utilize-a exatamente como informada. Se não houver explicação ou comentário, gere uma explicação didática.
+Se a questão já possuir explicação ou comentário, REESCREVA esse comentário de forma clara, didática e formal, corrigindo eventuais erros, mas sem inventar novas informações.
+Se não houver explicação, GERE uma explicação didática para o gabarito.
 Apenas responda com o JSON. NÃO inclua explicação extra, markdown, texto antes ou depois.
 
 Questão:
