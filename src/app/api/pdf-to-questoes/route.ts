@@ -1,8 +1,12 @@
+// FORÇA O USO DO RUNTIME NODE.JS PARA USAR DEPENDÊNCIAS NATIVAS!
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from "next/server";
 import pdf from "pdf-parse";
 import formidable from "formidable";
 import fs from "fs/promises";
 
+// Desativa o body parser padrão, obrigatório para upload de arquivos grandes.
 export const config = {
     api: { bodyParser: false }
 };
@@ -36,11 +40,14 @@ Questão:
 function detectarModalidade(alternativas: any, enunciado: string): string {
     if (!alternativas) return "Multipla Escolha";
     const letras = Object.keys(alternativas).filter(l => alternativas[l]?.trim());
-    if (letras.length === 2 && (
-        /certo.*errado|errado.*certo|verdadeiro.*falso|falso.*verdadeiro/i.test(enunciado) ||
-        (alternativas['A'] && alternativas['B'] &&
-            (/certo|errado|verdadeiro|falso/i.test(alternativas['A'] + alternativas['B'])))
-    )) {
+    if (
+        letras.length === 2 &&
+        (
+            /certo.*errado|errado.*certo|verdadeiro.*falso|falso.*verdadeiro/i.test(enunciado) ||
+            (alternativas['A'] && alternativas['B'] &&
+                (/certo|errado|verdadeiro|falso/i.test(alternativas['A'] + alternativas['B'])))
+        )
+    ) {
         return "Certo ou Errado";
     }
     if (letras.length >= 3) {
@@ -58,18 +65,30 @@ function separarQuestoes(texto: string): string[] {
 
 export async function POST(req: NextRequest) {
     try {
-        const form = new (formidable as any).IncomingForm();
-        const data = await new Promise<any>((resolve, reject) => {
+        // Parse multipart/form-data (upload de arquivo)
+        const form = new formidable.IncomingForm();
+        // formidable v3+ (ou v2+) pode retornar arrays, então trate ambos os casos.
+        const data: any = await new Promise((resolve, reject) => {
             form.parse(req as any, (err: any, fields: any, files: any) => {
                 if (err) reject(err);
                 else resolve({ fields, files });
             });
         });
 
-        const file = data.files?.file;
-        if (!file) return NextResponse.json({ error: "Arquivo não enviado" }, { status: 400 });
+        let file = data.files?.file;
+        if (!file) {
+            return NextResponse.json({ error: "Arquivo não enviado" }, { status: 400 });
+        }
+        // O formidable pode retornar array de arquivos!
+        if (Array.isArray(file)) file = file[0];
 
-        const buffer = await fs.readFile(file.filepath);
+        const filePath = file.filepath || file.path; // v3 usa .filepath, v2 pode ser .path
+
+        if (!filePath) {
+            return NextResponse.json({ error: "Caminho do arquivo não encontrado" }, { status: 400 });
+        }
+
+        const buffer = await fs.readFile(filePath);
         const pdfData = await pdf(buffer);
         const texto = pdfData.text;
 
