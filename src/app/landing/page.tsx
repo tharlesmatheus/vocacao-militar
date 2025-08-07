@@ -1,34 +1,45 @@
 'use client';
 
 import React, { useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 const GEMINI_API_KEY = "AIzaSyC-3CWT9uBxdEw8qdmZ9Vma0F6-iV0To88";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 const PROMPT_PREFIX = `
-Sua tarefa é receber uma questão de concurso (em português), extrair os campos especificados e retornar exatamente uma linha CSV com esses campos, na ordem e formato abaixo. NÃO inclua cabeçalho, NÃO explique nada, NÃO pule linhas. Apenas retorne a linha CSV conforme o exemplo.
-Os campos são: instituicao,cargo,disciplina,assunto,modalidade,banca,enunciado,alternativas,correta,explicacao
-- TODOS os campos devem estar entre aspas duplas (inclusive alternativas e explicacao).
-- O campo "alternativas" deve estar em formato JSON com aspas duplas escapadas, exemplo: "{""A"":""Texto A"",""B"":""Texto B"",""C"":""Texto C"",""D"":""Texto D"",""E"":""Texto E""}"
-- Se já houver explicação, use-a; se não houver, gere uma explicação didática.
-- NÃO inclua quebras de linha, texto extra ou espaços fora dos campos.
-- NÃO inclua cabeçalho, nem qualquer outra linha além da linha CSV.
-- TODOS os campos devem ser preenchidos, mesmo que algum texto seja curto.
+Receba a seguinte questão de concurso e extraia os campos:
+instituicao, cargo, disciplina, assunto, modalidade, banca, enunciado, alternativas, correta, explicacao
+Retorne como objeto JSON, exemplo:
+{
+  "instituicao": "...",
+  "cargo": "...",
+  "disciplina": "...",
+  "assunto": "...",
+  "modalidade": "...",
+  "banca": "...",
+  "enunciado": "...",
+  "alternativas": { "A": "...", "B": "...", "C": "...", "D": "...", "E": "..." },
+  "correta": "...",
+  "explicacao": "..."
+}
+Se algum campo não existir, deixe em branco. Se não houver explicação, gere uma didática.
+Apenas responda com o JSON. NÃO inclua explicação extra, markdown, texto antes ou depois.
 
-Agora, processe a questão abaixo e retorne apenas uma linha CSV como no exemplo acima.
-
+Questão:
 `;
 
-export default function Page() {
+export default function NovaQuestaoGemini() {
     const [input, setInput] = useState("");
-    const [csv, setCsv] = useState("");
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
+    const [erro, setErro] = useState("");
+    const [msg, setMsg] = useState("");
+    const [respostaJson, setRespostaJson] = useState<any>(null);
 
-    async function handleGenerate() {
+    async function handleProcessarQuestao() {
         setLoading(true);
-        setError("");
-        setCsv("");
+        setErro("");
+        setMsg("");
+        setRespostaJson(null);
         try {
             const res = await fetch(GEMINI_URL, {
                 method: "POST",
@@ -41,60 +52,76 @@ export default function Page() {
                 })
             });
 
-            if (!res.ok) {
-                throw new Error("Falha ao chamar a API do Gemini.");
-            }
+            if (!res.ok) throw new Error("Falha ao chamar a API do Gemini.");
             const data = await res.json();
-            const csvText =
+            let jsonStr = (
                 data.candidates?.[0]?.content?.parts?.[0]?.text ||
                 data.candidates?.[0]?.content?.text ||
-                "Erro ao obter resposta.";
+                ""
+            ).trim();
 
-            setCsv(csvText.trim());
+            // Tenta parsear o JSON (Gemini pode devolver blocos com ```json)
+            jsonStr = jsonStr.replace(/```json|```/g, "").trim();
+            let obj = null;
+            try {
+                obj = JSON.parse(jsonStr);
+            } catch {
+                setErro("Erro ao ler resposta da IA. Tente editar a questão e tente novamente.");
+                setLoading(false);
+                return;
+            }
+
+            setRespostaJson(obj);
+
+            // Validação básica dos campos obrigatórios
+            if (!obj.enunciado || !obj.correta || !obj.alternativas) {
+                setErro("Faltou campo obrigatório na resposta da IA!");
+                setLoading(false);
+                return;
+            }
+
+            // Insere no Supabase!
+            const { error } = await supabase.from("questoes").insert([obj]);
+            if (error) {
+                setErro("Erro ao inserir no banco: " + error.message);
+                setLoading(false);
+                return;
+            }
+            setMsg("Questão cadastrada com sucesso!");
+            setInput("");
         } catch (e: any) {
-            setError(e.message || "Erro inesperado.");
+            setErro(e.message || "Erro inesperado.");
         }
         setLoading(false);
     }
 
     return (
-        <main className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100">
-            <div className="w-full max-w-2xl bg-white shadow-xl rounded-2xl p-6">
-                <h1 className="text-2xl font-bold mb-4">Gerador de CSV para Supabase (Questões + Gemini)</h1>
-                <textarea
-                    className="w-full h-40 p-2 border rounded mb-4"
-                    placeholder="Cole a questão aqui (com enunciado, alternativas, etc)..."
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                />
-                <button
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
-                    onClick={handleGenerate}
-                    disabled={loading || !input}
-                >
-                    {loading ? "Gerando..." : "Gerar CSV"}
-                </button>
-                {error && (
-                    <div className="text-red-600 mt-4">{error}</div>
-                )}
-                {csv && (
-                    <div className="mt-6">
-                        <label className="block font-semibold mb-2">Linha CSV gerada:</label>
-                        <textarea
-                            className="w-full h-32 p-2 border rounded bg-gray-50"
-                            value={csv}
-                            readOnly
-                            onFocus={e => e.target.select()}
-                        />
-                        <div className="text-xs text-gray-500 mt-2">
-                            Copie e cole essa linha no seu CSV ou no Supabase.
-                        </div>
-                    </div>
-                )}
-            </div>
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-2xl mx-auto border border-[#e4e8f3] my-6">
+            <h2 className="text-xl font-extrabold text-[#232939] mb-4 text-center">Cadastrar Questão Automática (com Gemini)</h2>
+            <textarea
+                className="w-full h-32 p-2 border rounded mb-4"
+                placeholder="Cole a questão aqui (enunciado, alternativas, correta, etc)..."
+                value={input}
+                onChange={e => setInput(e.target.value)}
+            />
+            <button
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
+                onClick={handleProcessarQuestao}
+                disabled={loading || !input}
+            >
+                {loading ? "Processando..." : "Gerar e Cadastrar"}
+            </button>
+            {erro && <div className="text-red-600 mt-4">{erro}</div>}
+            {msg && <div className="text-green-700 mt-4">{msg}</div>}
+            {respostaJson && (
+                <div className="bg-gray-100 rounded-xl p-4 mt-6 text-xs font-mono whitespace-pre-wrap">
+                    <b>Resposta da IA (JSON):</b>
+                    <pre>{JSON.stringify(respostaJson, null, 2)}</pre>
+                </div>
+            )}
             <div className="mt-8 text-xs text-gray-400">
-                Powered by Gemini API | Next.js | by ChatGPT
+                Powered by Gemini API + Supabase
             </div>
-        </main>
+        </div>
     );
 }
