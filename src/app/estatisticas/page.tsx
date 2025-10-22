@@ -13,17 +13,15 @@ import {
 } from "recharts";
 
 /* ===================== CONFIG ===================== */
-/** ajuste aqui se seu schema tiver outro nome/campos */
 const ANSWERS_TABLE = "resolucoes";
-const ANSWERS_CORRECT_FIELD = "correta"; // boolean
+const ANSWERS_CORRECT_FIELD = "correta";
 const ANSWERS_MATERIA_FIELD = "materia_id";
 const ANSWERS_ASSUNTO_FIELD = "assunto_id";
 const ANSWERS_CREATED_FIELD = "created_at";
 
-/** limiares para “bem” e “melhorar” */
-const GOOD_THRESHOLD = 80; // >= 80% acerto
-const BAD_THRESHOLD = 50; // < 50% acerto
-const MIN_QUESTOES = 10; // mínimo p/ considerar no indicador
+const GOOD_THRESHOLD = 80;
+const BAD_THRESHOLD = 50;
+const MIN_QUESTOES = 10;
 
 /* ===================== TYPES & HELPERS ===================== */
 type Daily = { dia: string; tempo_min: number };
@@ -59,7 +57,6 @@ function fmtHMS(totalSeconds: number) {
     return parts.join(" ");
 }
 
-/* ===================== PAGE ===================== */
 export default function EstatisticasPage() {
     const [days, setDays] = useState<7 | 30 | 90>(7);
     const [loading, setLoading] = useState(true);
@@ -85,11 +82,9 @@ export default function EstatisticasPage() {
     const [revisoesTotal, setRevisoesTotal] = useState(0);
     const [revisoesPendentes, setRevisoesPendentes] = useState(0);
 
-    // — Questões
+    // — Questões (PERÍODO)
     const [questoesPeriodo, setQuestoesPeriodo] = useState(0);
-    const [questoesTotal, setQuestoesTotal] = useState(0);
     const [acertoPeriodo, setAcertoPeriodo] = useState(0);
-    const [acertoTotal, setAcertoTotal] = useState(0);
     const [byMateriaAcc, setByMateriaAcc] = useState<
         Array<{ nome: string; acerto: number; total: number }>
     >([]);
@@ -106,6 +101,16 @@ export default function EstatisticasPage() {
         Array<{ nome: string; acerto: number; total: number }>
     >([]);
     const [fracosAssuntos, setFracosAssuntos] = useState<
+        Array<{ nome: string; acerto: number; total: number }>
+    >([]);
+
+    // — Questões (TOTAL / histórico — ESTATISTICAS)
+    const [questoesTotal, setQuestoesTotal] = useState(0);
+    const [acertoTotal, setAcertoTotal] = useState(0);
+    const [byMateriaAccTotal, setByMateriaAccTotal] = useState<
+        Array<{ nome: string; acerto: number; total: number }>
+    >([]);
+    const [byAssuntoAccTotal, setByAssuntoAccTotal] = useState<
         Array<{ nome: string; acerto: number; total: number }>
     >([]);
 
@@ -265,8 +270,8 @@ export default function EstatisticasPage() {
                 setRevisoesTotal(revTot.count ?? 0);
                 setRevisoesPendentes(revPend.count ?? 0);
 
-                /* ================= Questões / Acerto ================= */
-                // — período (resolucoes)
+                /* ================= Questões ================= */
+                // — PERÍODO (resolucoes)
                 const { data: ansPer } = await supabase
                     .from(ANSWERS_TABLE)
                     .select(
@@ -276,7 +281,6 @@ export default function EstatisticasPage() {
                     .gte(ANSWERS_CREATED_FIELD, fromISO);
 
                 const per = (ansPer ?? []) as any[];
-
                 const perTotal = per.length;
                 const perCorretas = per.reduce(
                     (acc, r) => acc + (r[ANSWERS_CORRECT_FIELD] ? 1 : 0),
@@ -285,10 +289,10 @@ export default function EstatisticasPage() {
                 setQuestoesPeriodo(perTotal);
                 setAcertoPeriodo(perTotal ? Math.round((perCorretas / perTotal) * 100) : 0);
 
-                // — TOTAL (lido da TABELA ESTATISTICAS). Se não existir, faz fallback em resolucoes.
+                // — TOTAL / HISTÓRICO (estatisticas)
                 const { data: est } = await supabase
                     .from("estatisticas")
-                    .select("questoes_respondidas,taxa_acerto")
+                    .select("questoes_respondidas,taxa_acerto,acc_por_materia,acc_por_assunto")
                     .eq("user_id", uid)
                     .maybeSingle();
 
@@ -299,23 +303,38 @@ export default function EstatisticasPage() {
                             ? Math.round(est.taxa_acerto)
                             : Number(est.taxa_acerto ?? 0)
                     );
+
+                    // transforma JSONB em lista com nomes
+                    const matObj = (est.acc_por_materia ?? {}) as Record<
+                        string,
+                        { total: number; corretas: number }
+                    >;
+                    const assObj = (est.acc_por_assunto ?? {}) as Record<
+                        string,
+                        { total: number; corretas: number }
+                    >;
+
+                    const matList = Object.entries(matObj).map(([id, v]) => ({
+                        nome: mMap[id] || id.slice(0, 8) + "…",
+                        acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
+                        total: v.total,
+                    }));
+                    const assList = Object.entries(assObj).map(([id, v]) => ({
+                        nome: aMap[id] || id.slice(0, 8) + "…",
+                        acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
+                        total: v.total,
+                    }));
+
+                    setByMateriaAccTotal(matList.sort((a, b) => b.total - a.total).slice(0, 10));
+                    setByAssuntoAccTotal(assList.sort((a, b) => b.total - a.total).slice(0, 10));
                 } else {
-                    // fallback: total no histórico de resolucoes (se você gravar respostas lá)
-                    const { data: ansTot } = await supabase
-                        .from(ANSWERS_TABLE)
-                        .select(`id, ${ANSWERS_CORRECT_FIELD}`)
-                        .eq("user_id", uid);
-                    const tot = (ansTot ?? []) as any[];
-                    const totTotal = tot.length;
-                    const totCorretas = tot.reduce(
-                        (acc, r) => acc + (r[ANSWERS_CORRECT_FIELD] ? 1 : 0),
-                        0
-                    );
-                    setQuestoesTotal(totTotal);
-                    setAcertoTotal(totTotal ? Math.round((totCorretas / totTotal) * 100) : 0);
+                    setQuestoesTotal(0);
+                    setAcertoTotal(0);
+                    setByMateriaAccTotal([]);
+                    setByAssuntoAccTotal([]);
                 }
 
-                // — por matéria / assunto (PERÍODO – depende de resolucoes)
+                // — por matéria/assunto (PERÍODO) para indicadores
                 const materAgg: Record<string, { total: number; corretas: number }> = {};
                 const assuntoAgg: Record<string, { total: number; corretas: number }> = {};
 
@@ -347,11 +366,9 @@ export default function EstatisticasPage() {
                     total: v.total,
                 }));
 
-                // ordena por total desc e pega top-10 p/ gráfico
                 setByMateriaAcc(materList.sort((a, b) => b.total - a.total).slice(0, 10));
                 setByAssuntoAcc(assuntoList.sort((a, b) => b.total - a.total).slice(0, 10));
 
-                // indicadores (fortes e fracos) — aplicando mínimo de questões
                 setFortesMaterias(
                     materList
                         .filter((x) => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
@@ -485,9 +502,9 @@ export default function EstatisticasPage() {
                         </Section>
                     </div>
 
-                    {/* Acerto por Matéria / Assunto (PERÍODO – HORIZONTAL) */}
+                    {/* PERÍODO — Acerto por Matéria/Assunto (HORIZONTAL) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <Section title="Taxa de acerto por Matéria (período)">
+                        <Section title="Acerto por Matéria (período)">
                             <BarPercentH data={byMateriaAcc} />
                             {!byMateriaAcc.length && (
                                 <p className="text-sm text-muted-foreground mt-2">
@@ -495,7 +512,7 @@ export default function EstatisticasPage() {
                                 </p>
                             )}
                         </Section>
-                        <Section title="Taxa de acerto por Assunto (período)">
+                        <Section title="Acerto por Assunto (período)">
                             <BarPercentH data={byAssuntoAcc} />
                             {!byAssuntoAcc.length && (
                                 <p className="text-sm text-muted-foreground mt-2">
@@ -505,7 +522,27 @@ export default function EstatisticasPage() {
                         </Section>
                     </div>
 
-                    {/* Indicadores: Fortes x Prioridades */}
+                    {/* TOTAL / HISTÓRICO — a partir da TABELA ESTATISTICAS */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <Section title="Acerto por Matéria (TOTAL / histórico)">
+                            <BarPercentH data={byMateriaAccTotal} />
+                            {!byMateriaAccTotal.length && (
+                                <p className="text-sm text-muted-foreground mt-2">
+                                    Ainda não há histórico agregado por matéria.
+                                </p>
+                            )}
+                        </Section>
+                        <Section title="Acerto por Assunto (TOTAL / histórico)">
+                            <BarPercentH data={byAssuntoAccTotal} />
+                            {!byAssuntoAccTotal.length && (
+                                <p className="text-sm text-muted-foreground mt-2">
+                                    Ainda não há histórico agregado por assunto.
+                                </p>
+                            )}
+                        </Section>
+                    </div>
+
+                    {/* Indicadores: Fortes x Prioridades (PERÍODO) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <Section title="Fortes (≥ 80% de acerto, min. 10 questões)">
                             <ListBadges items={fortesMaterias} empty="Ainda sem dados suficientes." />
