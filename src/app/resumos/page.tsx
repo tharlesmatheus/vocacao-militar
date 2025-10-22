@@ -1,126 +1,264 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import Pomodoro from "@/components/Pomodoro";
 
-type Resumo = {
-    id: string;
-    titulo: string;
-    assunto_id: string | null;
-};
+type Opt = { value: string; label: string };
+type EditalRow = { id: string; nome: string };
+type MateriaRow = { id: string; nome: string };
+type AssuntoRow = { id: string; nome: string };
 
-type Rev = {
-    id: string;
-    etapa: number;
-    scheduled_for: string; // date (YYYY-MM-DD)
-    resumo_id: string;
-    resumo: Resumo | null; // <- objeto único para usar direto no render
-};
+function renderWithMarks(text: string) {
+    // Escapa HTML básico e converte ==grifo== para <mark>
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/==(.+?)==/g, "<mark>$1</mark>")
+        .replace(/\n/g, "<br/>");
+}
 
-// Como o Supabase pode retornar a relação como array, tipamos a linha "crua"
-type RevRow = {
-    id: string;
-    etapa: number;
-    scheduled_for: string;
-    resumo_id: string;
-    resumos: Resumo[] | null;
-};
+export default function ResumosPage() {
+    // opções
+    const [editais, setEditais] = useState<Opt[]>([]);
+    const [materias, setMaterias] = useState<Opt[]>([]);
+    const [assuntos, setAssuntos] = useState<Opt[]>([]);
 
-export default function RevisaoPage() {
-    const [today, setToday] = useState<string>(new Date().toISOString().slice(0, 10));
-    const [loading, setLoading] = useState(true);
-    const [rows, setRows] = useState<Rev[]>([]);
+    // seleção
+    const [edital, setEdital] = useState("");
+    const [materia, setMateria] = useState("");
+    const [assunto, setAssunto] = useState("");
 
+    // form
+    const [titulo, setTitulo] = useState("");
+    const [conteudo, setConteudo] = useState("");
+    const [preview, setPreview] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [msg, setMsg] = useState<{ t: "ok" | "err"; m: string } | null>(null);
+
+    const textRef = useRef<HTMLTextAreaElement>(null);
+
+    // Carrega editais
     useEffect(() => {
         (async () => {
-            setLoading(true);
+            const { data, error } = await supabase
+                .from("editais")
+                .select("id,nome")
+                .order("created_at", { ascending: false });
+            if (!error && data) {
+                setEditais((data as EditalRow[]).map((d) => ({ value: d.id, label: d.nome })));
+            }
+        })();
+    }, []);
+
+    // Carrega matérias ao escolher edital
+    useEffect(() => {
+        (async () => {
+            setMaterias([]);
+            setMateria("");
+            setAssuntos([]);
+            setAssunto("");
+            if (!edital) return;
+            const { data, error } = await supabase
+                .from("materias")
+                .select("id,nome")
+                .eq("edital_id", edital)
+                .order("nome");
+            if (!error && data) {
+                setMaterias((data as MateriaRow[]).map((d) => ({ value: d.id, label: d.nome })));
+            }
+        })();
+    }, [edital]);
+
+    // Carrega assuntos ao escolher matéria
+    useEffect(() => {
+        (async () => {
+            setAssuntos([]);
+            setAssunto("");
+            if (!materia) return;
+            const { data, error } = await supabase
+                .from("assuntos")
+                .select("id,nome")
+                .eq("materia_id", materia)
+                .order("nome");
+            if (!error && data) {
+                setAssuntos((data as AssuntoRow[]).map((d) => ({ value: d.id, label: d.nome })));
+            }
+        })();
+    }, [materia]);
+
+    // Botão "Grifar seleção"
+    const addMark = () => {
+        const ta = textRef.current;
+        if (!ta) return;
+        const { selectionStart: s, selectionEnd: e, value: v } = ta;
+        if (s === e) return;
+        const marked = v.slice(0, s) + "==" + v.slice(s, e) + "==" + v.slice(e);
+        setConteudo(marked);
+        setTimeout(() => {
+            ta.focus();
+            ta.selectionStart = s + 2;
+            ta.selectionEnd = e + 2;
+        }, 0);
+    };
+
+    const canSave = edital && materia && assunto && titulo.trim() && conteudo.trim();
+
+    const salvar = async () => {
+        try {
+            setSaving(true);
+            setMsg(null);
             const uid = (await supabase.auth.getUser()).data.user?.id;
             if (!uid) {
-                setRows([]);
-                setLoading(false);
+                setMsg({ t: "err", m: "Você precisa estar autenticado." });
+                setSaving(false);
                 return;
             }
+            const { error } = await supabase.from("resumos").insert({
+                edital_id: edital,
+                materia_id: materia,
+                assunto_id: assunto,
+                titulo: titulo.trim(),
+                conteudo: conteudo,
+                user_id: uid,
+            });
+            if (error) throw error;
 
-            const { data, error } = await supabase
-                .from("revisoes")
-                .select("id,etapa,scheduled_for,resumo_id,resumos(id,titulo,assunto_id)")
-                .eq("user_id", uid)
-                .is("done_at", null)
-                .lte("scheduled_for", today)
-                .order("scheduled_for", { ascending: true });
-
-            if (!error && data) {
-                // Normaliza: transforma resumos[] -> resumo (primeiro item)
-                const normalized: Rev[] = (data as RevRow[]).map((r) => ({
-                    id: r.id,
-                    etapa: r.etapa,
-                    scheduled_for: r.scheduled_for,
-                    resumo_id: r.resumo_id,
-                    resumo: r.resumos && r.resumos[0] ? r.resumos[0] : null,
-                }));
-                setRows(normalized);
-            }
-            setLoading(false);
-        })();
-    }, [today]);
-
-    const concluir = async (id: string) => {
-        await supabase.from("revisoes").update({ done_at: new Date().toISOString() }).eq("id", id);
-        // Trigger no banco já incrementa visto_count; aqui só removemos da lista
-        setRows((rs) => rs.filter((r) => r.id !== id));
+            // Limpa formulário
+            setTitulo("");
+            setConteudo("");
+            setMsg({ t: "ok", m: "Resumo salvo! Revisões agendadas automaticamente." });
+        } catch (e: any) {
+            setMsg({ t: "err", m: e?.message || "Falha ao salvar o resumo." });
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
-        <div className="mx-auto max-w-5xl p-4">
-            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-                {/* Coluna principal */}
-                <div className="md:col-span-2">
-                    <h1 className="mb-2 text-2xl font-semibold">Revisões</h1>
-                    <label className="text-sm text-gray-600">
-                        Mostrar pendentes até:
-                        <input
-                            type="date"
-                            value={today}
-                            onChange={(e) => setToday(e.target.value)}
-                            className="ml-2 rounded border p-1"
-                        />
-                    </label>
+        <div className="mx-auto max-w-3xl p-4">
+            <h1 className="mb-4 text-2xl font-semibold">Resumos</h1>
 
-                    <div className="mt-3 space-y-2">
-                        {loading && <div className="rounded border p-3">Carregando…</div>}
-                        {!loading && rows.length === 0 && (
-                            <div className="rounded border p-3 text-gray-500">Sem revisões pendentes 🎉</div>
-                        )}
-
-                        {rows.map((r) => (
-                            <div
-                                key={r.id}
-                                className="flex flex-col justify-between gap-2 rounded border p-3 sm:flex-row sm:items-center"
-                            >
-                                <div>
-                                    <div className="font-medium">{r.resumo?.titulo || "Resumo"}</div>
-                                    <div className="text-sm text-gray-500">
-                                        Etapa {r.etapa} • Agendado para{" "}
-                                        {new Date(r.scheduled_for).toLocaleDateString("pt-BR")}
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => concluir(r.id)}
-                                    className="self-start rounded bg-green-600 px-3 py-2 text-white sm:self-auto"
-                                >
-                                    Concluir
-                                </button>
-                            </div>
+            {/* Seleções */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <label className="block">
+                    <span className="mb-1 block text-sm text-gray-600">Edital</span>
+                    <select
+                        value={edital}
+                        onChange={(e) => setEdital(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 bg-white p-2 outline-none focus:ring"
+                    >
+                        <option value="">Selecione</option>
+                        {editais.map((o) => (
+                            <option key={o.value} value={o.value}>
+                                {o.label}
+                            </option>
                         ))}
+                    </select>
+                </label>
+
+                <label className="block">
+                    <span className="mb-1 block text-sm text-gray-600">Matéria</span>
+                    <select
+                        value={materia}
+                        onChange={(e) => setMateria(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 bg-white p-2 outline-none focus:ring"
+                        disabled={!edital}
+                    >
+                        <option value="">{edital ? "Selecione" : "Selecione um edital"}</option>
+                        {materias.map((o) => (
+                            <option key={o.value} value={o.value}>
+                                {o.label}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+
+                <label className="block">
+                    <span className="mb-1 block text-sm text-gray-600">Assunto</span>
+                    <select
+                        value={assunto}
+                        onChange={(e) => setAssunto(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 bg-white p-2 outline-none focus:ring"
+                        disabled={!materia}
+                    >
+                        <option value="">{materia ? "Selecione" : "Selecione a matéria"}</option>
+                        {assuntos.map((o) => (
+                            <option key={o.value} value={o.value}>
+                                {o.label}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            </div>
+
+            {/* Título */}
+            <div className="mt-3">
+                <input
+                    className="w-full rounded border p-2"
+                    placeholder="Título do resumo"
+                    value={titulo}
+                    onChange={(e) => setTitulo(e.target.value)}
+                />
+            </div>
+
+            {/* Editor */}
+            <div className="mt-3 rounded border">
+                <div className="flex items-center justify-between border-b p-2">
+                    <div className="text-sm text-gray-600">
+                        Dica: use <code>==texto==</code> para <mark>grifar</mark>
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            className="rounded bg-gray-100 px-2 py-1 text-sm"
+                            onClick={addMark}
+                            disabled={!conteudo}
+                        >
+                            Grifar seleção
+                        </button>
+                        <button
+                            className="rounded bg-gray-100 px-2 py-1 text-sm"
+                            onClick={() => setPreview((p) => !p)}
+                        >
+                            {preview ? "Editar" : "Pré-visualizar"}
+                        </button>
                     </div>
                 </div>
 
-                {/* Coluna lateral */}
-                <div className="md:col-span-1">
-                    <h2 className="mb-2 text-lg font-semibold">Pomodoro</h2>
-                    <Pomodoro study={30} rest={5} />
-                </div>
+                {!preview ? (
+                    <textarea
+                        ref={textRef}
+                        className="h-64 w-full p-3 outline-none"
+                        value={conteudo}
+                        onChange={(e) => setConteudo(e.target.value)}
+                        placeholder="Escreva seu resumo aqui…"
+                    />
+                ) : (
+                    <div
+                        className="prose max-w-none p-3"
+                        dangerouslySetInnerHTML={{ __html: renderWithMarks(conteudo) }}
+                    />
+                )}
+            </div>
+
+            {/* Ações */}
+            <div className="mt-4 flex items-center justify-between">
+                {msg && (
+                    <div
+                        className={`text-sm ${msg.t === "ok" ? "text-green-700" : "text-red-600"
+                            }`}
+                    >
+                        {msg.m}
+                    </div>
+                )}
+
+                <button
+                    disabled={!!saving || !canSave}
+                    onClick={salvar}
+                    className="rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-50"
+                >
+                    {saving ? "Salvando..." : "Salvar resumo"}
+                </button>
             </div>
         </div>
     );
