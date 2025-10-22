@@ -38,6 +38,7 @@ function startOfLocalDay(ts = Date.now()) {
     return d;
 }
 function iso(dt: Date) {
+    // Mantemos ISO (UTC) para comparar com timestamptz no Postgres
     return dt.toISOString();
 }
 function toLocalDateLabel(dt: string | Date) {
@@ -62,7 +63,6 @@ export default function EstatisticasPage() {
     const [erro, setErro] = useState<string | null>(null);
 
     // mapas de nomes
-    const [editalMap, setEditalMap] = useState<Record<string, string>>({});
     const [materiaMap, setMateriaMap] = useState<Record<string, string>>({});
     const [assuntoMap, setAssuntoMap] = useState<Record<string, string>>({});
 
@@ -103,20 +103,16 @@ export default function EstatisticasPage() {
                 if (!user) throw new Error("Não foi possível obter usuário logado.");
                 const uid = user.id;
 
-                // período
+                // período (começo do dia local → ISO)
                 const today0 = startOfLocalDay();
                 const from = new Date(today0.getTime() - (days - 1) * ONE_DAY);
                 const fromISO = iso(from);
 
                 // nomes
-                const [eds, mats, asss] = await Promise.all([
-                    supabase.from("editais").select("id,nome").eq("user_id", uid),
+                const [mats, asss] = await Promise.all([
                     supabase.from("materias").select("id,nome").eq("user_id", uid),
                     supabase.from("assuntos").select("id,nome").eq("user_id", uid),
                 ]);
-                const eMap: Record<string, string> = {};
-                (eds.data ?? []).forEach((e: any) => (eMap[e.id] = e.nome));
-                setEditalMap(eMap);
                 const mMap: Record<string, string> = {};
                 (mats.data ?? []).forEach((m: any) => (mMap[m.id] = m.nome));
                 setMateriaMap(mMap);
@@ -215,7 +211,7 @@ export default function EstatisticasPage() {
 
                 /* ================= Questões / Acerto ================= */
                 // período
-                const { data: ansPer, error: errPer } = await supabase
+                const { data: ansPer } = await supabase
                     .from(ANSWERS_TABLE)
                     .select(`id, ${ANSWERS_CORRECT_FIELD}, ${ANSWERS_MATERIA_FIELD}, ${ANSWERS_ASSUNTO_FIELD}, ${ANSWERS_CREATED_FIELD}`)
                     .eq("user_id", uid)
@@ -272,20 +268,35 @@ export default function EstatisticasPage() {
                     total: v.total,
                 }));
 
-                // ordena por total desc e pega top-10 p/ gráfico
+                // ordena por total desc e pega top-10 p/ gráfico horizontal
                 setByMateriaAcc(materList.sort((a, b) => b.total - a.total).slice(0, 10));
                 setByAssuntoAcc(assuntoList.sort((a, b) => b.total - a.total).slice(0, 10));
 
                 // indicadores (fortes e fracos) — aplicando mínimo de questões
-                setFortesMaterias(materList.filter(x => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
-                    .sort((a, b) => b.acerto - a.acerto).slice(0, 5));
-                setFracasMaterias(materList.filter(x => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
-                    .sort((a, b) => a.acerto - b.acerto).slice(0, 5));
-                setFortesAssuntos(assuntoList.filter(x => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
-                    .sort((a, b) => b.acerto - a.acerto).slice(0, 5));
-                setFracosAssuntos(assuntoList.filter(x => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
-                    .sort((a, b) => a.acerto - b.acerto).slice(0, 5));
-
+                setFortesMaterias(
+                    materList
+                        .filter(x => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
+                        .sort((a, b) => b.acerto - a.acerto)
+                        .slice(0, 5)
+                );
+                setFracasMaterias(
+                    materList
+                        .filter(x => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
+                        .sort((a, b) => a.acerto - b.acerto)
+                        .slice(0, 5)
+                );
+                setFortesAssuntos(
+                    assuntoList
+                        .filter(x => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
+                        .sort((a, b) => b.acerto - a.acerto)
+                        .slice(0, 5)
+                );
+                setFracosAssuntos(
+                    assuntoList
+                        .filter(x => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
+                        .sort((a, b) => a.acerto - b.acerto)
+                        .slice(0, 5)
+                );
             } catch (e: any) {
                 setErro(e?.message || "Falha ao carregar estatísticas.");
             } finally {
@@ -315,7 +326,9 @@ export default function EstatisticasPage() {
                         <button
                             key={n}
                             onClick={() => setDays(n as 7 | 30 | 90)}
-                            className={`rounded-xl px-3 py-1.5 border ${days === n ? "bg-primary text-primary-foreground border-primary" : "bg-card text-foreground border-border"
+                            className={`rounded-xl px-3 py-1.5 border ${days === n
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-card text-foreground border-border"
                                 }`}
                         >
                             {n} dias
@@ -372,7 +385,7 @@ export default function EstatisticasPage() {
                         </div>
                     </Section>
 
-                    {/* Rankings de tempo */}
+                    {/* Rankings de tempo — HORIZONTAL */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <Section title="Top 5 matérias por tempo (min)">
                             <BarSimple data={topMaterias} dataKey="minutos" nameKey="nome" />
@@ -382,7 +395,7 @@ export default function EstatisticasPage() {
                         </Section>
                     </div>
 
-                    {/* Acerto por Matéria / Assunto (período) */}
+                    {/* Acerto por Matéria / Assunto (período) — HORIZONTAL */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <Section title="Taxa de acerto por Matéria (período)">
                             <BarPercent data={byMateriaAcc} />
@@ -445,14 +458,24 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     );
 }
 
+/** Barras horizontais (layout="vertical") */
 function BarSimple({ data, dataKey, nameKey }: { data: any[]; dataKey: string; nameKey: string }) {
+    if (!data?.length) {
+        return <div className="text-sm text-muted-foreground">Sem dados no período.</div>;
+    }
     return (
-        <div className="w-full h-48 sm:h-64">
+        <div className="w-full h-56 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data}>
+                <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey={nameKey} stroke="var(--muted-foreground)" fontSize={12} interval={0} angle={-20} height={60} />
-                    <YAxis stroke="var(--muted-foreground)" fontSize={13} allowDecimals={false} />
+                    <XAxis type="number" stroke="var(--muted-foreground)" />
+                    <YAxis
+                        type="category"
+                        dataKey={nameKey}
+                        width={140}
+                        stroke="var(--muted-foreground)"
+                        tick={{ fontSize: 12 }}
+                    />
                     <Tooltip
                         contentStyle={{
                             background: "var(--muted)",
@@ -463,7 +486,7 @@ function BarSimple({ data, dataKey, nameKey }: { data: any[]; dataKey: string; n
                         }}
                         cursor={{ fill: "var(--primary)", opacity: 0.1 }}
                     />
-                    <Bar dataKey={dataKey} fill="var(--primary)" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey={dataKey} fill="var(--primary)" radius={[0, 8, 8, 0]} />
                 </BarChart>
             </ResponsiveContainer>
         </div>
@@ -471,14 +494,22 @@ function BarSimple({ data, dataKey, nameKey }: { data: any[]; dataKey: string; n
 }
 
 function BarPercent({ data }: { data: Array<{ nome: string; acerto: number; total: number }> }) {
-    // usamos só top-10 já no hook
+    if (!data?.length) {
+        return <div className="text-sm text-muted-foreground">Sem dados no período.</div>;
+    }
     return (
-        <div className="w-full h-48 sm:h-64">
+        <div className="w-full h-56 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data}>
+                <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="nome" stroke="var(--muted-foreground)" fontSize={12} interval={0} angle={-20} height={60} />
-                    <YAxis stroke="var(--muted-foreground)" fontSize={13} domain={[0, 100]} />
+                    <XAxis type="number" domain={[0, 100]} stroke="var(--muted-foreground)" />
+                    <YAxis
+                        type="category"
+                        dataKey="nome"
+                        width={160}
+                        stroke="var(--muted-foreground)"
+                        tick={{ fontSize: 12 }}
+                    />
                     <Tooltip
                         formatter={(v: any, _n, p: any) => [`${v}%`, `Acerto (${p?.payload?.total ?? 0} q.)`]}
                         contentStyle={{
@@ -490,7 +521,7 @@ function BarPercent({ data }: { data: Array<{ nome: string; acerto: number; tota
                         }}
                         cursor={{ fill: "var(--primary)", opacity: 0.08 }}
                     />
-                    <Bar dataKey="acerto" fill="var(--primary)" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="acerto" fill="var(--primary)" radius={[0, 8, 8, 0]} />
                 </BarChart>
             </ResponsiveContainer>
         </div>
