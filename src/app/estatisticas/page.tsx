@@ -14,7 +14,7 @@ import {
 
 /* ===================== CONFIG ===================== */
 /** ajuste aqui se seu schema tiver outro nome/campos */
-const ANSWERS_TABLE = "resolucoes";
+const ANSWERS_TABLE = "estatisticas";
 const ANSWERS_CORRECT_FIELD = "correta";      // boolean
 const ANSWERS_MATERIA_FIELD = "materia_id";
 const ANSWERS_ASSUNTO_FIELD = "assunto_id";
