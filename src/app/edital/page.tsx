@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import Modal from "@/components/Modal";
 import BadgeSeen from "@/components/BadgeSeen";
 
 /** Tipos */
@@ -15,7 +14,50 @@ type Assunto = {
     importance_level: number;
 };
 
-/** Badge de importância (clicável) – usa apenas tokens */
+/** Modal baseado em tokens (sem dark:) */
+function TokenModal({
+    open,
+    title,
+    onClose,
+    children,
+}: {
+    open: boolean;
+    title?: string;
+    onClose: () => void;
+    children: React.ReactNode;
+}) {
+    if (!open) return null;
+    return (
+        <div
+            className="fixed inset-0 z-[100] flex items-center justify-center px-4"
+            aria-modal="true"
+            role="dialog"
+        >
+            {/* overlay */}
+            <div
+                className="absolute inset-0 bg-black/60"
+                onClick={onClose}
+                aria-hidden="true"
+            />
+            {/* painel */}
+            <div className="relative z-[101] w-full max-w-2xl rounded-2xl bg-card text-foreground border border-border shadow-xl">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border rounded-t-2xl">
+                    <h2 className="text-lg font-semibold">{title}</h2>
+                    <button
+                        className="rounded p-2 hover:bg-muted text-muted-foreground"
+                        onClick={onClose}
+                        aria-label="Fechar"
+                    >
+                        ✕
+                    </button>
+                </div>
+                <div className="p-5">{children}</div>
+            </div>
+        </div>
+    );
+}
+
+/** Badge de importância (clicável) – tokens */
 function ImportanceBadge({
     level,
     onClick,
@@ -35,7 +77,8 @@ function ImportanceBadge({
             type="button"
             title={cfg.txt}
             onClick={onClick}
-            className={`inline-flex items-center gap-1 text-sm ${onClick ? "hover:opacity-80" : ""}`}
+            className={`inline-flex items-center gap-1 text-sm ${onClick ? "hover:opacity-80" : ""
+                }`}
         >
             <span>{cfg.icon}</span>
             <span className={cfg.className}>{cfg.txt}</span>
@@ -134,7 +177,7 @@ export default function EditalPage() {
         setAssuntos(byMateria);
     };
 
-    /** helpers com tokens (sem dark:) */
+    /** helpers (tokens) */
     const inputBase =
         "rounded border border-border p-2 bg-input text-foreground placeholder:text-muted-foreground " +
         "focus:outline-none focus:ring-2 focus:ring-primary/20";
@@ -205,6 +248,7 @@ export default function EditalPage() {
                                         key={a.id}
                                         className="flex items-center justify-between rounded p-2 bg-card border border-border text-foreground"
                                     >
+                                        {/* Clicar no nome abre modal de edição */}
                                         <button
                                             type="button"
                                             className="min-w-0 flex-1 truncate text-left hover:underline"
@@ -254,7 +298,11 @@ export default function EditalPage() {
             )}
 
             {/* MODAL: Novo Edital */}
-            <Modal open={openNovo} onClose={() => setOpenNovo(false)} title="Novo Edital">
+            <TokenModal
+                open={openNovo}
+                onClose={() => setOpenNovo(false)}
+                title="Novo Edital"
+            >
                 <NovoEdital
                     onCreated={async (id) => {
                         setOpenNovo(false);
@@ -268,10 +316,10 @@ export default function EditalPage() {
                         setSelEdital(id);
                     }}
                 />
-            </Modal>
+            </TokenModal>
 
             {/* MODAL: Editar matérias e assuntos */}
-            <Modal
+            <TokenModal
                 open={openEditar}
                 onClose={() => setOpenEditar(false)}
                 title="Editar matérias e assuntos"
@@ -283,10 +331,10 @@ export default function EditalPage() {
                         if (selEdital) await refreshTudo(selEdital);
                     }}
                 />
-            </Modal>
+            </TokenModal>
 
             {/* MODAL: Editar/Excluir um assunto */}
-            <Modal
+            <TokenModal
                 open={editingAssunto.open}
                 onClose={() =>
                     setEditingAssunto({ open: false, materiaId: null, assunto: null })
@@ -323,7 +371,7 @@ export default function EditalPage() {
                         }}
                     />
                 )}
-            </Modal>
+            </TokenModal>
         </div>
     );
 }
