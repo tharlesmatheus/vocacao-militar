@@ -4,6 +4,7 @@ import { QuestionCard } from "./QuestionCard";
 import { Pagination } from "./Pagination";
 import { supabase } from "../lib/supabaseClient";
 
+// Tipos de filtro
 type Filters = {
     instituicao?: string;
     cargo?: string;
@@ -29,63 +30,60 @@ type Questao = {
     comentarios?: any[];
     erros?: any[];
     created_at?: string;
-    materia_id?: string | null;
-    assunto_id?: string | null;
 };
 
 interface QuestionsListProps {
     filters?: Filters;
 }
 
-function QuestionsList({ filters = {} }: QuestionsListProps) {
+export function QuestionsList({ filters = {} }: QuestionsListProps) {
     const [questoes, setQuestoes] = useState<Questao[]>([]);
     const [page, setPage] = useState(1);
     const [perPage, setPerPage] = useState(3);
     const [loading, setLoading] = useState(true);
 
+    // Carrega questões do banco ao montar e quando filtros mudam
     useEffect(() => {
         setLoading(true);
 
-        let query = supabase
-            .from("questoes")
-            .select(`
-        id, instituicao, cargo, disciplina, assunto, modalidade, banca,
-        enunciado, alternativas, correta, explicacao, comentarios, erros, created_at,
-        materia_id, assunto_id
-      `);
+        let query = supabase.from("questoes").select("*");
 
+        // Aplica os filtros (exceto excluirRespondidas)
         Object.entries(filters).forEach(([key, value]) => {
             if (value && key !== "excluirRespondidas") {
-                query = query.eq(key, value as string);
+                query = query.eq(key, value);
             }
         });
 
+        // Filtro especial: excluir já respondidas
         if (filters.excluirRespondidas) {
-            query = query.eq("respondida", false);
+            query = query.eq("respondida", false); // Ajuste esse campo se necessário!
         }
 
-        query.order("created_at", { ascending: false }).then(({ data, error }) => {
-            if (!error && data) setQuestoes(data as Questao[]);
-            else setQuestoes([]);
-            setLoading(false);
-        });
-
-        setPage(1);
+        query.order("created_at", { ascending: false })
+            .then(({ data, error }) => {
+                if (!error && data) setQuestoes(data as Questao[]);
+                else setQuestoes([]);
+                setLoading(false);
+            });
+        setPage(1); // Volta para página 1 ao filtrar
     }, [filters]);
 
+    // Handler para atualizar erros instantaneamente
     const handleNotificarErro = (questaoId: string, erroText: string) => {
-        setQuestoes((questoes) =>
-            questoes.map((q) =>
+        setQuestoes(questoes =>
+            questoes.map(q =>
                 q.id === questaoId
                     ? {
                         ...q,
-                        erros: [...(q.erros ?? []), { mensagem: erroText, data: new Date().toISOString() }],
+                        erros: [...(q.erros ?? []), { mensagem: erroText, data: new Date().toISOString() }]
                     }
                     : q
             )
         );
     };
 
+    // Paginação real
     const start = (page - 1) * perPage;
     const end = start + perPage;
     const paginated = questoes.slice(start, end);
@@ -104,10 +102,7 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                         <select
                             className="bg-muted border border-border rounded px-3 py-1 text-xs text-foreground"
                             value={perPage}
-                            onChange={(e) => {
-                                setPerPage(Number(e.target.value));
-                                setPage(1);
-                            }}
+                            onChange={e => { setPerPage(Number(e.target.value)); setPage(1); }}
                         >
                             <option value={3}>3 por página</option>
                             <option value={5}>5 por página</option>
@@ -115,7 +110,6 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                         </select>
                     </div>
                 </div>
-
                 <div className="flex flex-col gap-7">
                     {loading ? (
                         <div className="text-muted-foreground py-8 text-center">Carregando questões...</div>
@@ -124,19 +118,15 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                             Nenhuma questão encontrada.
                         </div>
                     ) : (
-                        paginated.map((q) => (
+                        paginated.map((q) =>
                             <QuestionCard
                                 key={q.id}
                                 id={q.id}
-                                materiaId={q.materia_id ?? null}
-                                assuntoId={q.assunto_id ?? null}
-                                materiaNome={q.disciplina || null}
-                                assuntoNome={q.assunto || null}
                                 tags={[
                                     q.instituicao,
                                     q.cargo,
-                                    `Matéria: ${q.disciplina}`,
-                                    `Assunto: ${q.assunto}`,
+                                    q.disciplina,
+                                    q.assunto,
                                     q.modalidade,
                                     q.banca,
                                 ]}
@@ -151,16 +141,16 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                                 erros={q.erros}
                                 onNotificarErro={(erroText) => handleNotificarErro(q.id, erroText)}
                             />
-                        ))
+                        )
                     )}
                 </div>
-
-                <Pagination total={questoes.length} perPage={perPage} page={page} setPage={setPage} />
+                <Pagination
+                    total={questoes.length}
+                    perPage={perPage}
+                    page={page}
+                    setPage={setPage}
+                />
             </div>
         </div>
     );
 }
-
-// **Exporte dos dois jeitos** para evitar esse erro no futuro:
-export { QuestionsList };
-export default QuestionsList;
