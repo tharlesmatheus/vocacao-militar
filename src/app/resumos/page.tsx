@@ -1,103 +1,126 @@
-'use client'
-import { useEffect, useRef, useState } from 'react';
-import Select from '@/components/Select';
-import { renderWithMarks } from '@/components/Rich';
-import { supabase } from '@/lib/supabaseClient';
+"use client";
 
-type Opt = { value: string; label: string };
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import Pomodoro from "@/components/Pomodoro";
 
-export default function ResumosPage() {
-    const [editais, setEditais] = useState<Opt[]>([]);
-    const [materias, setMaterias] = useState<Opt[]>([]);
-    const [assuntos, setAssuntos] = useState<Opt[]>([]);
-    const [edital, setEdital] = useState(''); const [materia, setMateria] = useState(''); const [assunto, setAssunto] = useState('');
-    const [titulo, setTitulo] = useState(''); const [conteudo, setConteudo] = useState('');
-    const [preview, setPreview] = useState(false); const [saving, setSaving] = useState(false);
-    const textRef = useRef<HTMLTextAreaElement>(null);
+type Resumo = {
+    id: string;
+    titulo: string;
+    assunto_id: string | null;
+};
+
+type Rev = {
+    id: string;
+    etapa: number;
+    scheduled_for: string; // date (YYYY-MM-DD)
+    resumo_id: string;
+    resumo: Resumo | null; // <- objeto único para usar direto no render
+};
+
+// Como o Supabase pode retornar a relação como array, tipamos a linha "crua"
+type RevRow = {
+    id: string;
+    etapa: number;
+    scheduled_for: string;
+    resumo_id: string;
+    resumos: Resumo[] | null;
+};
+
+export default function RevisaoPage() {
+    const [today, setToday] = useState<string>(new Date().toISOString().slice(0, 10));
+    const [loading, setLoading] = useState(true);
+    const [rows, setRows] = useState<Rev[]>([]);
 
     useEffect(() => {
         (async () => {
-            const { data } = await supabase.from('editais').select('id,nome').order('created_at', { ascending: false });
-            setEditais((data || []).map(d => ({ value: d.id, label: d.nome })));
-        })()
-    }, []);
+            setLoading(true);
+            const uid = (await supabase.auth.getUser()).data.user?.id;
+            if (!uid) {
+                setRows([]);
+                setLoading(false);
+                return;
+            }
 
-    useEffect(() => {
-        (async () => {
-            setMaterias([]); setMateria(''); setAssuntos([]); setAssunto('');
-            if (!edital) return;
-            const { data } = await supabase.from('materias').select('id,nome').eq('edital_id', edital).order('nome');
-            setMaterias((data || []).map(d => ({ value: d.id, label: d.nome })));
-        })()
-    }, [edital]);
+            const { data, error } = await supabase
+                .from("revisoes")
+                .select("id,etapa,scheduled_for,resumo_id,resumos(id,titulo,assunto_id)")
+                .eq("user_id", uid)
+                .is("done_at", null)
+                .lte("scheduled_for", today)
+                .order("scheduled_for", { ascending: true });
 
-    useEffect(() => {
-        (async () => {
-            setAssuntos([]); setAssunto('');
-            if (!materia) return;
-            const { data } = await supabase.from('assuntos').select('id,nome').eq('materia_id', materia).order('nome');
-            setAssuntos((data || []).map(d => ({ value: d.id, label: d.nome })));
-        })()
-    }, [materia]);
+            if (!error && data) {
+                // Normaliza: transforma resumos[] -> resumo (primeiro item)
+                const normalized: Rev[] = (data as RevRow[]).map((r) => ({
+                    id: r.id,
+                    etapa: r.etapa,
+                    scheduled_for: r.scheduled_for,
+                    resumo_id: r.resumo_id,
+                    resumo: r.resumos && r.resumos[0] ? r.resumos[0] : null,
+                }));
+                setRows(normalized);
+            }
+            setLoading(false);
+        })();
+    }, [today]);
 
-    const addMark = () => {
-        const ta = textRef.current; if (!ta) return;
-        const { selectionStart: s, selectionEnd: e, value: v } = ta;
-        if (s === e) return;
-        const marked = v.slice(0, s) + '==' + v.slice(s, e) + '==' + v.slice(e);
-        setConteudo(marked);
-        setTimeout(() => { ta.focus(); ta.selectionStart = s + 2; ta.selectionEnd = e + 2; }, 0);
+    const concluir = async (id: string) => {
+        await supabase.from("revisoes").update({ done_at: new Date().toISOString() }).eq("id", id);
+        // Trigger no banco já incrementa visto_count; aqui só removemos da lista
+        setRows((rs) => rs.filter((r) => r.id !== id));
     };
 
-    const canSave = edital && materia && assunto && titulo && conteudo;
-
     return (
-        <div className="mx-auto max-w-3xl p-4">
-            <h1 className="mb-4 text-2xl font-semibold">Resumos</h1>
+        <div className="mx-auto max-w-5xl p-4">
+            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+                {/* Coluna principal */}
+                <div className="md:col-span-2">
+                    <h1 className="mb-2 text-2xl font-semibold">Revisões</h1>
+                    <label className="text-sm text-gray-600">
+                        Mostrar pendentes até:
+                        <input
+                            type="date"
+                            value={today}
+                            onChange={(e) => setToday(e.target.value)}
+                            className="ml-2 rounded border p-1"
+                        />
+                    </label>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <Select label="Edital" value={edital} onChange={setEdital} options={editais} />
-                <Select label="Matéria" value={materia} onChange={setMateria} options={materias} />
-                <Select label="Assunto" value={assunto} onChange={setAssunto} options={assuntos} />
-            </div>
+                    <div className="mt-3 space-y-2">
+                        {loading && <div className="rounded border p-3">Carregando…</div>}
+                        {!loading && rows.length === 0 && (
+                            <div className="rounded border p-3 text-gray-500">Sem revisões pendentes 🎉</div>
+                        )}
 
-            <div className="mt-3">
-                <input className="w-full rounded border p-2" placeholder="Título do resumo" value={titulo} onChange={e => setTitulo(e.target.value)} />
-            </div>
-
-            <div className="mt-3 rounded border">
-                <div className="flex items-center justify-between border-b p-2">
-                    <div className="text-sm text-gray-600">Use <code>==texto==</code> para grifar</div>
-                    <div className="flex gap-2">
-                        <button className="rounded bg-gray-100 px-2 py-1 text-sm" onClick={addMark}>Grifar seleção</button>
-                        <button className="rounded bg-gray-100 px-2 py-1 text-sm" onClick={() => setPreview(p => !p)}>{preview ? 'Editar' : 'Pré-visualizar'}</button>
+                        {rows.map((r) => (
+                            <div
+                                key={r.id}
+                                className="flex flex-col justify-between gap-2 rounded border p-3 sm:flex-row sm:items-center"
+                            >
+                                <div>
+                                    <div className="font-medium">{r.resumo?.titulo || "Resumo"}</div>
+                                    <div className="text-sm text-gray-500">
+                                        Etapa {r.etapa} • Agendado para{" "}
+                                        {new Date(r.scheduled_for).toLocaleDateString("pt-BR")}
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => concluir(r.id)}
+                                    className="self-start rounded bg-green-600 px-3 py-2 text-white sm:self-auto"
+                                >
+                                    Concluir
+                                </button>
+                            </div>
+                        ))}
                     </div>
                 </div>
 
-                {!preview ? (
-                    <textarea ref={textRef} className="h-60 w-full p-3 outline-none" value={conteudo} onChange={e => setConteudo(e.target.value)} placeholder="Escreva seu resumo..." />
-                ) : (
-                    <div className="prose max-w-none p-3" dangerouslySetInnerHTML={{ __html: renderWithMarks(conteudo) }} />
-                )}
-            </div>
-
-            <div className="mt-4 text-right">
-                <button
-                    disabled={!!saving || !canSave}
-                    onClick={async () => {
-                        setSaving(true);
-                        const uid = (await supabase.auth.getUser()).data.user?.id;
-                        await supabase.from('resumos').insert({
-                            edital_id: edital, materia_id: materia, assunto_id: assunto,
-                            titulo, conteudo, user_id: uid
-                        });
-                        setSaving(false);
-                        setTitulo(''); setConteudo('');
-                    }}
-                    className="rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-50"
-                >
-                    {saving ? 'Salvando...' : 'Salvar resumo'}
-                </button>
+                {/* Coluna lateral */}
+                <div className="md:col-span-1">
+                    <h2 className="mb-2 text-lg font-semibold">Pomodoro</h2>
+                    <Pomodoro study={30} rest={5} />
+                </div>
             </div>
         </div>
     );
