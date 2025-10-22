@@ -1,48 +1,215 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "../lib/supabaseClient"; // ajuste se usar "@/lib/..."
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 type Phase = "study" | "break";
-
 type Edital = { id: string; nome: string };
 type Materia = { id: string; nome: string; edital_id: string };
 type Assunto = { id: string; nome: string; materia_id: string; edital_id: string };
 
 const STUDY_SECONDS = 45 * 60;
 const BREAK_SECONDS = 5 * 60;
+const LS_KEY = "pomodoro_state_v1";
 
-type PersistedState = {
+type Persisted = {
     phase: Phase;
     remaining: number;
     isRunning: boolean;
-    targetEnd?: number;             // epoch ms
-    currentSessionId?: string;      // registro atual no banco
+    targetEnd?: number;
+    currentSessionId?: string;
     edital_id?: string | null;
     materia_id?: string | null;
     assunto_id?: string | null;
 };
 
-const LS_KEY = "pomodoro_state_v1";
-
-function saveState(state: PersistedState) {
-    localStorage.setItem(LS_KEY, JSON.stringify(state));
+function formatClock(s: number) {
+    const m = String(Math.floor(s / 60)).padStart(2, "0");
+    const sec = String(s % 60).padStart(2, "0");
+    return `${m}:${sec}`;
 }
-
-function loadState(): PersistedState | null {
-    try {
-        const raw = localStorage.getItem(LS_KEY);
-        return raw ? JSON.parse(raw) as PersistedState : null;
-    } catch {
-        return null;
-    }
-}
-
-function dispatchMiniBadge(text: string | null) {
+function dispatchMini(text: string | null) {
     window.dispatchEvent(new CustomEvent("pomodoro:mini", { detail: text }));
 }
 
-/** UI: Container do Modal */
+/** ============== SERVIÇO SINGLETON (persiste mesmo com o modal fechado) ============== */
+class PomodoroService {
+    state: Persisted = {
+        phase: "study",
+        remaining: STUDY_SECONDS,
+        isRunning: false,
+    };
+    private timer: number | null = null;
+
+    constructor() {
+        // carrega estado salvo
+        try {
+            const raw = localStorage.getItem(LS_KEY);
+            if (raw) this.state = { ...this.state, ...(JSON.parse(raw) as Persisted) };
+        } catch { }
+        // se estava rodando, recalcula remaining e retoma
+        if (this.state.isRunning) {
+            const now = Date.now();
+            const left = Math.max(0, Math.floor(((this.state.targetEnd ?? now) - now) / 1000));
+            this.state.remaining = left;
+            if (left <= 0) {
+                // passou do tempo — comuta uma vez
+                this.switchPhaseInternal(true);
+            } else {
+                this.startTick();
+            }
+        }
+        this.persistAndBroadcast();
+    }
+
+    private durationForPhase(p: Phase) {
+        return p === "study" ? STUDY_SECONDS : BREAK_SECONDS;
+    }
+
+    private persistAndBroadcast() {
+        localStorage.setItem(LS_KEY, JSON.stringify(this.state));
+        const label = this.state.isRunning ? formatClock(this.state.remaining) : null;
+        dispatchMini(label);
+        window.dispatchEvent(new CustomEvent("pomodoro:update", { detail: { ...this.state } }));
+    }
+
+    private startTick() {
+        if (this.timer) return;
+        this.timer = window.setInterval(async () => {
+            const now = Date.now();
+            const left = Math.max(0, Math.floor(((this.state.targetEnd ?? now) - now) / 1000));
+            this.state.remaining = left;
+            if (left <= 0) {
+                await this.onPhaseEnded();
+            }
+            this.persistAndBroadcast();
+        }, 1000);
+    }
+
+    private stopTick() {
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+    }
+
+    private async openSession(p: Phase) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const uid = user?.id;
+        if (!uid) return;
+        const { data } = await supabase
+            .from("pomodoro_sessions")
+            .insert({
+                user_id: uid,
+                phase: p,
+                edital_id: this.state.edital_id,
+                materia_id: this.state.materia_id,
+                assunto_id: this.state.assunto_id,
+                started_at: new Date().toISOString(),
+            })
+            .select("id")
+            .single();
+        if (data?.id) this.state.currentSessionId = data.id;
+    }
+
+    private async closeSession() {
+        if (!this.state.currentSessionId) return;
+        await supabase
+            .from("pomodoro_sessions")
+            .update({ ended_at: new Date().toISOString() })
+            .eq("id", this.state.currentSessionId);
+        this.state.currentSessionId = undefined;
+    }
+
+    private async onPhaseEnded() {
+        // encerra a fase atual
+        await this.closeSession();
+        // troca de fase e já inicia a próxima rodando
+        await this.switchPhaseInternal(true);
+    }
+
+    private async switchPhaseInternal(autorun: boolean) {
+        this.state.phase = this.state.phase === "study" ? "break" : "study";
+        const dur = this.durationForPhase(this.state.phase);
+        this.state.remaining = dur;
+        this.state.isRunning = autorun;
+        this.state.targetEnd = autorun ? Date.now() + dur * 1000 : undefined;
+        if (autorun) {
+            await this.openSession(this.state.phase);
+            this.startTick();
+        } else {
+            this.stopTick();
+        }
+        this.persistAndBroadcast();
+    }
+
+    // === Métodos públicos usados pelo modal ===
+
+    selectContext(ids: { edital_id: string; materia_id: string; assunto_id: string }) {
+        this.state.edital_id = ids.edital_id;
+        this.state.materia_id = ids.materia_id;
+        this.state.assunto_id = ids.assunto_id;
+        this.persistAndBroadcast();
+    }
+
+    async start() {
+        if (this.state.isRunning) return;
+        this.state.isRunning = true;
+        // se não houver targetEnd, cria a partir do remaining
+        if (!this.state.targetEnd) this.state.targetEnd = Date.now() + (this.state.remaining || this.durationForPhase(this.state.phase)) * 1000;
+        // se não houver sessão aberta, abre
+        if (!this.state.currentSessionId) await this.openSession(this.state.phase);
+        this.startTick();
+        this.persistAndBroadcast();
+    }
+
+    pause() {
+        this.state.isRunning = false;
+        this.state.targetEnd = undefined;
+        this.stopTick();
+        this.persistAndBroadcast();
+    }
+
+    reset() {
+        this.state.isRunning = false;
+        this.state.remaining = this.durationForPhase(this.state.phase);
+        this.state.targetEnd = undefined;
+        this.stopTick();
+        this.persistAndBroadcast();
+    }
+
+    async skip() {
+        // fecha fase atual e vai para a próxima já rodando
+        await this.closeSession();
+        await this.switchPhaseInternal(true);
+    }
+
+    async endAll() {
+        this.stopTick();
+        await this.closeSession();
+        this.state = {
+            phase: "study",
+            remaining: STUDY_SECONDS,
+            isRunning: false,
+            edital_id: this.state.edital_id,
+            materia_id: this.state.materia_id,
+            assunto_id: this.state.assunto_id,
+        };
+        this.persistAndBroadcast();
+    }
+}
+
+// singleton
+let _svc: PomodoroService | null = null;
+function service() {
+    if (!_svc && typeof window !== "undefined") _svc = new PomodoroService();
+    return _svc!;
+}
+// garante inicialização assim que o arquivo for importado (Header importa este componente)
+if (typeof window !== "undefined") service();
+
+/** ============== UI ============== */
+
 function ModalContainer({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
     return (
         <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center px-4">
@@ -60,7 +227,6 @@ function ModalContainer({ children, onClose }: { children: React.ReactNode; onCl
     );
 }
 
-/** PASSO 1: Seleção (edital → matéria → assunto) */
 function Selector({
     onReady,
     initial,
@@ -76,7 +242,6 @@ function Selector({
     const [materiaId, setMateriaId] = useState(initial?.materia_id || "");
     const [assuntoId, setAssuntoId] = useState(initial?.assunto_id || "");
 
-    const inputBase = "rounded border border-border p-2 bg-input text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20";
     const selectBase = "rounded border border-border p-2 bg-input text-foreground appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 w-full";
 
     useEffect(() => {
@@ -84,46 +249,31 @@ function Selector({
             const uid = (await supabase.auth.getUser()).data.user?.id;
             if (!uid) return;
             const { data: eds } = await supabase
-                .from("editais")
-                .select("id,nome")
-                .eq("user_id", uid)
-                .order("created_at", { ascending: false });
+                .from("editais").select("id,nome")
+                .eq("user_id", uid).order("created_at", { ascending: false });
             setEditais(eds || []);
         })();
     }, []);
 
     useEffect(() => {
         (async () => {
-            if (!editalId) {
-                setMaterias([]); setAssuntos([]); setMateriaId(""); setAssuntoId("");
-                return;
-            }
+            if (!editalId) { setMaterias([]); setAssuntos([]); setMateriaId(""); setAssuntoId(""); return; }
             const uid = (await supabase.auth.getUser()).data.user?.id;
             const { data: mats } = await supabase
-                .from("materias")
-                .select("id,nome,edital_id")
-                .eq("user_id", uid)
-                .eq("edital_id", editalId)
-                .order("nome");
+                .from("materias").select("id,nome,edital_id")
+                .eq("user_id", uid).eq("edital_id", editalId).order("nome");
             setMaterias(mats || []);
-            setMateriaId(""); setAssuntoId("");
-            setAssuntos([]);
+            setMateriaId(""); setAssuntoId(""); setAssuntos([]);
         })();
     }, [editalId]);
 
     useEffect(() => {
         (async () => {
-            if (!materiaId) {
-                setAssuntos([]); setAssuntoId("");
-                return;
-            }
+            if (!materiaId) { setAssuntos([]); setAssuntoId(""); return; }
             const uid = (await supabase.auth.getUser()).data.user?.id;
             const { data: ass } = await supabase
-                .from("assuntos")
-                .select("id,nome,materia_id,edital_id")
-                .eq("user_id", uid)
-                .eq("materia_id", materiaId)
-                .order("nome");
+                .from("assuntos").select("id,nome,materia_id,edital_id")
+                .eq("user_id", uid).eq("materia_id", materiaId).order("nome");
             setAssuntos(ass || []);
             setAssuntoId("");
         })();
@@ -170,248 +320,70 @@ function Selector({
     );
 }
 
-/** MODAL PRINCIPAL */
 export function PomodoroModal({ onClose }: { onClose: () => void }) {
-    const [phase, setPhase] = useState<Phase>("study");
-    const [remaining, setRemaining] = useState<number>(STUDY_SECONDS);
-    const [isRunning, setIsRunning] = useState(false);
-    const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(undefined);
-    const [editalId, setEditalId] = useState<string | null>(null);
-    const [materiaId, setMateriaId] = useState<string | null>(null);
-    const [assuntoId, setAssuntoId] = useState<string | null>(null);
-    const [step, setStep] = useState<"select" | "timer">("select");
+    const svc = service();
 
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    // espelho local só para renderizar
+    const [phase, setPhase] = useState<Phase>(svc.state.phase);
+    const [remaining, setRemaining] = useState<number>(svc.state.remaining);
+    const [isRunning, setIsRunning] = useState<boolean>(svc.state.isRunning);
+    const [step, setStep] = useState<"select" | "timer">(
+        svc.state.edital_id && svc.state.materia_id && svc.state.assunto_id ? "timer" : "select"
+    );
 
-    // carrega estado salvo (inclusive vínculos)
+    // acompanha atualizações do serviço
     useEffect(() => {
-        const st = loadState();
-        if (st) {
+        const handler = (e: Event) => {
+            const st = (e as CustomEvent<Persisted>).detail;
             setPhase(st.phase);
-            setRemaining(st.remaining ?? (st.phase === "study" ? STUDY_SECONDS : BREAK_SECONDS));
+            setRemaining(st.remaining);
             setIsRunning(st.isRunning);
-            setCurrentSessionId(st.currentSessionId);
-            if (st.edital_id) setEditalId(st.edital_id);
-            if (st.materia_id) setMateriaId(st.materia_id);
-            if (st.assunto_id) setAssuntoId(st.assunto_id);
-            if (st.edital_id && st.materia_id && st.assunto_id) setStep("timer");
-
-            // se tinha targetEnd, re-calcula remaining (resiliência a refresh)
-            if (st.isRunning && st.targetEnd) {
-                const now = Date.now();
-                const delta = Math.max(0, Math.floor((st.targetEnd - now) / 1000));
-                setRemaining(delta);
-            }
-        }
-    }, []);
-
-    // helper — salva no LS e atualiza mini badge
-    const persist = useCallback((next: Partial<PersistedState> = {}) => {
-        const state: PersistedState = {
-            phase,
-            remaining,
-            isRunning,
-            currentSessionId,
-            edital_id: editalId,
-            materia_id: materiaId,
-            assunto_id: assuntoId,
-            ...next,
         };
-        saveState(state);
-        const label = `${state.phase === "study" ? "Estudo" : "Pausa"} ${formatClock(state.remaining ?? remaining)}`;
-        dispatchMiniBadge(state.isRunning ? label : null);
-    }, [phase, remaining, isRunning, currentSessionId, editalId, materiaId, assuntoId]);
-
-    // formata mm:ss
-    const formatClock = (s: number) => {
-        const m = String(Math.floor(s / 60)).padStart(2, "0");
-        const sec = String(s % 60).padStart(2, "0");
-        return `${m}:${sec}`;
-    };
-
-    const durationForPhase = useMemo(() => phase === "study" ? STUDY_SECONDS : BREAK_SECONDS, [phase]);
-
-    // cria sessão (insert) ao iniciar fase
-    const openSession = useCallback(async (p: Phase) => {
-        const { data: { user } } = await supabase.auth.getUser();
-        const uid = user?.id;
-        if (!uid) return;
-
-        const { data, error } = await supabase
-            .from("pomodoro_sessions")
-            .insert({
-                user_id: uid,
-                phase: p,
-                edital_id: editalId,
-                materia_id: materiaId,
-                assunto_id: assuntoId,
-                started_at: new Date().toISOString(),
-            })
-            .select("id")
-            .single();
-
-        if (!error && data?.id) {
-            setCurrentSessionId(data.id);
-            persist({ currentSessionId: data.id });
-        }
-    }, [editalId, materiaId, assuntoId, persist]);
-
-    // encerra sessão (update ended_at)
-    const closeSession = useCallback(async () => {
-        if (!currentSessionId) return;
-        await supabase
-            .from("pomodoro_sessions")
-            .update({ ended_at: new Date().toISOString() })
-            .eq("id", currentSessionId);
-        setCurrentSessionId(undefined);
-        persist({ currentSessionId: undefined });
-    }, [currentSessionId, persist]);
-
-    // alterna fase automaticamente
-    const switchPhase = useCallback(async () => {
-        await closeSession();
-        const nextPhase: Phase = phase === "study" ? "break" : "study";
-        setPhase(nextPhase);
-        const nextDur = nextPhase === "study" ? STUDY_SECONDS : BREAK_SECONDS;
-        setRemaining(nextDur);
-        setIsRunning(true);
-        persist({ phase: nextPhase, remaining: nextDur, isRunning: true, targetEnd: Date.now() + nextDur * 1000 });
-        await openSession(nextPhase);
-    }, [phase, closeSession, persist, openSession]);
-
-    // loop do timer
-    const startTicking = useCallback(() => {
-        if (intervalRef.current) return;
-        intervalRef.current = setInterval(() => {
-            setRemaining(prev => {
-                if (prev <= 1) {
-                    clearInterval(intervalRef.current!);
-                    intervalRef.current = null;
-                    // terminou a fase → troca
-                    switchPhase();
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-    }, [switchPhase]);
-
-    const stopTicking = useCallback(() => {
-        if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-        }
+        window.addEventListener("pomodoro:update", handler);
+        return () => window.removeEventListener("pomodoro:update", handler);
     }, []);
 
-    // iniciar (play)
-    const handleStart = useCallback(async () => {
-        if (!editalId || !materiaId || !assuntoId) return;
-        if (!isRunning) {
-            setIsRunning(true);
-            persist({ isRunning: true, targetEnd: Date.now() + remaining * 1000 });
-            startTicking();
-            // se ainda não existe sessão aberta, abre uma
-            if (!currentSessionId) await openSession(phase);
-        }
-    }, [editalId, materiaId, assuntoId, isRunning, persist, remaining, startTicking, currentSessionId, openSession, phase]);
+    const minutes = useMemo(() => String(Math.floor(remaining / 60)).padStart(2, "0"), [remaining]);
+    const seconds = useMemo(() => String(remaining % 60).padStart(2, "0"), [remaining]);
 
-    const handlePause = useCallback(async () => {
-        setIsRunning(false);
-        persist({ isRunning: false, targetEnd: undefined });
-        stopTicking();
-        // não fecha sessão — apenas pausa
-    }, [persist, stopTicking]);
-
-    const handleReset = useCallback(async () => {
-        stopTicking();
-        setIsRunning(false);
-        const d = durationForPhase;
-        setRemaining(d);
-        persist({ isRunning: false, remaining: d, targetEnd: undefined });
-    }, [stopTicking, durationForPhase, persist]);
-
-    const handleSkip = useCallback(async () => {
-        stopTicking();
-        await closeSession(); // fecha fase atual
-        await switchPhase();  // e já abre a próxima
-    }, [stopTicking, closeSession, switchPhase]);
-
-    const handleEndAll = useCallback(async () => {
-        stopTicking();
-        await closeSession();
-        setIsRunning(false);
-        setPhase("study");
-        setRemaining(STUDY_SECONDS);
-        persist({ isRunning: false, phase: "study", remaining: STUDY_SECONDS, targetEnd: undefined });
-        dispatchMiniBadge(null);
-    }, [stopTicking, closeSession, persist]);
-
-    // controla intervalo conforme isRunning
-    useEffect(() => {
-        if (isRunning) startTicking();
-        else stopTicking();
-        return () => stopTicking();
-    }, [isRunning, startTicking, stopTicking]);
-
-    // badge ao fechar modal
-    useEffect(() => {
-        const label = `${phase === "study" ? "Estudo" : "Pausa"} ${formatClock(remaining)}`;
-        dispatchMiniBadge(isRunning ? label : null);
-    }, [isRunning, remaining, phase]);
-
-    const minutes = String(Math.floor(remaining / 60)).padStart(2, "0");
-    const seconds = String(remaining % 60).padStart(2, "0");
+    const handleStart = useCallback(async () => { await svc.start(); }, [svc]);
+    const handlePause = useCallback(() => { svc.pause(); }, [svc]);
+    const handleReset = useCallback(() => { svc.reset(); }, [svc]);
+    const handleSkip = useCallback(async () => { await svc.skip(); }, [svc]);
+    const handleEnd = useCallback(async () => { await svc.endAll(); }, [svc]);
 
     return (
         <ModalContainer onClose={onClose}>
-            {/* Cabeçalho */}
             <div className="px-5 py-4 border-b border-border flex items-center justify-between rounded-t-2xl">
                 <div className="flex items-center gap-2">
-                    <span className="text-xl">🍅</span>
+                    <span className="text-xl">🍎</span>
                     <h2 className="text-lg font-semibold">Pomodoro</h2>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                    {phase === "study" ? "Fase: Estudo (45min)" : "Fase: Pausa (5min)"}
+                    {phase === "study" ? "Estudo (45 min)" : "Pausa (5 min)"}
                 </div>
             </div>
 
-            {/* Corpo */}
             {step === "select" ? (
                 <Selector
-                    initial={{ edital_id: editalId, materia_id: materiaId, assunto_id: assuntoId }}
+                    initial={{
+                        edital_id: svc.state.edital_id ?? "",
+                        materia_id: svc.state.materia_id ?? "",
+                        assunto_id: svc.state.assunto_id ?? "",
+                    }}
                     onReady={(sel) => {
-                        setEditalId(sel.edital_id);
-                        setMateriaId(sel.materia_id);
-                        setAssuntoId(sel.assunto_id);
-                        setPhase("study");
-                        setRemaining(STUDY_SECONDS);
-                        setIsRunning(false);
-                        saveState({
-                            phase: "study",
-                            remaining: STUDY_SECONDS,
-                            isRunning: false,
-                            edital_id: sel.edital_id,
-                            materia_id: sel.materia_id,
-                            assunto_id: sel.assunto_id,
-                        });
+                        svc.selectContext(sel);
+                        // zera para começar do estudo
+                        svc.state.phase = "study";
+                        svc.state.remaining = STUDY_SECONDS;
+                        svc.state.isRunning = false;
+                        svc.state.targetEnd = undefined;
+                        localStorage.setItem(LS_KEY, JSON.stringify(svc.state));
                         setStep("timer");
                     }}
                 />
             ) : (
                 <div className="p-5">
-                    {/* Chips de contexto */}
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        {editalId && (
-                            <span className="text-xs px-2 py-1 rounded-full border border-border bg-muted">Edital: {editalId.slice(0, 8)}…</span>
-                        )}
-                        {materiaId && (
-                            <span className="text-xs px-2 py-1 rounded-full border border-border bg-muted">Matéria: {materiaId.slice(0, 8)}…</span>
-                        )}
-                        {assuntoId && (
-                            <span className="text-xs px-2 py-1 rounded-full border border-border bg-muted">Assunto: {assuntoId.slice(0, 8)}…</span>
-                        )}
-                    </div>
-
                     {/* Relógio */}
                     <div className="flex flex-col items-center">
                         <div className="text-6xl font-extrabold mb-6">
@@ -452,7 +424,7 @@ export function PomodoroModal({ onClose }: { onClose: () => void }) {
                             </button>
 
                             <button
-                                onClick={handleEndAll}
+                                onClick={handleEnd}
                                 className="bg-red-600 text-white px-5 py-2 rounded-lg font-semibold hover:bg-red-700 transition"
                                 title="Encerrar o ciclo atual"
                             >
@@ -468,7 +440,6 @@ export function PomodoroModal({ onClose }: { onClose: () => void }) {
                             </button>
                         </div>
 
-                        {/* Dica responsiva */}
                         <p className="mt-4 text-xs text-muted-foreground text-center">
                             O timer continua mesmo se fechar este modal ou recarregar a página.
                         </p>
