@@ -3,109 +3,52 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import {
-    BarChart,
-    Bar,
+    ResponsiveContainer,
+    AreaChart,
+    Area,
     XAxis,
     YAxis,
-    ResponsiveContainer,
     Tooltip,
     CartesianGrid,
+    BarChart,
+    Bar,
 } from "recharts";
 
-/* ===================== CONFIG ===================== */
-const GOOD_THRESHOLD = 80;
-const BAD_THRESHOLD = 50;
-const MIN_QUESTOES = 10;
-
-type Daily = { dia: string; tempo_min: number };
-type TopItem = { nome: string; minutos: number };
-type Phase = "study" | "break";
+/* ===================== HELPERS ===================== */
+type Daily = { dia: string; minutos: number; questoes: number };
+type TopItem = { nome: string; valor: number };
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
-
-function startOfLocalDay(ts = Date.now()) {
-    const d = new Date(ts);
+const fmtHMS = (s: number) => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return h ? `${h}h ${m}m` : `${m}m`;
+};
+const startOfLocalDay = (t = Date.now()) => {
+    const d = new Date(t);
     d.setHours(0, 0, 0, 0);
     return d;
-}
-function iso(dt: Date) {
-    return dt.toISOString();
-}
-function toLocalDateLabel(dt: string | Date) {
-    const d = typeof dt === "string" ? new Date(dt) : dt;
-    return d.toLocaleDateString("pt-BR", {
-        weekday: "short",
-        day: "2-digit",
-        month: "2-digit",
-    });
-}
-function fmtHMS(totalSeconds: number) {
-    const d = Math.floor(totalSeconds / 86400);
-    const h = Math.floor((totalSeconds % 86400) / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const parts: string[] = [];
-    if (d) parts.push(`${d}d`);
-    if (h) parts.push(`${h}h`);
-    if (m || (!d && !h)) parts.push(`${m}m`);
-    return parts.join(" ");
-}
-/** formata Date -> "dd/MM/yyyy" (como salvo em progresso_semanal) */
-function ptBR(d: Date) {
-    return d.toLocaleDateString("pt-BR");
-}
+};
+const br = (d: Date) => d.toLocaleDateString("pt-BR");
 
+/* ===================== PAGE ===================== */
 export default function EstatisticasPage() {
-    const [days, setDays] = useState<7 | 30 | 90>(7);
+    const [days, setDays] = useState<7 | 30 | 90>(30);
     const [loading, setLoading] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
 
-    // mapas de nomes
-    const [materiaMap, setMateriaMap] = useState<Record<string, string>>({});
-    const [assuntoMap, setAssuntoMap] = useState<Record<string, string>>({});
-
-    // — Pomodoro métricas
+    // cards
     const [tempoTotalSeg, setTempoTotalSeg] = useState(0);
-    const [sessoesCount, setSessoesCount] = useState(0);
-    const [mediaSessaoMin, setMediaSessaoMin] = useState(0);
-    const [streakDias, setStreakDias] = useState(0);
-    const [diario, setDiario] = useState<Daily[]>([]);
-    const [topMaterias, setTopMaterias] = useState<TopItem[]>([]);
-    const [topAssuntos, setTopAssuntos] = useState<TopItem[]>([]);
-
-    // — Resumos/Revisões (se existirem)
-    const [resumosPeriodo, setResumosPeriodo] = useState(0);
-    const [resumosTotal, setResumosTotal] = useState(0);
-    const [revisoesPeriodo, setRevisoesPeriodo] = useState(0);
-    const [revisoesTotal, setRevisoesTotal] = useState(0);
-    const [revisoesPendentes, setRevisoesPendentes] = useState(0);
-
-    // — Questões (PERÍODO via progresso_semanal) e TOTAL (estatisticas)
-    const [questoesPeriodo, setQuestoesPeriodo] = useState(0);
-    const [acertoPeriodo, setAcertoPeriodo] = useState(0);
+    const [sessoes, setSessoes] = useState(0);
     const [questoesTotal, setQuestoesTotal] = useState(0);
     const [acertoTotal, setAcertoTotal] = useState(0);
 
-    // TOTAL (histórico) – vindo de acc_por_materia/assunto
-    const [byMateriaAccTotal, setByMateriaAccTotal] = useState<
-        Array<{ nome: string; acerto: number; total: number }>
-    >([]);
-    const [byAssuntoAccTotal, setByAssuntoAccTotal] = useState<
-        Array<{ nome: string; acerto: number; total: number }>
-    >([]);
-
-    // Indicadores (usam TOTAL por falta de série no período)
-    const [fortesMaterias, setFortesMaterias] = useState<
-        Array<{ nome: string; acerto: number; total: number }>
-    >([]);
-    const [fracasMaterias, setFracasMaterias] = useState<
-        Array<{ nome: string; acerto: number; total: number }>
-    >([]);
-    const [fortesAssuntos, setFortesAssuntos] = useState<
-        Array<{ nome: string; acerto: number; total: number }>
-    >([]);
-    const [fracosAssuntos, setFracosAssuntos] = useState<
-        Array<{ nome: string; acerto: number; total: number }>
-    >([]);
+    // séries/gráficos
+    const [serie, setSerie] = useState<Daily[]>([]);
+    const [topMateriasTempo, setTopMateriasTempo] = useState<TopItem[]>([]);
+    const [topAssuntosTempo, setTopAssuntosTempo] = useState<TopItem[]>([]);
+    const [matAcc, setMatAcc] = useState<TopItem[]>([]);
+    const [assAcc, setAssAcc] = useState<TopItem[]>([]);
 
     useEffect(() => {
         (async () => {
@@ -115,269 +58,179 @@ export default function EstatisticasPage() {
                 const {
                     data: { user },
                 } = await supabase.auth.getUser();
-                if (!user) throw new Error("Não foi possível obter usuário logado.");
-                const uid = user.id;
+                if (!user) throw new Error("Sem usuário.");
 
-                // período
+                // janelas
                 const today0 = startOfLocalDay();
                 const from = new Date(today0.getTime() - (days - 1) * ONE_DAY);
-                const fromISO = iso(from);
+                const fromISO = from.toISOString();
 
-                // nomes
+                /* ---------- nomes de matérias/assuntos ---------- */
                 const [mats, asss] = await Promise.all([
-                    supabase.from("materias").select("id,nome").eq("user_id", uid),
-                    supabase.from("assuntos").select("id,nome").eq("user_id", uid),
+                    supabase.from("materias").select("id,nome").eq("user_id", user.id),
+                    supabase.from("assuntos").select("id,nome").eq("user_id", user.id),
                 ]);
-                const mMap: Record<string, string> = {};
-                (mats.data ?? []).forEach((m: any) => (mMap[m.id] = m.nome));
-                setMateriaMap(mMap);
-                const aMap: Record<string, string> = {};
-                (asss.data ?? []).forEach((a: any) => (aMap[a.id] = a.nome));
-                setAssuntoMap(aMap);
+                const matName: Record<string, string> = {};
+                (mats.data ?? []).forEach((m: any) => (matName[m.id] = m.nome));
+                const assName: Record<string, string> = {};
+                (asss.data ?? []).forEach((a: any) => (assName[a.id] = a.nome));
 
-                /* ================= Pomodoro ================= */
+                /* ---------- Pomodoro (se existir) ---------- */
                 const { data: sess } = await supabase
                     .from("pomodoro_sessions")
-                    .select("phase, duration_seconds, started_at, materia_id, assunto_id")
-                    .eq("user_id", uid)
-                    .eq("phase", "study" as Phase)
+                    .select("phase,duration_seconds,started_at,materia_id,assunto_id")
+                    .eq("user_id", user.id)
+                    .eq("phase", "study")
                     .not("duration_seconds", "is", null)
                     .gte("started_at", fromISO)
                     .order("started_at", { ascending: true });
 
-                const sessions =
-                    (sess ?? []) as Array<{
-                        duration_seconds: number | null;
-                        started_at: string;
-                        materia_id: string | null;
-                        assunto_id: string | null;
-                    }>;
+                const byDayMin: Record<string, number> = {};
+                const byMatSec: Record<string, number> = {};
+                const byAssSec: Record<string, number> = {};
 
-                // base diária (minutos/dia)
-                const baseDays: Daily[] = Array.from({ length: days }, (_, i) => {
-                    const d = new Date(from.getTime() + i * ONE_DAY);
-                    return { dia: toLocalDateLabel(d), tempo_min: 0 };
-                });
-
-                let totalSeconds = 0;
+                let totalSec = 0;
                 let count = 0;
-                const byDay: Record<string, number> = {};
-                const byMateriaTime: Record<string, number> = {};
-                const byAssuntoTime: Record<string, number> = {};
 
-                for (const s of sessions) {
+                for (const s of sess ?? []) {
                     const dur = s.duration_seconds ?? 0;
-                    totalSeconds += dur;
-                    count += 1;
-
+                    totalSec += dur;
+                    count++;
                     const d = new Date(s.started_at);
                     const key = new Date(d.getFullYear(), d.getMonth(), d.getDate())
                         .toISOString()
                         .slice(0, 10);
-                    byDay[key] = (byDay[key] ?? 0) + dur;
+                    byDayMin[key] = (byDayMin[key] ?? 0) + Math.round(dur / 60);
 
                     if (s.materia_id)
-                        byMateriaTime[s.materia_id] =
-                            (byMateriaTime[s.materia_id] ?? 0) + dur;
+                        byMatSec[s.materia_id] = (byMatSec[s.materia_id] ?? 0) + dur;
                     if (s.assunto_id)
-                        byAssuntoTime[s.assunto_id] =
-                            (byAssuntoTime[s.assunto_id] ?? 0) + dur;
+                        byAssSec[s.assunto_id] = (byAssSec[s.assunto_id] ?? 0) + dur;
                 }
 
-                for (let i = 0; i < days; i++) {
-                    const d = new Date(from.getTime() + i * ONE_DAY)
-                        .toISOString()
-                        .slice(0, 10);
-                    baseDays[i].tempo_min = Math.round((byDay[d] ?? 0) / 60);
-                }
-                setDiario(baseDays);
+                setTempoTotalSeg(totalSec);
+                setSessoes(count);
 
-                setTempoTotalSeg(totalSeconds);
-                setSessoesCount(count);
-                setMediaSessaoMin(count ? Math.round(totalSeconds / 60 / count) : 0);
-
-                // streak (dias seguidos com >0 min)
-                let streak = 0;
-                for (let i = baseDays.length - 1; i >= 0; i--) {
-                    if (baseDays[i].tempo_min > 0) streak++;
-                    else break;
-                }
-                setStreakDias(streak);
-
-                // top 5 tempo (matérias/assuntos)
-                const tM: TopItem[] = Object.entries(byMateriaTime)
-                    .map(([id, sec]) => ({
-                        nome: mMap[id] || id.slice(0, 8) + "…",
-                        minutos: Math.round(sec / 60),
-                    }))
-                    .sort((a, b) => b.minutos - a.minutos)
-                    .slice(0, 5);
-                const tA: TopItem[] = Object.entries(byAssuntoTime)
-                    .map(([id, sec]) => ({
-                        nome: aMap[id] || id.slice(0, 8) + "…",
-                        minutos: Math.round(sec / 60),
-                    }))
-                    .sort((a, b) => b.minutos - a.minutos)
-                    .slice(0, 5);
-                setTopMaterias(tM);
-                setTopAssuntos(tA);
-
-                /* ================= ESTATISTICAS (única tabela) ================= */
+                /* ---------- Estatísticas (única tabela) ---------- */
                 const { data: est } = await supabase
                     .from("estatisticas")
-                    .select(
-                        "questoes_respondidas,taxa_acerto,progresso_semanal,acc_por_materia,acc_por_assunto"
-                    )
-                    .eq("user_id", uid)
+                    .select("questoes_respondidas,taxa_acerto,progresso_semanal,acc_por_materia,acc_por_assunto")
+                    .eq("user_id", user.id)
                     .maybeSingle();
 
-                // Totais básicos
-                const totalQuestoes = est?.questoes_respondidas ?? 0;
-                const taxa = est?.taxa_acerto ?? 0;
-                setQuestoesTotal(totalQuestoes);
-                setAcertoTotal(typeof taxa === "number" ? Math.round(taxa) : Number(taxa));
+                setQuestoesTotal(est?.questoes_respondidas ?? 0);
+                setAcertoTotal(Math.round(Number(est?.taxa_acerto ?? 0)));
 
-                // Questões no PERÍODO = soma de progresso_semanal nos últimos N dias
-                const diasAlvo = new Set(
-                    Array.from({ length: days }, (_, i) =>
-                        ptBR(new Date(startOfLocalDay().getTime() - i * ONE_DAY))
-                    )
-                );
-                let somaPeriodo = 0;
-                const prog = Array.isArray(est?.progresso_semanal)
-                    ? (est!.progresso_semanal as Array<{ dia: string; questoes: number }>)
+                // map de questões por dia (progresso_semanal usa dd/MM/yyyy)
+                const progArr: Array<{ dia: string; questoes: number }> = Array.isArray(
+                    est?.progresso_semanal
+                )
+                    ? est!.progresso_semanal
                     : [];
-                for (const row of prog) {
-                    if (row?.dia && diasAlvo.has(row.dia)) {
-                        somaPeriodo += Number(row.questoes ?? 0);
+
+                const byDayQ: Record<string, number> = {};
+                for (const p of progArr) {
+                    // converte dd/MM/yyyy -> ISO-day
+                    const [dd, mm, yyyy] = String(p.dia || "").split("/");
+                    if (dd && mm && yyyy) {
+                        const key = new Date(
+                            Number(yyyy),
+                            Number(mm) - 1,
+                            Number(dd)
+                        )
+                            .toISOString()
+                            .slice(0, 10);
+                        byDayQ[key] = (byDayQ[key] ?? 0) + Number(p.questoes ?? 0);
                     }
                 }
-                setQuestoesPeriodo(somaPeriodo);
 
-                // Sem série por acerto diário: usamos taxa_acerto como “acerto no período”
-                setAcertoPeriodo(
-                    typeof taxa === "number" ? Math.round(taxa) : Number(taxa ?? 0)
+                // série unificada (dias contínuos)
+                const s: Daily[] = [];
+                for (let i = 0; i < days; i++) {
+                    const d = new Date(from.getTime() + i * ONE_DAY);
+                    const iso = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+                        .toISOString()
+                        .slice(0, 10);
+                    s.push({
+                        dia: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+                        minutos: byDayMin[iso] ?? 0,
+                        questoes: byDayQ[iso] ?? 0,
+                    });
+                }
+                setSerie(s);
+
+                // top 5 tempo (mat/ass)
+                setTopMateriasTempo(
+                    Object.entries(byMatSec)
+                        .map(([id, sec]) => ({ nome: matName[id] || id.slice(0, 8) + "…", valor: Math.round(sec / 60) }))
+                        .sort((a, b) => b.valor - a.valor)
+                        .slice(0, 5)
+                );
+                setTopAssuntosTempo(
+                    Object.entries(byAssSec)
+                        .map(([id, sec]) => ({ nome: assName[id] || id.slice(0, 8) + "…", valor: Math.round(sec / 60) }))
+                        .sort((a, b) => b.valor - a.valor)
+                        .slice(0, 5)
                 );
 
-                // Listas TOTAL/histórico por matéria/assunto
-                const matObj = (est?.acc_por_materia ?? {}) as Record<
+                // acertos por matéria/assunto (TOTAL)
+                const matsAcc = (est?.acc_por_materia ?? {}) as Record<
                     string,
                     { total: number; corretas: number }
                 >;
-                const assObj = (est?.acc_por_assunto ?? {}) as Record<
+                const asssAcc = (est?.acc_por_assunto ?? {}) as Record<
                     string,
                     { total: number; corretas: number }
                 >;
 
-                const matList = Object.entries(matObj).map(([id, v]) => ({
-                    nome: mMap[id] || id.slice(0, 8) + "…",
-                    acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
-                    total: v.total,
-                }));
-                const assList = Object.entries(assObj).map(([id, v]) => ({
-                    nome: aMap[id] || id.slice(0, 8) + "…",
-                    acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
-                    total: v.total,
-                }));
-
-                setByMateriaAccTotal(matList.sort((a, b) => b.total - a.total).slice(0, 10));
-                setByAssuntoAccTotal(assList.sort((a, b) => b.total - a.total).slice(0, 10));
-
-                // Indicadores (com TOTAL)
-                setFortesMaterias(
-                    matList
-                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
-                        .sort((a, b) => b.acerto - a.acerto)
-                        .slice(0, 5)
-                );
-                setFracasMaterias(
-                    matList
-                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
-                        .sort((a, b) => a.acerto - b.acerto)
-                        .slice(0, 5)
-                );
-                setFortesAssuntos(
-                    assList
-                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
-                        .sort((a, b) => b.acerto - a.acerto)
-                        .slice(0, 5)
-                );
-                setFracosAssuntos(
-                    assList
-                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
-                        .sort((a, b) => a.acerto - b.acerto)
-                        .slice(0, 5)
+                setMatAcc(
+                    Object.entries(matsAcc)
+                        .map(([id, v]) => ({
+                            nome: matName[id] || id.slice(0, 8) + "…",
+                            valor: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
+                        }))
+                        .sort((a, b) => b.valor - a.valor)
+                        .slice(0, 8)
                 );
 
-                /* ================= Resumos / Revisões (se você usa essas tabelas) ================= */
-                const [resPeriodo, resTot] = await Promise.all([
-                    supabase
-                        .from("resumos")
-                        .select("id", { count: "exact", head: true })
-                        .eq("user_id", uid)
-                        .gte("created_at", fromISO),
-                    supabase
-                        .from("resumos")
-                        .select("id", { count: "exact", head: true })
-                        .eq("user_id", uid),
-                ]);
-                setResumosPeriodo(resPeriodo.count ?? 0);
-                setResumosTotal(resTot.count ?? 0);
-
-                const [revPeriodo, revTot, revPend] = await Promise.all([
-                    supabase
-                        .from("revisoes")
-                        .select("id", { count: "exact", head: true })
-                        .eq("user_id", uid)
-                        .not("done_at", "is", null)
-                        .gte("done_at", fromISO),
-                    supabase
-                        .from("revisoes")
-                        .select("id", { count: "exact", head: true })
-                        .eq("user_id", uid)
-                        .not("done_at", "is", null),
-                    supabase
-                        .from("revisoes")
-                        .select("id", { count: "exact", head: true })
-                        .eq("user_id", uid)
-                        .is("done_at", null),
-                ]);
-                setRevisoesPeriodo(revPeriodo.count ?? 0);
-                setRevisoesTotal(revTot.count ?? 0);
-                setRevisoesPendentes(revPend.count ?? 0);
+                setAssAcc(
+                    Object.entries(asssAcc)
+                        .map(([id, v]) => ({
+                            nome: assName[id] || id.slice(0, 8) + "…",
+                            valor: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
+                        }))
+                        .sort((a, b) => b.valor - a.valor)
+                        .slice(0, 8)
+                );
             } catch (e: any) {
-                setErro(e?.message || "Falha ao carregar estatísticas.");
+                setErro(e?.message || "Falha ao carregar.");
             } finally {
                 setLoading(false);
             }
         })();
-    }, [days]); // <— só depende do range de dias (evita loop)
+    }, [days]);
 
-    const cards = useMemo(() => {
-        return [
-            { label: "Tempo estudado", valor: fmtHMS(tempoTotalSeg) },
-            { label: "Sessões (Pomodoro)", valor: sessoesCount },
-            { label: "Média por sessão", valor: `${mediaSessaoMin} min` },
-            { label: "Resumos no período", valor: resumosPeriodo },
-            { label: "Revisões concluídas", valor: revisoesPeriodo },
-            { label: "Streak de estudo", valor: `${streakDias} dia(s)` },
-        ];
-    }, [tempoTotalSeg, sessoesCount, mediaSessaoMin, resumosPeriodo, revisoesPeriodo, streakDias]);
+    const cards = useMemo(
+        () => [
+            { label: "Tempo total", value: fmtHMS(tempoTotalSeg), icon: "⏱️", tone: "from-sky-500 to-cyan-500" },
+            { label: "Sessões", value: sessoes, icon: "🍅", tone: "from-violet-500 to-fuchsia-500" },
+            { label: "Questões (total)", value: questoesTotal, icon: "🧮", tone: "from-emerald-500 to-teal-500" },
+            { label: "Acerto (total)", value: `${acertoTotal}%`, icon: "✅", tone: "from-amber-500 to-orange-500" },
+        ],
+        [tempoTotalSeg, sessoes, questoesTotal, acertoTotal]
+    );
 
     return (
-        <div className="w-full max-w-6xl mx-auto px-2 sm:px-4 md:px-8 py-8 flex flex-col gap-8">
-            {/* cabeçalho */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-6 space-y-6">
+            {/* HEADER + RANGE */}
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <h1 className="text-2xl font-semibold">Estatísticas</h1>
+                <h1 className="text-2xl font-semibold">Dashboard</h1>
                 <div className="flex gap-2">
                     {[7, 30, 90].map((n) => (
                         <button
                             key={n}
                             onClick={() => setDays(n as 7 | 30 | 90)}
-                            className={`rounded-xl px-3 py-1.5 border ${days === n
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "bg-card text-foreground border-border"
-                                }`}
+                            className={`px-3 py-1.5 rounded-lg border ${days === n ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border"}`}
                         >
                             {n} dias
                         </button>
@@ -385,251 +238,128 @@ export default function EstatisticasPage() {
                 </div>
             </div>
 
-            {/* feedback */}
-            {loading && (
-                <div className="text-center text-muted-foreground font-semibold">
-                    Carregando estatísticas…
+            {/* CARDS GRADIENTES */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {cards.map((c) => (
+                    <div
+                        key={c.label}
+                        className={`rounded-2xl p-4 text-white shadow-sm bg-gradient-to-r ${c.tone}`}
+                    >
+                        <div className="text-sm/5 opacity-90">{c.label}</div>
+                        <div className="mt-1 flex items-end justify-between">
+                            <div className="text-2xl font-extrabold tracking-tight">{c.value}</div>
+                            <div className="text-xl/none opacity-90">{c.icon}</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* LINHAS PADRÃO: Minutos x Questões (estilo “trafic sources”) */}
+            <div className="rounded-2xl bg-card border border-border p-4">
+                <div className="flex items-center justify-between mb-2">
+                    <h2 className="font-semibold">Estudo diário</h2>
+                    <span className="text-xs text-muted-foreground">Min vs Questões</span>
                 </div>
-            )}
-            {erro && <div className="text-center text-destructive font-semibold">{erro}</div>}
+                <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={serie} margin={{ left: 6, right: 6 }}>
+                            <defs>
+                                <linearGradient id="gMin" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.5} />
+                                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
+                                </linearGradient>
+                                <linearGradient id="gQst" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.5} />
+                                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                            <XAxis dataKey="dia" stroke="var(--muted-foreground)" />
+                            <YAxis stroke="var(--muted-foreground)" allowDecimals={false} />
+                            <Tooltip
+                                contentStyle={{
+                                    background: "var(--muted)",
+                                    border: "1px solid var(--border)",
+                                    color: "var(--foreground)",
+                                    borderRadius: 12,
+                                }}
+                            />
+                            <Area type="monotone" dataKey="minutos" name="Minutos" stroke="var(--primary)" fill="url(#gMin)" strokeWidth={2} />
+                            <Area type="monotone" dataKey="questoes" name="Questões" stroke="#22c55e" fill="url(#gQst)" strokeWidth={2} />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
 
-            {!loading && !erro && (
-                <>
-                    {/* Cards principais */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
-                        {cards.map((c, i) => (
-                            <div
-                                key={i}
-                                className="rounded-2xl bg-card border border-border py-6 px-2 flex flex-col items-center shadow-sm"
-                            >
-                                <span className="text-xs sm:text-sm text-muted-foreground mb-1 font-medium">
-                                    {c.label}
-                                </span>
-                                <span className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
-                                    {c.valor}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
+            {/* BARRAS COMPACTAS (pequenas) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Panel title="Top 5 matérias por tempo (min)">
+                    <TinyBarH data={topMateriasTempo} />
+                </Panel>
+                <Panel title="Top 5 assuntos por tempo (min)">
+                    <TinyBarH data={topAssuntosTempo} />
+                </Panel>
+            </div>
 
-                    {/* Cards de Questões */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-                        <StatMini title="Questões (período)" value={questoesPeriodo} />
-                        <StatMini title="Acerto (período)" value={`${acertoPeriodo}%`} />
-                        <StatMini title="Questões (total)" value={questoesTotal} />
-                        <StatMini title="Acerto (total)" value={`${acertoTotal}%`} />
-                    </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Panel title="Acerto por Matéria (total)">
+                    <TinyBarH data={matAcc} percent />
+                </Panel>
+                <Panel title="Acerto por Assunto (total)">
+                    <TinyBarH data={assAcc} percent />
+                </Panel>
+            </div>
 
-                    {/* Série diária: tempo estudado */}
-                    <Section title="Tempo estudado por dia (min)">
-                        <div className="w-full h-48 sm:h-64">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={diario}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                                    <XAxis dataKey="dia" stroke="var(--muted-foreground)" fontSize={13} />
-                                    <YAxis stroke="var(--muted-foreground)" fontSize={13} allowDecimals={false} />
-                                    <Tooltip
-                                        contentStyle={{
-                                            background: "var(--muted)",
-                                            border: "1px solid var(--border)",
-                                            color: "var(--foreground)",
-                                            fontFamily: "inherit",
-                                            borderRadius: 12,
-                                        }}
-                                        cursor={{ fill: "var(--primary)", opacity: 0.1 }}
-                                    />
-                                    <Bar dataKey="tempo_min" fill="var(--primary)" radius={[8, 8, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </Section>
-
-                    {/* Rankings de tempo (HORIZONTAL, compacto) */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <Section title="Top 5 matérias por tempo (min)">
-                            <BarSimpleH data={topMaterias} dataKey="minutos" nameKey="nome" />
-                        </Section>
-                        <Section title="Top 5 assuntos por tempo (min)">
-                            <BarSimpleH data={topAssuntos} dataKey="minutos" nameKey="nome" />
-                        </Section>
-                    </div>
-
-                    {/* TOTAL / HISTÓRICO — a partir da TABELA ESTATISTICAS */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <Section title="Acerto por Matéria (TOTAL)">
-                            <BarPercentH data={byMateriaAccTotal} />
-                            {!byMateriaAccTotal.length && (
-                                <p className="text-sm text-muted-foreground mt-2">
-                                    Ainda não há histórico agregado por matéria.
-                                </p>
-                            )}
-                        </Section>
-                        <Section title="Acerto por Assunto (TOTAL)">
-                            <BarPercentH data={byAssuntoAccTotal} />
-                            {!byAssuntoAccTotal.length && (
-                                <p className="text-sm text-muted-foreground mt-2">
-                                    Ainda não há histórico agregado por assunto.
-                                </p>
-                            )}
-                        </Section>
-                    </div>
-
-                    {/* Indicadores: Fortes x Prioridades (TOTAL) */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <Section title="Fortes (≥ 80% de acerto, min. 10 questões)">
-                            <ListBadges items={fortesMaterias} empty="Ainda sem dados suficientes." />
-                            <div className="mt-3 border-t border-border pt-3">
-                                <ListBadges items={fortesAssuntos} empty="" />
-                            </div>
-                        </Section>
-
-                        <Section title="Prioridades (< 50% de acerto, min. 10 questões)">
-                            <ListBadges items={fracasMaterias} variant="danger" empty="Tudo ok por enquanto 👌" />
-                            <div className="mt-3 border-t border-border pt-3">
-                                <ListBadges items={fracosAssuntos} variant="danger" empty="" />
-                            </div>
-                        </Section>
-                    </div>
-
-                    {/* Rodapé com totais */}
-                    <div className="rounded-2xl bg-card border border-border px-4 sm:px-8 py-5">
-                        <div className="text-sm text-muted-foreground">
-                            <div className="flex flex-wrap gap-x-6 gap-y-2">
-                                <span>
-                                    <strong>Resumos (total):</strong> {resumosTotal}
-                                </span>
-                                <span>
-                                    <strong>Revisões concluídas (total):</strong> {revisoesTotal}
-                                </span>
-                                <span>
-                                    <strong>Revisões pendentes:</strong> {revisoesPendentes}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
+            {erro && <p className="text-destructive">{erro}</p>}
+            {loading && <p className="text-muted-foreground">Carregando…</p>}
         </div>
     );
 }
 
-/* ===================== SUBCOMPONENTES ===================== */
+/* ===================== SUBS ===================== */
 
-function StatMini({ title, value }: { title: string; value: string | number }) {
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
     return (
-        <div className="rounded-2xl bg-card border border-border py-5 px-3 flex flex-col items-center shadow-sm">
-            <span className="text-xs sm:text-sm text-muted-foreground mb-1 font-medium">{title}</span>
-            <span className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">{value}</span>
-        </div>
-    );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-    return (
-        <div className="bg-card rounded-2xl shadow-lg border border-border px-4 sm:px-8 py-6">
-            <h2 className="text-base sm:text-lg font-bold mb-4 text-foreground">{title}</h2>
+        <div className="rounded-2xl bg-card border border-border p-4">
+            <h3 className="font-semibold mb-2">{title}</h3>
             {children}
         </div>
     );
 }
 
-/** Barras horizontais simples (tempo) — compactas */
-function BarSimpleH({
-    data,
-    dataKey,
-    nameKey,
-}: {
-    data: any[];
-    dataKey: string;
-    nameKey: string;
-}) {
+/** Barras horizontais bem pequenas/organizadas */
+function TinyBarH({ data, percent = false }: { data: TopItem[]; percent?: boolean }) {
+    const height = Math.max(120, data.length * 26 + 30); // compacta
     return (
-        <div className="w-full h-56 sm:h-72">
+        <div style={{ width: "100%", height }}>
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} layout="vertical" margin={{ left: 8 }}>
+                <BarChart data={data} layout="vertical" margin={{ top: 6, bottom: 6, left: 6, right: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis type="number" stroke="var(--muted-foreground)" />
-                    <YAxis
-                        type="category"
-                        dataKey={nameKey}
+                    <XAxis
+                        type="number"
+                        domain={percent ? [0, 100] : ["auto", "auto"]}
                         stroke="var(--muted-foreground)"
-                        width={140}
-                        tick={{ fontSize: 12 }}
+                        tick={{ fontSize: 11 }}
                     />
-                    <Tooltip
-                        contentStyle={{
-                            background: "var(--muted)",
-                            border: "1px solid var(--border)",
-                            color: "var(--foreground)",
-                            fontFamily: "inherit",
-                            borderRadius: 12,
-                        }}
-                        cursor={{ fill: "var(--primary)", opacity: 0.08 }}
-                    />
-                    <Bar dataKey={dataKey} fill="var(--primary)" radius={[0, 8, 8, 0]} />
-                </BarChart>
-            </ResponsiveContainer>
-        </div>
-    );
-}
-
-/** Barras horizontais de % acerto (0–100) — compactas */
-function BarPercentH({
-    data,
-}: {
-    data: Array<{ nome: string; acerto: number; total: number }>;
-}) {
-    return (
-        <div className="w-full h-56 sm:h-72">
-            <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} layout="vertical" margin={{ left: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis type="number" domain={[0, 100]} stroke="var(--muted-foreground)" />
                     <YAxis
                         type="category"
                         dataKey="nome"
+                        width={140}
                         stroke="var(--muted-foreground)"
-                        width={160}
-                        tick={{ fontSize: 12 }}
+                        tick={{ fontSize: 11 }}
                     />
                     <Tooltip
-                        formatter={(v: any, _n, p: any) => [`${v}%`, `Acerto (${p?.payload?.total ?? 0} q.)`]}
+                        formatter={(v: any) => (percent ? [`${v}%`, "Acerto"] : [v, "Minutos"])}
                         contentStyle={{
                             background: "var(--muted)",
                             border: "1px solid var(--border)",
                             color: "var(--foreground)",
-                            fontFamily: "inherit",
                             borderRadius: 12,
                         }}
-                        cursor={{ fill: "var(--primary)", opacity: 0.08 }}
                     />
-                    <Bar dataKey="acerto" fill="var(--primary)" radius={[0, 8, 8, 0]} />
+                    <Bar dataKey="valor" barSize={12} radius={[0, 8, 8, 0]} fill={percent ? "var(--primary)" : "#60a5fa"} />
                 </BarChart>
             </ResponsiveContainer>
         </div>
-    );
-}
-
-function ListBadges({
-    items,
-    variant = "ok",
-    empty,
-}: {
-    items: Array<{ nome: string; acerto: number; total: number }>;
-    variant?: "ok" | "danger";
-    empty?: string;
-}) {
-    if (!items.length) {
-        return <div className="text-sm text-muted-foreground">{empty || "Sem itens."}</div>;
-    }
-    const bg = variant === "danger" ? "bg-red-600 text-white" : "bg-emerald-600 text-white";
-    return (
-        <ul className="flex flex-wrap gap-2">
-            {items.map((it, i) => (
-                <li key={i} className={`text-xs rounded-full px-3 py-1 ${bg}`}>
-                    {it.nome} • {it.acerto}% <span className="opacity-80">({it.total} q.)</span>
-                </li>
-            ))}
-        </ul>
     );
 }
