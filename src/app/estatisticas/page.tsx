@@ -14,16 +14,16 @@ import {
 
 /* ===================== CONFIG ===================== */
 /** ajuste aqui se seu schema tiver outro nome/campos */
-const ANSWERS_TABLE = "estatisticas";
-const ANSWERS_CORRECT_FIELD = "correta";      // boolean
+const ANSWERS_TABLE = "resolucoes";
+const ANSWERS_CORRECT_FIELD = "correta"; // boolean
 const ANSWERS_MATERIA_FIELD = "materia_id";
 const ANSWERS_ASSUNTO_FIELD = "assunto_id";
 const ANSWERS_CREATED_FIELD = "created_at";
 
 /** limiares para “bem” e “melhorar” */
-const GOOD_THRESHOLD = 80;   // >= 80% acerto
-const BAD_THRESHOLD = 50;    // < 50% acerto
-const MIN_QUESTOES = 10;     // mínimo p/ considerar no indicador
+const GOOD_THRESHOLD = 80; // >= 80% acerto
+const BAD_THRESHOLD = 50; // < 50% acerto
+const MIN_QUESTOES = 10; // mínimo p/ considerar no indicador
 
 /* ===================== TYPES & HELPERS ===================== */
 type Daily = { dia: string; tempo_min: number };
@@ -38,12 +38,15 @@ function startOfLocalDay(ts = Date.now()) {
     return d;
 }
 function iso(dt: Date) {
-    // Mantemos ISO (UTC) para comparar com timestamptz no Postgres
     return dt.toISOString();
 }
 function toLocalDateLabel(dt: string | Date) {
     const d = typeof dt === "string" ? new Date(dt) : dt;
-    return d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
+    return d.toLocaleDateString("pt-BR", {
+        weekday: "short",
+        day: "2-digit",
+        month: "2-digit",
+    });
 }
 function fmtHMS(totalSeconds: number) {
     const d = Math.floor(totalSeconds / 86400);
@@ -87,23 +90,37 @@ export default function EstatisticasPage() {
     const [questoesTotal, setQuestoesTotal] = useState(0);
     const [acertoPeriodo, setAcertoPeriodo] = useState(0);
     const [acertoTotal, setAcertoTotal] = useState(0);
-    const [byMateriaAcc, setByMateriaAcc] = useState<Array<{ nome: string; acerto: number; total: number }>>([]);
-    const [byAssuntoAcc, setByAssuntoAcc] = useState<Array<{ nome: string; acerto: number; total: number }>>([]);
-    const [fortesMaterias, setFortesMaterias] = useState<Array<{ nome: string; acerto: number; total: number }>>([]);
-    const [fracasMaterias, setFracasMaterias] = useState<Array<{ nome: string; acerto: number; total: number }>>([]);
-    const [fortesAssuntos, setFortesAssuntos] = useState<Array<{ nome: string; acerto: number; total: number }>>([]);
-    const [fracosAssuntos, setFracosAssuntos] = useState<Array<{ nome: string; acerto: number; total: number }>>([]);
+    const [byMateriaAcc, setByMateriaAcc] = useState<
+        Array<{ nome: string; acerto: number; total: number }>
+    >([]);
+    const [byAssuntoAcc, setByAssuntoAcc] = useState<
+        Array<{ nome: string; acerto: number; total: number }>
+    >([]);
+    const [fortesMaterias, setFortesMaterias] = useState<
+        Array<{ nome: string; acerto: number; total: number }>
+    >([]);
+    const [fracasMaterias, setFracasMaterias] = useState<
+        Array<{ nome: string; acerto: number; total: number }>
+    >([]);
+    const [fortesAssuntos, setFortesAssuntos] = useState<
+        Array<{ nome: string; acerto: number; total: number }>
+    >([]);
+    const [fracosAssuntos, setFracosAssuntos] = useState<
+        Array<{ nome: string; acerto: number; total: number }>
+    >([]);
 
     useEffect(() => {
         (async () => {
             setLoading(true);
             setErro(null);
             try {
-                const { data: { user } } = await supabase.auth.getUser();
+                const {
+                    data: { user },
+                } = await supabase.auth.getUser();
                 if (!user) throw new Error("Não foi possível obter usuário logado.");
                 const uid = user.id;
 
-                // período (começo do dia local → ISO)
+                // período
                 const today0 = startOfLocalDay();
                 const from = new Date(today0.getTime() - (days - 1) * ONE_DAY);
                 const fromISO = iso(from);
@@ -130,12 +147,13 @@ export default function EstatisticasPage() {
                     .gte("started_at", fromISO)
                     .order("started_at", { ascending: true });
 
-                const sessions = (sess ?? []) as Array<{
-                    duration_seconds: number | null;
-                    started_at: string;
-                    materia_id: string | null;
-                    assunto_id: string | null;
-                }>;
+                const sessions =
+                    (sess ?? []) as Array<{
+                        duration_seconds: number | null;
+                        started_at: string;
+                        materia_id: string | null;
+                        assunto_id: string | null;
+                    }>;
 
                 // diária base
                 const baseDays: Daily[] = Array.from({ length: days }, (_, i) => {
@@ -155,15 +173,27 @@ export default function EstatisticasPage() {
                     count += 1;
 
                     const d = new Date(s.started_at);
-                    const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10);
+                    const key = new Date(
+                        d.getFullYear(),
+                        d.getMonth(),
+                        d.getDate()
+                    )
+                        .toISOString()
+                        .slice(0, 10);
                     byDay[key] = (byDay[key] ?? 0) + dur;
 
-                    if (s.materia_id) byMateriaTime[s.materia_id] = (byMateriaTime[s.materia_id] ?? 0) + dur;
-                    if (s.assunto_id) byAssuntoTime[s.assunto_id] = (byAssuntoTime[s.assunto_id] ?? 0) + dur;
+                    if (s.materia_id)
+                        byMateriaTime[s.materia_id] =
+                            (byMateriaTime[s.materia_id] ?? 0) + dur;
+                    if (s.assunto_id)
+                        byAssuntoTime[s.assunto_id] =
+                            (byAssuntoTime[s.assunto_id] ?? 0) + dur;
                 }
 
                 for (let i = 0; i < days; i++) {
-                    const d = new Date(from.getTime() + i * ONE_DAY).toISOString().slice(0, 10);
+                    const d = new Date(from.getTime() + i * ONE_DAY)
+                        .toISOString()
+                        .slice(0, 10);
                     baseDays[i].tempo_min = Math.round((byDay[d] ?? 0) / 60);
                 }
                 setDiario(baseDays);
@@ -180,13 +210,19 @@ export default function EstatisticasPage() {
                 }
                 setStreakDias(streak);
 
-                // top 5 tempo
+                // top 5 tempo (matérias/assuntos)
                 const tM: TopItem[] = Object.entries(byMateriaTime)
-                    .map(([id, sec]) => ({ nome: mMap[id] || id.slice(0, 8) + "…", minutos: Math.round(sec / 60) }))
+                    .map(([id, sec]) => ({
+                        nome: mMap[id] || id.slice(0, 8) + "…",
+                        minutos: Math.round(sec / 60),
+                    }))
                     .sort((a, b) => b.minutos - a.minutos)
                     .slice(0, 5);
                 const tA: TopItem[] = Object.entries(byAssuntoTime)
-                    .map(([id, sec]) => ({ nome: aMap[id] || id.slice(0, 8) + "…", minutos: Math.round(sec / 60) }))
+                    .map(([id, sec]) => ({
+                        nome: aMap[id] || id.slice(0, 8) + "…",
+                        minutos: Math.round(sec / 60),
+                    }))
                     .sort((a, b) => b.minutos - a.minutos)
                     .slice(0, 5);
                 setTopMaterias(tM);
@@ -194,49 +230,92 @@ export default function EstatisticasPage() {
 
                 /* ================= Resumos / Revisões ================= */
                 const [resPeriodo, resTot] = await Promise.all([
-                    supabase.from("resumos").select("id", { count: "exact", head: true }).eq("user_id", uid).gte("created_at", fromISO),
-                    supabase.from("resumos").select("id", { count: "exact", head: true }).eq("user_id", uid),
+                    supabase
+                        .from("resumos")
+                        .select("id", { count: "exact", head: true })
+                        .eq("user_id", uid)
+                        .gte("created_at", fromISO),
+                    supabase
+                        .from("resumos")
+                        .select("id", { count: "exact", head: true })
+                        .eq("user_id", uid),
                 ]);
                 setResumosPeriodo(resPeriodo.count ?? 0);
                 setResumosTotal(resTot.count ?? 0);
 
                 const [revPeriodo, revTot, revPend] = await Promise.all([
-                    supabase.from("revisoes").select("id", { count: "exact", head: true }).eq("user_id", uid).not("done_at", "is", null).gte("done_at", fromISO),
-                    supabase.from("revisoes").select("id", { count: "exact", head: true }).eq("user_id", uid).not("done_at", "is", null),
-                    supabase.from("revisoes").select("id", { count: "exact", head: true }).eq("user_id", uid).is("done_at", null),
+                    supabase
+                        .from("revisoes")
+                        .select("id", { count: "exact", head: true })
+                        .eq("user_id", uid)
+                        .not("done_at", "is", null)
+                        .gte("done_at", fromISO),
+                    supabase
+                        .from("revisoes")
+                        .select("id", { count: "exact", head: true })
+                        .eq("user_id", uid)
+                        .not("done_at", "is", null),
+                    supabase
+                        .from("revisoes")
+                        .select("id", { count: "exact", head: true })
+                        .eq("user_id", uid)
+                        .is("done_at", null),
                 ]);
                 setRevisoesPeriodo(revPeriodo.count ?? 0);
                 setRevisoesTotal(revTot.count ?? 0);
                 setRevisoesPendentes(revPend.count ?? 0);
 
                 /* ================= Questões / Acerto ================= */
-                // período
+                // — período (resolucoes)
                 const { data: ansPer } = await supabase
                     .from(ANSWERS_TABLE)
-                    .select(`id, ${ANSWERS_CORRECT_FIELD}, ${ANSWERS_MATERIA_FIELD}, ${ANSWERS_ASSUNTO_FIELD}, ${ANSWERS_CREATED_FIELD}`)
+                    .select(
+                        `id, ${ANSWERS_CORRECT_FIELD}, ${ANSWERS_MATERIA_FIELD}, ${ANSWERS_ASSUNTO_FIELD}, ${ANSWERS_CREATED_FIELD}`
+                    )
                     .eq("user_id", uid)
                     .gte(ANSWERS_CREATED_FIELD, fromISO);
 
-                // total (geral)
-                const { data: ansTot } = await supabase
-                    .from(ANSWERS_TABLE)
-                    .select(`id, ${ANSWERS_CORRECT_FIELD}, ${ANSWERS_MATERIA_FIELD}, ${ANSWERS_ASSUNTO_FIELD}`)
-                    .eq("user_id", uid);
-
                 const per = (ansPer ?? []) as any[];
-                const tot = (ansTot ?? []) as any[];
 
                 const perTotal = per.length;
-                const perCorretas = per.reduce((acc, r) => acc + (r[ANSWERS_CORRECT_FIELD] ? 1 : 0), 0);
+                const perCorretas = per.reduce(
+                    (acc, r) => acc + (r[ANSWERS_CORRECT_FIELD] ? 1 : 0),
+                    0
+                );
                 setQuestoesPeriodo(perTotal);
                 setAcertoPeriodo(perTotal ? Math.round((perCorretas / perTotal) * 100) : 0);
 
-                const totTotal = tot.length;
-                const totCorretas = tot.reduce((acc, r) => acc + (r[ANSWERS_CORRECT_FIELD] ? 1 : 0), 0);
-                setQuestoesTotal(totTotal);
-                setAcertoTotal(totTotal ? Math.round((totCorretas / totTotal) * 100) : 0);
+                // — TOTAL (lido da TABELA ESTATISTICAS). Se não existir, faz fallback em resolucoes.
+                const { data: est } = await supabase
+                    .from("estatisticas")
+                    .select("questoes_respondidas,taxa_acerto")
+                    .eq("user_id", uid)
+                    .maybeSingle();
 
-                // por matéria / assunto (período)
+                if (est) {
+                    setQuestoesTotal(est.questoes_respondidas ?? 0);
+                    setAcertoTotal(
+                        typeof est.taxa_acerto === "number"
+                            ? Math.round(est.taxa_acerto)
+                            : Number(est.taxa_acerto ?? 0)
+                    );
+                } else {
+                    // fallback: total no histórico de resolucoes (se você gravar respostas lá)
+                    const { data: ansTot } = await supabase
+                        .from(ANSWERS_TABLE)
+                        .select(`id, ${ANSWERS_CORRECT_FIELD}`)
+                        .eq("user_id", uid);
+                    const tot = (ansTot ?? []) as any[];
+                    const totTotal = tot.length;
+                    const totCorretas = tot.reduce(
+                        (acc, r) => acc + (r[ANSWERS_CORRECT_FIELD] ? 1 : 0),
+                        0
+                    );
+                    setQuestoesTotal(totTotal);
+                    setAcertoTotal(totTotal ? Math.round((totCorretas / totTotal) * 100) : 0);
+                }
+
+                // — por matéria / assunto (PERÍODO – depende de resolucoes)
                 const materAgg: Record<string, { total: number; corretas: number }> = {};
                 const assuntoAgg: Record<string, { total: number; corretas: number }> = {};
 
@@ -268,32 +347,32 @@ export default function EstatisticasPage() {
                     total: v.total,
                 }));
 
-                // ordena por total desc e pega top-10 p/ gráfico horizontal
+                // ordena por total desc e pega top-10 p/ gráfico
                 setByMateriaAcc(materList.sort((a, b) => b.total - a.total).slice(0, 10));
                 setByAssuntoAcc(assuntoList.sort((a, b) => b.total - a.total).slice(0, 10));
 
                 // indicadores (fortes e fracos) — aplicando mínimo de questões
                 setFortesMaterias(
                     materList
-                        .filter(x => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
+                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
                         .sort((a, b) => b.acerto - a.acerto)
                         .slice(0, 5)
                 );
                 setFracasMaterias(
                     materList
-                        .filter(x => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
+                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
                         .sort((a, b) => a.acerto - b.acerto)
                         .slice(0, 5)
                 );
                 setFortesAssuntos(
                     assuntoList
-                        .filter(x => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
+                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
                         .sort((a, b) => b.acerto - a.acerto)
                         .slice(0, 5)
                 );
                 setFracosAssuntos(
                     assuntoList
-                        .filter(x => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
+                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
                         .sort((a, b) => a.acerto - b.acerto)
                         .slice(0, 5)
                 );
@@ -338,7 +417,11 @@ export default function EstatisticasPage() {
             </div>
 
             {/* feedback */}
-            {loading && <div className="text-center text-muted-foreground font-semibold">Carregando estatísticas…</div>}
+            {loading && (
+                <div className="text-center text-muted-foreground font-semibold">
+                    Carregando estatísticas…
+                </div>
+            )}
             {erro && <div className="text-center text-destructive font-semibold">{erro}</div>}
 
             {!loading && !erro && (
@@ -346,9 +429,16 @@ export default function EstatisticasPage() {
                     {/* Cards (pomodoro/resumos/revisões) */}
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
                         {cards.map((c, i) => (
-                            <div key={i} className="rounded-2xl bg-card border border-border py-6 px-2 flex flex-col items-center shadow-sm">
-                                <span className="text-xs sm:text-sm text-muted-foreground mb-1 font-medium">{c.label}</span>
-                                <span className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">{c.valor}</span>
+                            <div
+                                key={i}
+                                className="rounded-2xl bg-card border border-border py-6 px-2 flex flex-col items-center shadow-sm"
+                            >
+                                <span className="text-xs sm:text-sm text-muted-foreground mb-1 font-medium">
+                                    {c.label}
+                                </span>
+                                <span className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
+                                    {c.valor}
+                                </span>
                             </div>
                         ))}
                     </div>
@@ -385,23 +475,33 @@ export default function EstatisticasPage() {
                         </div>
                     </Section>
 
-                    {/* Rankings de tempo — HORIZONTAL */}
+                    {/* Rankings de tempo (HORIZONTAL) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <Section title="Top 5 matérias por tempo (min)">
-                            <BarSimple data={topMaterias} dataKey="minutos" nameKey="nome" />
+                            <BarSimpleH data={topMaterias} dataKey="minutos" nameKey="nome" />
                         </Section>
                         <Section title="Top 5 assuntos por tempo (min)">
-                            <BarSimple data={topAssuntos} dataKey="minutos" nameKey="nome" />
+                            <BarSimpleH data={topAssuntos} dataKey="minutos" nameKey="nome" />
                         </Section>
                     </div>
 
-                    {/* Acerto por Matéria / Assunto (período) — HORIZONTAL */}
+                    {/* Acerto por Matéria / Assunto (PERÍODO – HORIZONTAL) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <Section title="Taxa de acerto por Matéria (período)">
-                            <BarPercent data={byMateriaAcc} />
+                            <BarPercentH data={byMateriaAcc} />
+                            {!byMateriaAcc.length && (
+                                <p className="text-sm text-muted-foreground mt-2">
+                                    Sem dados no período. Resolva questões para ver esta seção.
+                                </p>
+                            )}
                         </Section>
                         <Section title="Taxa de acerto por Assunto (período)">
-                            <BarPercent data={byAssuntoAcc} />
+                            <BarPercentH data={byAssuntoAcc} />
+                            {!byAssuntoAcc.length && (
+                                <p className="text-sm text-muted-foreground mt-2">
+                                    Sem dados no período. Resolva questões para ver esta seção.
+                                </p>
+                            )}
                         </Section>
                     </div>
 
@@ -426,9 +526,15 @@ export default function EstatisticasPage() {
                     <div className="rounded-2xl bg-card border border-border px-4 sm:px-8 py-5">
                         <div className="text-sm text-muted-foreground">
                             <div className="flex flex-wrap gap-x-6 gap-y-2">
-                                <span><strong>Resumos (total):</strong> {resumosTotal}</span>
-                                <span><strong>Revisões concluídas (total):</strong> {revisoesTotal}</span>
-                                <span><strong>Revisões pendentes:</strong> {revisoesPendentes}</span>
+                                <span>
+                                    <strong>Resumos (total):</strong> {resumosTotal}
+                                </span>
+                                <span>
+                                    <strong>Revisões concluídas (total):</strong> {revisoesTotal}
+                                </span>
+                                <span>
+                                    <strong>Revisões pendentes:</strong> {revisoesPendentes}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -458,22 +564,27 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     );
 }
 
-/** Barras horizontais (layout="vertical") */
-function BarSimple({ data, dataKey, nameKey }: { data: any[]; dataKey: string; nameKey: string }) {
-    if (!data?.length) {
-        return <div className="text-sm text-muted-foreground">Sem dados no período.</div>;
-    }
+/** Barras horizontais simples (tempo) */
+function BarSimpleH({
+    data,
+    dataKey,
+    nameKey,
+}: {
+    data: any[];
+    dataKey: string;
+    nameKey: string;
+}) {
     return (
         <div className="w-full h-56 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
+                <BarChart data={data} layout="vertical" margin={{ left: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis type="number" stroke="var(--muted-foreground)" />
                     <YAxis
                         type="category"
                         dataKey={nameKey}
-                        width={140}
                         stroke="var(--muted-foreground)"
+                        width={140}
                         tick={{ fontSize: 12 }}
                     />
                     <Tooltip
@@ -484,7 +595,7 @@ function BarSimple({ data, dataKey, nameKey }: { data: any[]; dataKey: string; n
                             fontFamily: "inherit",
                             borderRadius: 12,
                         }}
-                        cursor={{ fill: "var(--primary)", opacity: 0.1 }}
+                        cursor={{ fill: "var(--primary)", opacity: 0.08 }}
                     />
                     <Bar dataKey={dataKey} fill="var(--primary)" radius={[0, 8, 8, 0]} />
                 </BarChart>
@@ -493,21 +604,23 @@ function BarSimple({ data, dataKey, nameKey }: { data: any[]; dataKey: string; n
     );
 }
 
-function BarPercent({ data }: { data: Array<{ nome: string; acerto: number; total: number }> }) {
-    if (!data?.length) {
-        return <div className="text-sm text-muted-foreground">Sem dados no período.</div>;
-    }
+/** Barras horizontais de % acerto (0–100) */
+function BarPercentH({
+    data,
+}: {
+    data: Array<{ nome: string; acerto: number; total: number }>;
+}) {
     return (
         <div className="w-full h-56 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
+                <BarChart data={data} layout="vertical" margin={{ left: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis type="number" domain={[0, 100]} stroke="var(--muted-foreground)" />
                     <YAxis
                         type="category"
                         dataKey="nome"
-                        width={160}
                         stroke="var(--muted-foreground)"
+                        width={160}
                         tick={{ fontSize: 12 }}
                     />
                     <Tooltip
