@@ -61,7 +61,9 @@ export default function ResumosPage() {
     const [editText, setEditText] = useState("");
 
     // revisões
-    const [today, setToday] = useState<string>(new Date().toISOString().slice(0, 10));
+    const [today, setToday] = useState<string>(
+        new Date().toISOString().slice(0, 10)
+    );
     const [loadingRev, setLoadingRev] = useState(true);
     const [revisoes, setRevisoes] = useState<RevItem[]>([]);
     const [viewingRev, setViewingRev] = useState<RevItem | null>(null);
@@ -90,7 +92,11 @@ export default function ResumosPage() {
                 if (!uid) return;
 
                 const [eds, mats, asss] = await Promise.all([
-                    supabase.from("editais").select("id,nome").eq("user_id", uid).order("created_at", { ascending: false }),
+                    supabase
+                        .from("editais")
+                        .select("id,nome")
+                        .eq("user_id", uid)
+                        .order("created_at", { ascending: false }),
                     supabase.from("materias").select("id,nome").eq("user_id", uid),
                     supabase.from("assuntos").select("id,nome").eq("user_id", uid),
                 ]);
@@ -98,7 +104,9 @@ export default function ResumosPage() {
                 const eMap: Record<string, string> = {};
                 (eds.data ?? []).forEach((e: any) => (eMap[e.id] = e.nome));
                 setEditalMap(eMap);
-                setEditais((eds.data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
+                setEditais(
+                    (eds.data ?? []).map((d: any) => ({ value: d.id, label: d.nome }))
+                );
 
                 const mMap: Record<string, string> = {};
                 (mats.data ?? []).forEach((m: any) => (mMap[m.id] = m.nome));
@@ -107,19 +115,26 @@ export default function ResumosPage() {
                 const aMap: Record<string, string> = {};
                 (asss.data ?? []).forEach((a: any) => (aMap[a.id] = a.nome));
                 setAssuntoMap(aMap);
-            } catch { /* evita quebrar */ }
+            } catch {
+                /* evita quebrar */
+            }
         })();
     }, []);
 
     const nameEdital = (id?: string | null) => (id && editalMap[id]) || "Edital";
-    const nameMateria = (id?: string | null) => (id && materiaMap[id]) || "Matéria";
-    const nameAssunto = (id?: string | null) => (id && assuntoMap[id]) || "Assunto";
+    const nameMateria = (id?: string | null) =>
+        (id && materiaMap[id]) || "Matéria";
+    const nameAssunto = (id?: string | null) =>
+        (id && assuntoMap[id]) || "Assunto";
 
     /* ========= filtros dependentes (LISTA) ========= */
     useEffect(() => {
         (async () => {
             try {
-                setMateriasOpt([]); setMateria(""); setAssuntosOpt([]); setAssunto("");
+                setMateriasOpt([]);
+                setMateria("");
+                setAssuntosOpt([]);
+                setAssunto("");
                 if (!edital) return;
                 const { data: u } = await supabase.auth.getUser();
                 const uid = u?.user?.id;
@@ -130,7 +145,9 @@ export default function ResumosPage() {
                     .eq("user_id", uid)
                     .eq("edital_id", edital)
                     .order("nome");
-                setMateriasOpt((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
+                setMateriasOpt(
+                    (data ?? []).map((d: any) => ({ value: d.id, label: d.nome }))
+                );
             } catch { }
         })();
     }, [edital]);
@@ -138,7 +155,8 @@ export default function ResumosPage() {
     useEffect(() => {
         (async () => {
             try {
-                setAssuntosOpt([]); setAssunto("");
+                setAssuntosOpt([]);
+                setAssunto("");
                 if (!materia) return;
                 const { data: u } = await supabase.auth.getUser();
                 const uid = u?.user?.id;
@@ -149,7 +167,9 @@ export default function ResumosPage() {
                     .eq("user_id", uid)
                     .eq("materia_id", materia)
                     .order("nome");
-                setAssuntosOpt((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
+                setAssuntosOpt(
+                    (data ?? []).map((d: any) => ({ value: d.id, label: d.nome }))
+                );
             } catch { }
         })();
     }, [materia]);
@@ -160,11 +180,16 @@ export default function ResumosPage() {
         try {
             const { data: u } = await supabase.auth.getUser();
             const uid = u?.user?.id;
-            if (!uid) { setResumos([]); return; }
+            if (!uid) {
+                setResumos([]);
+                return;
+            }
 
             let q = supabase
                 .from("resumos")
-                .select("id,titulo,conteudo,created_at,edital_id,materia_id,assunto_id")
+                .select(
+                    "id,titulo,conteudo,created_at,edital_id,materia_id,assunto_id"
+                )
                 .eq("user_id", uid)
                 .order("created_at", { ascending: false })
                 .limit(100);
@@ -193,25 +218,30 @@ export default function ResumosPage() {
         try {
             const { data: u } = await supabase.auth.getUser();
             const uid = u?.user?.id;
-            if (!uid) { setRevisoes([]); return; }
+            if (!uid) {
+                setRevisoes([]);
+                return;
+            }
 
             const { data: rows, error } = await supabase
                 .from("revisoes")
                 .select(
                     "id,etapa,scheduled_for,resumos:resumo_id(id,titulo,conteudo,created_at,edital_id,materia_id,assunto_id)"
-                ) // usa alias explícito da FK
+                )
                 .eq("user_id", uid)
                 .is("done_at", null)
                 .lte("scheduled_for", today)
                 .order("scheduled_for", { ascending: true });
 
             if (!error && rows) {
-                const items: RevItem[] = (rows as any[]).map((r) => ({
-                    id: r.id,
-                    etapa: r.etapa,
-                    scheduled_for: r.scheduled_for,
-                    resumo: (r.resumos ?? {}) as ResumoRow,
-                })).filter(x => !!x.resumo?.id);
+                const items: RevItem[] = (rows as any[])
+                    .map((r) => ({
+                        id: r.id,
+                        etapa: r.etapa,
+                        scheduled_for: r.scheduled_for,
+                        resumo: (r.resumos ?? {}) as ResumoRow,
+                    }))
+                    .filter((x) => !!x.resumo?.id);
                 setRevisoes(items);
             } else {
                 setRevisoes([]);
@@ -237,21 +267,32 @@ export default function ResumosPage() {
 
     const salvarEdicao = async () => {
         if (!viewingResumo) return;
-        await supabase.from("resumos").update({ conteudo: editText }).eq("id", viewingResumo.id);
+        await supabase
+            .from("resumos")
+            .update({ conteudo: editText })
+            .eq("id", viewingResumo.id);
         setViewingResumo({ ...viewingResumo, conteudo: editText });
         setEditing(false);
     };
 
     const excluirResumo = async () => {
         if (!viewingResumo) return;
-        if (!confirm("Excluir este resumo? Isso também removerá as revisões relacionadas.")) return;
+        if (
+            !confirm(
+                "Excluir este resumo? Isso também removerá as revisões relacionadas."
+            )
+        )
+            return;
         await supabase.from("resumos").delete().eq("id", viewingResumo.id);
         setViewingResumo(null);
         await Promise.all([loadResumos(), loadRevisoes()]);
     };
 
     const concluirRevisao = async (idRevisao: string) => {
-        await supabase.from("revisoes").update({ done_at: new Date().toISOString() }).eq("id", idRevisao);
+        await supabase
+            .from("revisoes")
+            .update({ done_at: new Date().toISOString() })
+            .eq("id", idRevisao);
         setRevisoes((rs) => rs.filter((x) => x.id !== idRevisao));
         setViewingRev(null);
     };
@@ -277,7 +318,13 @@ export default function ResumosPage() {
             const { data: u } = await supabase.auth.getUser();
             const uid = u?.user?.id;
             if (!uid) throw new Error("Você precisa estar autenticado.");
-            if (!newEdital || !newMateria || !newAssunto || !newTitulo.trim() || !newConteudo.trim()) {
+            if (
+                !newEdital ||
+                !newMateria ||
+                !newAssunto ||
+                !newTitulo.trim() ||
+                !newConteudo.trim()
+            ) {
                 throw new Error("Preencha todos os campos.");
             }
             const { error } = await supabase.from("resumos").insert({
@@ -290,8 +337,11 @@ export default function ResumosPage() {
             });
             if (error) throw error;
             setOpenNew(false);
-            setNewTitulo(""); setNewConteudo("");
-            setNewEdital(""); setNewMateria(""); setNewAssunto("");
+            setNewTitulo("");
+            setNewConteudo("");
+            setNewEdital("");
+            setNewMateria("");
+            setNewAssunto("");
             await Promise.all([loadResumos(), loadRevisoes()]);
         } catch (e: any) {
             alert(e?.message || "Falha ao salvar.");
@@ -300,7 +350,7 @@ export default function ResumosPage() {
         }
     };
 
-    /* ========= opções do MODAL (separadas dos filtros) ========= */
+    /* ========= opções do MODAL ========= */
     useEffect(() => {
         if (!openNew) return;
         (async () => {
@@ -312,14 +362,18 @@ export default function ResumosPage() {
                 .select("id,nome")
                 .eq("user_id", uid)
                 .order("created_at", { ascending: false });
-            setOptsNewEditais((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
+            setOptsNewEditais(
+                (data ?? []).map((d: any) => ({ value: d.id, label: d.nome }))
+            );
         })();
     }, [openNew]);
 
     useEffect(() => {
         (async () => {
-            setOptsNewMaterias([]); setNewMateria("");
-            setOptsNewAssuntos([]); setNewAssunto("");
+            setOptsNewMaterias([]);
+            setNewMateria("");
+            setOptsNewAssuntos([]);
+            setNewAssunto("");
             if (!newEdital) return;
             const { data: u } = await supabase.auth.getUser();
             const uid = u?.user?.id;
@@ -330,13 +384,16 @@ export default function ResumosPage() {
                 .eq("user_id", uid)
                 .eq("edital_id", newEdital)
                 .order("nome");
-            setOptsNewMaterias((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
+            setOptsNewMaterias(
+                (data ?? []).map((d: any) => ({ value: d.id, label: d.nome }))
+            );
         })();
     }, [newEdital]);
 
     useEffect(() => {
         (async () => {
-            setOptsNewAssuntos([]); setNewAssunto("");
+            setOptsNewAssuntos([]);
+            setNewAssunto("");
             if (!newMateria) return;
             const { data: u } = await supabase.auth.getUser();
             const uid = u?.user?.id;
@@ -347,76 +404,138 @@ export default function ResumosPage() {
                 .eq("user_id", uid)
                 .eq("materia_id", newMateria)
                 .order("nome");
-            setOptsNewAssuntos((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
+            setOptsNewAssuntos(
+                (data ?? []).map((d: any) => ({ value: d.id, label: d.nome }))
+            );
         })();
     }, [newMateria]);
 
     /* ========= UI ========= */
     return (
-        <div className="mx-auto max-w-4xl p-4">
-            <div className="mb-4 flex items-center justify-between">
+        <div className="mx-auto max-w-4xl p-4 overflow-x-hidden">
+            {/* header: agora quebra linha no mobile */}
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <h1 className="text-2xl font-semibold">Estudos</h1>
-                <div className="flex items-center gap-2">
-                    <button onClick={() => setTab("revisao")} className={`rounded px-3 py-2 ${tab === "revisao" ? "bg-indigo-600 text-white" : "bg-gray-200"}`}>Revisões</button>
-                    <button onClick={() => setTab("lista")} className={`rounded px-3 py-2 ${tab === "lista" ? "bg-indigo-600 text-white" : "bg-gray-200"}`}>Resumos</button>
-                    <button className="ml-2 rounded bg-indigo-600 px-3 py-2 text-white" onClick={() => setOpenNew(true)}>+ Novo Resumo</button>
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        onClick={() => setTab("revisao")}
+                        className={`rounded px-3 py-2 ${tab === "revisao" ? "bg-indigo-600 text-white" : "bg-gray-200"
+                            }`}
+                    >
+                        Revisões
+                    </button>
+                    <button
+                        onClick={() => setTab("lista")}
+                        className={`rounded px-3 py-2 ${tab === "lista" ? "bg-indigo-600 text-white" : "bg-gray-200"
+                            }`}
+                    >
+                        Resumos
+                    </button>
+                    <button
+                        className="ml-0 sm:ml-2 rounded bg-indigo-600 px-3 py-2 text-white"
+                        onClick={() => setOpenNew(true)}
+                    >
+                        + Novo Resumo
+                    </button>
                 </div>
             </div>
 
             {/* ===== Revisões ===== */}
             {tab === "revisao" && (
                 <div>
-                    <label className="text-sm text-gray-600">
-                        Mostrar pendentes até:
-                        <input type="date" value={today} onChange={(e) => setToday(e.target.value)} className="ml-2 rounded border p-1" />
+                    <label className="text-sm text-gray-600 block">
+                        <span className="mr-2">Mostrar pendentes até:</span>
+                        <input
+                            type="date"
+                            value={today}
+                            onChange={(e) => setToday(e.target.value)}
+                            className="rounded border p-1"
+                        />
                     </label>
 
                     <div className="mt-3 space-y-3">
                         {loadingRev && <div className="rounded border p-3">Carregando…</div>}
                         {!loadingRev && revisoes.length === 0 && !viewingRev && (
                             <div className="rounded border p-3 text-gray-500">
-                                Sem revisões pendentes. Adicione um resumo e os agendamentos (1/3/7/15/30/60/90) serão criados.
+                                Sem revisões pendentes. Adicione um resumo e os agendamentos
+                                (1/3/7/15/30/60/90) serão criados.
                             </div>
                         )}
 
-                        {!viewingRev && revisoes.map((rv) => (
-                            <div key={rv.id} className="rounded border p-3 hover:bg-gray-50 transition">
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                        <div className="text-xs text-gray-500">
-                                            {nameMateria(rv.resumo.materia_id)} • {nameAssunto(rv.resumo.assunto_id)}
+                        {!viewingRev &&
+                            revisoes.map((rv) => (
+                                <div
+                                    key={rv.id}
+                                    className="rounded border p-3 hover:bg-gray-50 transition"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-xs text-gray-500 break-words">
+                                                {nameMateria(rv.resumo.materia_id)} •{" "}
+                                                {nameAssunto(rv.resumo.assunto_id)}
+                                            </div>
+                                            <div className="font-medium truncate">
+                                                {rv.resumo.titulo || "Resumo"}
+                                            </div>
+                                            {rv.resumo.conteudo && (
+                                                <div className="mt-1 text-sm text-gray-700 line-clamp-2 break-words">
+                                                    {plainSnippet(rv.resumo.conteudo)}
+                                                </div>
+                                            )}
+                                            <div className="mt-1 text-xs text-gray-500">
+                                                Etapa {rv.etapa} •{" "}
+                                                {new Date(rv.scheduled_for).toLocaleDateString("pt-BR")}
+                                            </div>
                                         </div>
-                                        <div className="font-medium truncate">{rv.resumo.titulo || "Resumo"}</div>
-                                        {rv.resumo.conteudo && (
-                                            <div className="mt-1 text-sm text-gray-700 line-clamp-2">{plainSnippet(rv.resumo.conteudo)}</div>
-                                        )}
-                                        <div className="mt-1 text-xs text-gray-500">
-                                            Etapa {rv.etapa} • {new Date(rv.scheduled_for).toLocaleDateString("pt-BR")}
-                                        </div>
+                                        <button
+                                            onClick={() => setViewingRev(rv)}
+                                            className="shrink-0 rounded bg-indigo-600 px-3 py-2 text-white"
+                                        >
+                                            Ver
+                                        </button>
                                     </div>
-                                    <button onClick={() => setViewingRev(rv)} className="shrink-0 rounded bg-indigo-600 px-3 py-2 text-white">Ver</button>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
 
                         {viewingRev && (
                             <div className="rounded border">
-                                <div className="flex items-center justify-between border-b p-3">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b p-3">
                                     <div className="min-w-0">
-                                        <div className="text-sm text-gray-500">
-                                            {nameMateria(viewingRev.resumo.materia_id)} • {nameAssunto(viewingRev.resumo.assunto_id)}
+                                        <div className="text-sm text-gray-500 break-words">
+                                            {nameMateria(viewingRev.resumo.materia_id)} •{" "}
+                                            {nameAssunto(viewingRev.resumo.assunto_id)}
                                         </div>
                                         <div className="text-xs text-gray-500">
-                                            Etapa {viewingRev.etapa} • {new Date(viewingRev.scheduled_for).toLocaleDateString("pt-BR")}
+                                            Etapa {viewingRev.etapa} •{" "}
+                                            {new Date(viewingRev.scheduled_for).toLocaleDateString(
+                                                "pt-BR"
+                                            )}
                                         </div>
-                                        <h2 className="mt-1 truncate text-lg font-semibold">{viewingRev.resumo.titulo || "Resumo"}</h2>
+                                        <h2 className="mt-1 truncate text-lg font-semibold">
+                                            {viewingRev.resumo.titulo || "Resumo"}
+                                        </h2>
                                     </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => setViewingRev(null)} className="rounded bg-gray-200 px-3 py-2">Voltar</button>
-                                        <button onClick={() => concluirRevisao(viewingRev.id)} className="rounded bg-green-600 px-3 py-2 text-white">Concluir revisão</button>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            onClick={() => setViewingRev(null)}
+                                            className="rounded bg-gray-200 px-3 py-2"
+                                        >
+                                            Voltar
+                                        </button>
+                                        <button
+                                            onClick={() => concluirRevisao(viewingRev.id)}
+                                            className="rounded bg-green-600 px-3 py-2 text-white"
+                                        >
+                                            Concluir revisão
+                                        </button>
                                     </div>
                                 </div>
-                                <div className="prose max-w-none p-4" dangerouslySetInnerHTML={{ __html: renderWithMarks(viewingRev.resumo.conteudo ?? "") }} />
+                                <div
+                                    className="prose max-w-none p-4 break-words"
+                                    dangerouslySetInnerHTML={{
+                                        __html: renderWithMarks(viewingRev.resumo.conteudo ?? ""),
+                                    }}
+                                />
                             </div>
                         )}
                     </div>
@@ -429,23 +548,51 @@ export default function ResumosPage() {
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <label className="block">
                             <span className="mb-1 block text-sm text-gray-600">Edital</span>
-                            <select value={edital} onChange={(e) => setEdital(e.target.value)} className="w-full rounded border p-2">
+                            <select
+                                value={edital}
+                                onChange={(e) => setEdital(e.target.value)}
+                                className="w-full rounded border p-2"
+                            >
                                 <option value="">Todos</option>
-                                {editais.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                {editais.map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                        {o.label}
+                                    </option>
+                                ))}
                             </select>
                         </label>
                         <label className="block">
                             <span className="mb-1 block text-sm text-gray-600">Matéria</span>
-                            <select value={materia} onChange={(e) => setMateria(e.target.value)} className="w-full rounded border p-2" disabled={!edital}>
+                            <select
+                                value={materia}
+                                onChange={(e) => setMateria(e.target.value)}
+                                className="w-full rounded border p-2"
+                                disabled={!edital}
+                            >
                                 <option value="">{edital ? "Todas" : "Selecione um edital"}</option>
-                                {materiasOpt.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                {materiasOpt.map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                        {o.label}
+                                    </option>
+                                ))}
                             </select>
                         </label>
                         <label className="block">
                             <span className="mb-1 block text-sm text-gray-600">Assunto</span>
-                            <select value={assunto} onChange={(e) => setAssunto(e.target.value)} className="w-full rounded border p-2" disabled={!materia}>
-                                <option value="">{materia ? "Todos" : "Selecione a matéria"}</option>
-                                {assuntosOpt.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            <select
+                                value={assunto}
+                                onChange={(e) => setAssunto(e.target.value)}
+                                className="w-full rounded border p-2"
+                                disabled={!materia}
+                            >
+                                <option value="">
+                                    {materia ? "Todos" : "Selecione a matéria"}
+                                </option>
+                                {assuntosOpt.map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                        {o.label}
+                                    </option>
+                                ))}
                             </select>
                         </label>
                     </div>
@@ -453,52 +600,109 @@ export default function ResumosPage() {
                     <div className="mt-3 space-y-3">
                         {loadingList && <div className="rounded border p-3">Carregando…</div>}
                         {!loadingList && resumos.length === 0 && !viewingResumo && (
-                            <div className="rounded border p-3 text-gray-500">Nenhum resumo encontrado.</div>
+                            <div className="rounded border p-3 text-gray-500">
+                                Nenhum resumo encontrado.
+                            </div>
                         )}
 
-                        {!viewingResumo && resumos.map((r) => (
-                            <div key={r.id} className="flex flex-col justify-between gap-2 rounded border p-3 sm:flex-row sm:items-center">
-                                <div className="min-w-0">
-                                    <div className="text-sm text-gray-500">
-                                        {nameEdital(r.edital_id)} • {nameMateria(r.materia_id)} • {nameAssunto(r.assunto_id)} • {new Date(r.created_at).toLocaleDateString("pt-BR")}
+                        {!viewingResumo &&
+                            resumos.map((r) => (
+                                <div
+                                    key={r.id}
+                                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded border p-3"
+                                >
+                                    <div className="min-w-0">
+                                        <div className="text-sm text-gray-500 break-words">
+                                            {nameEdital(r.edital_id)} • {nameMateria(r.materia_id)} •{" "}
+                                            {nameAssunto(r.assunto_id)} •{" "}
+                                            {new Date(r.created_at).toLocaleDateString("pt-BR")}
+                                        </div>
+                                        <div className="font-medium truncate">{r.titulo}</div>
                                     </div>
-                                    <div className="font-medium truncate">{r.titulo}</div>
+                                    <button
+                                        onClick={() => openViewResumo(r)}
+                                        className="shrink-0 rounded bg-indigo-600 px-3 py-2 text-white"
+                                    >
+                                        Ver
+                                    </button>
                                 </div>
-                                <button onClick={() => openViewResumo(r)} className="rounded bg-indigo-600 px-3 py-2 text-white">Ver</button>
-                            </div>
-                        ))}
+                            ))}
 
                         {viewingResumo && (
                             <div className="rounded border">
-                                <div className="flex items-center justify-between border-b p-3">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b p-3">
                                     <div className="min-w-0">
-                                        <div className="text-sm text-gray-500">
-                                            {nameEdital(viewingResumo.edital_id)} • {nameMateria(viewingResumo.materia_id)} • {nameAssunto(viewingResumo.assunto_id)} • {new Date(viewingResumo.created_at).toLocaleDateString("pt-BR")}
+                                        <div className="text-sm text-gray-500 break-words">
+                                            {nameEdital(viewingResumo.edital_id)} •{" "}
+                                            {nameMateria(viewingResumo.materia_id)} •{" "}
+                                            {nameAssunto(viewingResumo.assunto_id)} •{" "}
+                                            {new Date(viewingResumo.created_at).toLocaleDateString(
+                                                "pt-BR"
+                                            )}
                                         </div>
-                                        <h2 className="mt-1 truncate text-lg font-semibold">{viewingResumo.titulo}</h2>
+                                        <h2 className="mt-1 truncate text-lg font-semibold">
+                                            {viewingResumo.titulo}
+                                        </h2>
                                     </div>
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-wrap gap-2">
                                         {!editing ? (
-                                            <button onClick={() => setEditing(true)} className="rounded bg-gray-800 px-3 py-2 text-white">Editar</button>
+                                            <button
+                                                onClick={() => setEditing(true)}
+                                                className="rounded bg-gray-800 px-3 py-2 text-white"
+                                            >
+                                                Editar
+                                            </button>
                                         ) : (
                                             <>
-                                                <button onClick={salvarEdicao} className="rounded bg-green-600 px-3 py-2 text-white">Salvar</button>
-                                                <button onClick={() => { setEditing(false); setEditText(viewingResumo.conteudo ?? ""); }} className="rounded bg-gray-200 px-3 py-2">Cancelar</button>
+                                                <button
+                                                    onClick={salvarEdicao}
+                                                    className="rounded bg-green-600 px-3 py-2 text-white"
+                                                >
+                                                    Salvar
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setEditing(false);
+                                                        setEditText(viewingResumo.conteudo ?? "");
+                                                    }}
+                                                    className="rounded bg-gray-200 px-3 py-2"
+                                                >
+                                                    Cancelar
+                                                </button>
                                             </>
                                         )}
-                                        <button onClick={excluirResumo} className="rounded bg-red-600 px-3 py-2 text-white">Excluir</button>
-                                        <button onClick={() => setViewingResumo(null)} className="rounded bg-gray-200 px-3 py-2">Voltar</button>
+                                        <button
+                                            onClick={excluirResumo}
+                                            className="rounded bg-red-600 px-3 py-2 text-white"
+                                        >
+                                            Excluir
+                                        </button>
+                                        <button
+                                            onClick={() => setViewingResumo(null)}
+                                            className="rounded bg-gray-200 px-3 py-2"
+                                        >
+                                            Voltar
+                                        </button>
                                     </div>
                                 </div>
 
                                 {!editing ? (
-                                    <div className="prose max-w-none p-4" dangerouslySetInnerHTML={{ __html: renderWithMarks(viewingResumo.conteudo ?? "") }} />
+                                    <div
+                                        className="prose max-w-none p-4 break-words"
+                                        dangerouslySetInnerHTML={{
+                                            __html: renderWithMarks(viewingResumo.conteudo ?? ""),
+                                        }}
+                                    />
                                 ) : (
                                     <div className="p-4">
                                         <div className="mb-2 text-sm text-gray-600">
                                             Dica: use <code>==texto==</code> para <mark>grifar</mark>
                                         </div>
-                                        <textarea className="h-64 w-full rounded border p-2" value={editText} onChange={(e) => setEditText(e.target.value)} />
+                                        <textarea
+                                            className="h-64 w-full rounded border p-2"
+                                            value={editText}
+                                            onChange={(e) => setEditText(e.target.value)}
+                                        />
                                     </div>
                                 )}
                             </div>
@@ -511,48 +715,116 @@ export default function ResumosPage() {
             {openNew && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
                     <div className="w-full max-w-2xl rounded-lg bg-white shadow">
-                        <div className="flex items-center justify-between border-b p-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b p-3">
                             <h3 className="text-lg font-semibold">Novo Resumo</h3>
-                            <button onClick={() => setOpenNew(false)} className="rounded px-2 py-1 hover:bg-gray-100">✕</button>
+                            <button
+                                onClick={() => setOpenNew(false)}
+                                className="rounded px-2 py-1 hover:bg-gray-100 self-start sm:self-auto"
+                            >
+                                ✕
+                            </button>
                         </div>
+
                         <div className="p-4 space-y-3">
                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                 <label className="block">
                                     <span className="mb-1 block text-sm text-gray-600">Edital</span>
-                                    <select value={newEdital} onChange={(e) => setNewEdital(e.target.value)} className="w-full rounded border p-2">
+                                    <select
+                                        value={newEdital}
+                                        onChange={(e) => setNewEdital(e.target.value)}
+                                        className="w-full rounded border p-2"
+                                    >
                                         <option value="">Selecione</option>
-                                        {optsNewEditais.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                        {optsNewEditais.map((o) => (
+                                            <option key={o.value} value={o.value}>
+                                                {o.label}
+                                            </option>
+                                        ))}
                                     </select>
                                 </label>
                                 <label className="block">
-                                    <span className="mb-1 block text-sm text-gray-600">Matéria</span>
-                                    <select value={newMateria} onChange={(e) => setNewMateria(e.target.value)} className="w-full rounded border p-2" disabled={!newEdital}>
-                                        <option value="">{newEdital ? "Selecione" : "Selecione um edital"}</option>
-                                        {optsNewMaterias.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    <span className="mb-1 block text-sm text-gray-600">
+                                        Matéria
+                                    </span>
+                                    <select
+                                        value={newMateria}
+                                        onChange={(e) => setNewMateria(e.target.value)}
+                                        className="w-full rounded border p-2"
+                                        disabled={!newEdital}
+                                    >
+                                        <option value="">
+                                            {newEdital ? "Selecione" : "Selecione um edital"}
+                                        </option>
+                                        {optsNewMaterias.map((o) => (
+                                            <option key={o.value} value={o.value}>
+                                                {o.label}
+                                            </option>
+                                        ))}
                                     </select>
                                 </label>
                                 <label className="block">
-                                    <span className="mb-1 block text-sm text-gray-600">Assunto</span>
-                                    <select value={newAssunto} onChange={(e) => setNewAssunto(e.target.value)} className="w-full rounded border p-2" disabled={!newMateria}>
-                                        <option value="">{newMateria ? "Selecione" : "Selecione a matéria"}</option>
-                                        {optsNewAssuntos.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    <span className="mb-1 block text-sm text-gray-600">
+                                        Assunto
+                                    </span>
+                                    <select
+                                        value={newAssunto}
+                                        onChange={(e) => setNewAssunto(e.target.value)}
+                                        className="w-full rounded border p-2"
+                                        disabled={!newMateria}
+                                    >
+                                        <option value="">
+                                            {newMateria ? "Selecione" : "Selecione a matéria"}
+                                        </option>
+                                        {optsNewAssuntos.map((o) => (
+                                            <option key={o.value} value={o.value}>
+                                                {o.label}
+                                            </option>
+                                        ))}
                                     </select>
                                 </label>
                             </div>
 
-                            <input className="w-full rounded border p-2" placeholder="Título do resumo" value={newTitulo} onChange={(e) => setNewTitulo(e.target.value)} />
+                            <input
+                                className="w-full rounded border p-2"
+                                placeholder="Título do resumo"
+                                value={newTitulo}
+                                onChange={(e) => setNewTitulo(e.target.value)}
+                            />
 
                             <div className="rounded border">
-                                <div className="flex items-center justify-between border-b p-2">
-                                    <div className="text-sm text-gray-600">Dica: use <code>==texto==</code> para <mark>grifar</mark></div>
-                                    <button className="rounded bg-gray-100 px-2 py-1 text-sm" onClick={addMarkNew} disabled={!newConteudo}>Grifar seleção</button>
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b p-2">
+                                    <div className="text-sm text-gray-600">
+                                        Dica: use <code>==texto==</code> para <mark>grifar</mark>
+                                    </div>
+                                    <button
+                                        className="rounded bg-gray-100 px-2 py-1 text-sm self-start sm:self-auto"
+                                        onClick={addMarkNew}
+                                        disabled={!newConteudo}
+                                    >
+                                        Grifar seleção
+                                    </button>
                                 </div>
-                                <textarea ref={newTextRef} className="h-64 w-full p-3 outline-none" value={newConteudo} onChange={(e) => setNewConteudo(e.target.value)} placeholder="Escreva seu resumo…" />
+                                <textarea
+                                    ref={newTextRef}
+                                    className="h-64 w-full p-3 outline-none"
+                                    value={newConteudo}
+                                    onChange={(e) => setNewConteudo(e.target.value)}
+                                    placeholder="Escreva seu resumo…"
+                                />
                             </div>
 
-                            <div className="flex items-center justify-end gap-2">
-                                <button onClick={() => setOpenNew(false)} className="rounded bg-gray-200 px-3 py-2">Cancelar</button>
-                                <button onClick={salvarNovo} disabled={savingNew} className="rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-50">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                <button
+                                    onClick={() => setOpenNew(false)}
+                                    className="rounded bg-gray-200 px-3 py-2"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={salvarNovo}
+                                    disabled={savingNew}
+                                    className="rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-50"
+                                >
                                     {savingNew ? "Salvando..." : "Salvar resumo"}
                                 </button>
                             </div>
