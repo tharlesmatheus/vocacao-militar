@@ -1,10 +1,11 @@
 "use client";
+
 import React, { useEffect, useState } from "react";
 import { QuestionCard } from "./QuestionCard";
 import { Pagination } from "./Pagination";
 import { supabase } from "../lib/supabaseClient";
 
-// Tipos de filtro
+/* ========== Tipos ========== */
 type Filters = {
     instituicao?: string;
     cargo?: string;
@@ -19,8 +20,8 @@ type Questao = {
     id: string;
     instituicao: string;
     cargo: string;
-    disciplina: string;
-    assunto: string;
+    disciplina: string; // <- vem como nome da matéria
+    assunto: string;    // <- vem como nome do assunto
     modalidade: string;
     banca: string;
     enunciado: string;
@@ -36,7 +37,8 @@ interface QuestionsListProps {
     filters?: Filters;
 }
 
-export function QuestionsList({ filters = {} }: QuestionsListProps) {
+/* ========== Componente ========== */
+function QuestionsList({ filters = {} }: QuestionsListProps) {
     const [questoes, setQuestoes] = useState<Questao[]>([]);
     const [page, setPage] = useState(1);
     const [perPage, setPerPage] = useState(3);
@@ -51,39 +53,45 @@ export function QuestionsList({ filters = {} }: QuestionsListProps) {
         // Aplica os filtros (exceto excluirRespondidas)
         Object.entries(filters).forEach(([key, value]) => {
             if (value && key !== "excluirRespondidas") {
-                query = query.eq(key, value);
+                query = query.eq(key, value as string);
             }
         });
 
-        // Filtro especial: excluir já respondidas
+        // Filtro especial: excluir já respondidas (ajuste esse campo se necessário)
         if (filters.excluirRespondidas) {
-            query = query.eq("respondida", false); // Ajuste esse campo se necessário!
+            query = query.eq("respondida", false);
         }
 
-        query.order("created_at", { ascending: false })
+        query
+            .order("created_at", { ascending: false })
             .then(({ data, error }) => {
                 if (!error && data) setQuestoes(data as Questao[]);
                 else setQuestoes([]);
                 setLoading(false);
             });
-        setPage(1); // Volta para página 1 ao filtrar
+
+        // Volta para página 1 ao alterar filtros
+        setPage(1);
     }, [filters]);
 
-    // Handler para atualizar erros instantaneamente
+    // Atualiza erros localmente sem refetch
     const handleNotificarErro = (questaoId: string, erroText: string) => {
-        setQuestoes(questoes =>
-            questoes.map(q =>
+        setQuestoes((qs) =>
+            qs.map((q) =>
                 q.id === questaoId
                     ? {
                         ...q,
-                        erros: [...(q.erros ?? []), { mensagem: erroText, data: new Date().toISOString() }]
+                        erros: [
+                            ...(q.erros ?? []),
+                            { mensagem: erroText, data: new Date().toISOString() },
+                        ],
                     }
                     : q
             )
         );
     };
 
-    // Paginação real
+    // Paginação
     const start = (page - 1) * perPage;
     const end = start + perPage;
     const paginated = questoes.slice(start, end);
@@ -102,7 +110,10 @@ export function QuestionsList({ filters = {} }: QuestionsListProps) {
                         <select
                             className="bg-muted border border-border rounded px-3 py-1 text-xs text-foreground"
                             value={perPage}
-                            onChange={e => { setPerPage(Number(e.target.value)); setPage(1); }}
+                            onChange={(e) => {
+                                setPerPage(Number(e.target.value));
+                                setPage(1);
+                            }}
                         >
                             <option value={3}>3 por página</option>
                             <option value={5}>5 por página</option>
@@ -110,18 +121,25 @@ export function QuestionsList({ filters = {} }: QuestionsListProps) {
                         </select>
                     </div>
                 </div>
+
                 <div className="flex flex-col gap-7">
                     {loading ? (
-                        <div className="text-muted-foreground py-8 text-center">Carregando questões...</div>
+                        <div className="text-muted-foreground py-8 text-center">
+                            Carregando questões...
+                        </div>
                     ) : paginated.length === 0 ? (
                         <div className="min-h-[120px] flex items-center justify-center text-[#a8b1c6]">
                             Nenhuma questão encontrada.
                         </div>
                     ) : (
-                        paginated.map((q) =>
+                        paginated.map((q) => (
                             <QuestionCard
                                 key={q.id}
                                 id={q.id}
+                                // >>> ESSAS DUAS PROPS SÃO O PONTO-CHAVE <<<
+                                materiaNome={q.disciplina} // disciplina = “matéria” (nome)
+                                assuntoNome={q.assunto}    // assunto (nome)
+                                // -------------------------------------------------------
                                 tags={[
                                     q.instituicao,
                                     q.cargo,
@@ -141,9 +159,10 @@ export function QuestionsList({ filters = {} }: QuestionsListProps) {
                                 erros={q.erros}
                                 onNotificarErro={(erroText) => handleNotificarErro(q.id, erroText)}
                             />
-                        )
+                        ))
                     )}
                 </div>
+
                 <Pagination
                     total={questoes.length}
                     perPage={perPage}
@@ -154,3 +173,10 @@ export function QuestionsList({ filters = {} }: QuestionsListProps) {
         </div>
     );
 }
+
+/* 
+   Para evitar futuros erros de import (como o da Vercel),
+   exporto como named *e* default.
+*/
+export { QuestionsList };
+export default QuestionsList;
