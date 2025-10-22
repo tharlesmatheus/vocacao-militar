@@ -10,6 +10,7 @@ import {
     ResponsiveContainer,
     Tooltip,
     CartesianGrid,
+    LabelList,
 } from "recharts";
 
 /* ===================== CONFIG ===================== */
@@ -57,6 +58,7 @@ function fmtHMS(totalSeconds: number) {
     return parts.join(" ");
 }
 
+/* ===================== PAGE ===================== */
 export default function EstatisticasPage() {
     const [days, setDays] = useState<7 | 30 | 90>(7);
     const [loading, setLoading] = useState(true);
@@ -178,11 +180,7 @@ export default function EstatisticasPage() {
                     count += 1;
 
                     const d = new Date(s.started_at);
-                    const key = new Date(
-                        d.getFullYear(),
-                        d.getMonth(),
-                        d.getDate()
-                    )
+                    const key = new Date(d.getFullYear(), d.getMonth(), d.getDate())
                         .toISOString()
                         .slice(0, 10);
                     byDay[key] = (byDay[key] ?? 0) + dur;
@@ -215,7 +213,7 @@ export default function EstatisticasPage() {
                 }
                 setStreakDias(streak);
 
-                // top 5 tempo (matérias/assuntos)
+                // top 5 tempo
                 const tM: TopItem[] = Object.entries(byMateriaTime)
                     .map(([id, sec]) => ({
                         nome: mMap[id] || id.slice(0, 8) + "…",
@@ -271,7 +269,7 @@ export default function EstatisticasPage() {
                 setRevisoesPendentes(revPend.count ?? 0);
 
                 /* ================= Questões ================= */
-                // — PERÍODO (resolucoes)
+                // — PERÍODO
                 const { data: ansPer } = await supabase
                     .from(ANSWERS_TABLE)
                     .select(
@@ -304,7 +302,6 @@ export default function EstatisticasPage() {
                             : Number(est.taxa_acerto ?? 0)
                     );
 
-                    // transforma JSONB em lista com nomes
                     const matObj = (est.acc_por_materia ?? {}) as Record<
                         string,
                         { total: number; corretas: number }
@@ -315,12 +312,12 @@ export default function EstatisticasPage() {
                     >;
 
                     const matList = Object.entries(matObj).map(([id, v]) => ({
-                        nome: mMap[id] || id.slice(0, 8) + "…",
+                        nome: materiaMap[id] || id.slice(0, 8) + "…",
                         acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
                         total: v.total,
                     }));
                     const assList = Object.entries(assObj).map(([id, v]) => ({
-                        nome: aMap[id] || id.slice(0, 8) + "…",
+                        nome: assuntoMap[id] || id.slice(0, 8) + "…",
                         acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
                         total: v.total,
                     }));
@@ -334,7 +331,7 @@ export default function EstatisticasPage() {
                     setByAssuntoAccTotal([]);
                 }
 
-                // — por matéria/assunto (PERÍODO) para indicadores
+                // — por matéria/assunto (PERÍODO)
                 const materAgg: Record<string, { total: number; corretas: number }> = {};
                 const assuntoAgg: Record<string, { total: number; corretas: number }> = {};
 
@@ -356,12 +353,12 @@ export default function EstatisticasPage() {
                 }
 
                 const materList = Object.entries(materAgg).map(([id, v]) => ({
-                    nome: mMap[id] || id.slice(0, 8) + "…",
+                    nome: materiaMap[id] || id.slice(0, 8) + "…",
                     acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
                     total: v.total,
                 }));
                 const assuntoList = Object.entries(assuntoAgg).map(([id, v]) => ({
-                    nome: aMap[id] || id.slice(0, 8) + "…",
+                    nome: assuntoMap[id] || id.slice(0, 8) + "…",
                     acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
                     total: v.total,
                 }));
@@ -399,7 +396,7 @@ export default function EstatisticasPage() {
                 setLoading(false);
             }
         })();
-    }, [days]);
+    }, [days, materiaMap, assuntoMap]);
 
     const cards = useMemo(() => {
         return [
@@ -468,14 +465,14 @@ export default function EstatisticasPage() {
                         <StatMini title="Acerto (total)" value={`${acertoTotal}%`} />
                     </div>
 
-                    {/* Série diária: tempo estudado */}
+                    {/* Série diária: tempo estudado (mais compacto) */}
                     <Section title="Tempo estudado por dia (min)">
-                        <div className="w-full h-48 sm:h-64">
+                        <div className="w-full h-40">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={diario}>
+                                <BarChart data={diario} barCategoryGap="35%" margin={{ left: 6, right: 6 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                                    <XAxis dataKey="dia" stroke="var(--muted-foreground)" fontSize={13} />
-                                    <YAxis stroke="var(--muted-foreground)" fontSize={13} allowDecimals={false} />
+                                    <XAxis dataKey="dia" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} />
+                                    <YAxis stroke="var(--muted-foreground)" fontSize={12} allowDecimals={false} tickLine={false} />
                                     <Tooltip
                                         contentStyle={{
                                             background: "var(--muted)",
@@ -484,28 +481,28 @@ export default function EstatisticasPage() {
                                             fontFamily: "inherit",
                                             borderRadius: 12,
                                         }}
-                                        cursor={{ fill: "var(--primary)", opacity: 0.1 }}
+                                        cursor={{ fill: "var(--primary)", opacity: 0.08 }}
                                     />
-                                    <Bar dataKey="tempo_min" fill="var(--primary)" radius={[8, 8, 0, 0]} />
+                                    <Bar dataKey="tempo_min" fill="var(--primary)" radius={[6, 6, 0, 0]} barSize={10} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
                     </Section>
 
-                    {/* Rankings de tempo (HORIZONTAL) */}
+                    {/* Rankings de tempo (HORIZONTAL, barras finas, estilo lista) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <Section title="Top 5 matérias por tempo (min)">
-                            <BarSimpleH data={topMaterias} dataKey="minutos" nameKey="nome" />
+                            <CompactBarList data={topMaterias} nameKey="nome" valueKey="minutos" unit="min" />
                         </Section>
                         <Section title="Top 5 assuntos por tempo (min)">
-                            <BarSimpleH data={topAssuntos} dataKey="minutos" nameKey="nome" />
+                            <CompactBarList data={topAssuntos} nameKey="nome" valueKey="minutos" unit="min" />
                         </Section>
                     </div>
 
-                    {/* PERÍODO — Acerto por Matéria/Assunto (HORIZONTAL) */}
+                    {/* PERÍODO — Acerto por Matéria/Assunto (HORIZONTAL compacto) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <Section title="Acerto por Matéria (período)">
-                            <BarPercentH data={byMateriaAcc} />
+                            <CompactBarList data={byMateriaAcc} nameKey="nome" valueKey="acerto" unit="%" max={100} />
                             {!byMateriaAcc.length && (
                                 <p className="text-sm text-muted-foreground mt-2">
                                     Sem dados no período. Resolva questões para ver esta seção.
@@ -513,7 +510,7 @@ export default function EstatisticasPage() {
                             )}
                         </Section>
                         <Section title="Acerto por Assunto (período)">
-                            <BarPercentH data={byAssuntoAcc} />
+                            <CompactBarList data={byAssuntoAcc} nameKey="nome" valueKey="acerto" unit="%" max={100} />
                             {!byAssuntoAcc.length && (
                                 <p className="text-sm text-muted-foreground mt-2">
                                     Sem dados no período. Resolva questões para ver esta seção.
@@ -525,7 +522,7 @@ export default function EstatisticasPage() {
                     {/* TOTAL / HISTÓRICO — a partir da TABELA ESTATISTICAS */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <Section title="Acerto por Matéria (TOTAL / histórico)">
-                            <BarPercentH data={byMateriaAccTotal} />
+                            <CompactBarList data={byMateriaAccTotal} nameKey="nome" valueKey="acerto" unit="%" max={100} />
                             {!byMateriaAccTotal.length && (
                                 <p className="text-sm text-muted-foreground mt-2">
                                     Ainda não há histórico agregado por matéria.
@@ -533,7 +530,7 @@ export default function EstatisticasPage() {
                             )}
                         </Section>
                         <Section title="Acerto por Assunto (TOTAL / histórico)">
-                            <BarPercentH data={byAssuntoAccTotal} />
+                            <CompactBarList data={byAssuntoAccTotal} nameKey="nome" valueKey="acerto" unit="%" max={100} />
                             {!byAssuntoAccTotal.length && (
                                 <p className="text-sm text-muted-foreground mt-2">
                                     Ainda não há histórico agregado por assunto.
@@ -542,7 +539,7 @@ export default function EstatisticasPage() {
                         </Section>
                     </div>
 
-                    {/* Indicadores: Fortes x Prioridades (PERÍODO) */}
+                    {/* Indicadores: Fortes x Prioridades */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <Section title="Fortes (≥ 80% de acerto, min. 10 questões)">
                             <ListBadges items={fortesMaterias} empty="Ainda sem dados suficientes." />
@@ -601,67 +598,60 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     );
 }
 
-/** Barras horizontais simples (tempo) */
-function BarSimpleH({
+/**
+ * Lista compacta de barras horizontais.
+ * - Altura dinâmica em função do número de itens
+ * - Barras finas (barSize/maxBarSize)
+ * - Rótulo do valor no fim da barra
+ */
+function CompactBarList<T extends Record<string, any>>({
     data,
-    dataKey,
     nameKey,
+    valueKey,
+    unit,
+    max,
 }: {
-    data: any[];
-    dataKey: string;
-    nameKey: string;
+    data: T[];
+    nameKey: keyof T;
+    valueKey: keyof T;
+    unit?: string; // "min" ou "%"
+    max?: number;  // se 100, vira medidor de %; caso indefinido usa dataMax
 }) {
-    return (
-        <div className="w-full h-56 sm:h-72">
-            <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} layout="vertical" margin={{ left: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis type="number" stroke="var(--muted-foreground)" />
-                    <YAxis
-                        type="category"
-                        dataKey={nameKey}
-                        stroke="var(--muted-foreground)"
-                        width={140}
-                        tick={{ fontSize: 12 }}
-                    />
-                    <Tooltip
-                        contentStyle={{
-                            background: "var(--muted)",
-                            border: "1px solid var(--border)",
-                            color: "var(--foreground)",
-                            fontFamily: "inherit",
-                            borderRadius: 12,
-                        }}
-                        cursor={{ fill: "var(--primary)", opacity: 0.08 }}
-                    />
-                    <Bar dataKey={dataKey} fill="var(--primary)" radius={[0, 8, 8, 0]} />
-                </BarChart>
-            </ResponsiveContainer>
-        </div>
-    );
-}
+    // altura: ~34px por item (mínimo 140px)
+    const height = Math.max((data?.length ?? 0) * 34 + 20, 140);
 
-/** Barras horizontais de % acerto (0–100) */
-function BarPercentH({
-    data,
-}: {
-    data: Array<{ nome: string; acerto: number; total: number }>;
-}) {
+    // domínio do eixo X
+    const xDomain: any = max === undefined ? [0, "dataMax + 5"] : [0, max];
+
     return (
-        <div className="w-full h-56 sm:h-72">
+        <div className="w-full" style={{ height }}>
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} layout="vertical" margin={{ left: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis type="number" domain={[0, 100]} stroke="var(--muted-foreground)" />
+                <BarChart
+                    data={data}
+                    layout="vertical"
+                    barCategoryGap={12}
+                    margin={{ left: 6, right: 10, top: 6, bottom: 6 }}
+                >
+                    <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" />
+                    <XAxis
+                        type="number"
+                        domain={xDomain}
+                        stroke="var(--muted-foreground)"
+                        tickLine={false}
+                        axisLine={false}
+                        fontSize={11}
+                    />
                     <YAxis
                         type="category"
-                        dataKey="nome"
+                        dataKey={nameKey as string}
                         stroke="var(--muted-foreground)"
                         width={160}
                         tick={{ fontSize: 12 }}
+                        tickLine={false}
+                        axisLine={false}
                     />
                     <Tooltip
-                        formatter={(v: any, _n, p: any) => [`${v}%`, `Acerto (${p?.payload?.total ?? 0} q.)`]}
+                        formatter={(v: any) => (unit ? [`${v}${unit}`, ""] : [v, ""])}
                         contentStyle={{
                             background: "var(--muted)",
                             border: "1px solid var(--border)",
@@ -669,9 +659,23 @@ function BarPercentH({
                             fontFamily: "inherit",
                             borderRadius: 12,
                         }}
-                        cursor={{ fill: "var(--primary)", opacity: 0.08 }}
+                        cursor={{ fill: "var(--primary)", opacity: 0.06 }}
                     />
-                    <Bar dataKey="acerto" fill="var(--primary)" radius={[0, 8, 8, 0]} />
+                    <Bar
+                        dataKey={valueKey as string}
+                        fill="var(--primary)"
+                        radius={[0, 6, 6, 0]}
+                        barSize={10}
+                        maxBarSize={12}
+                    >
+                        <LabelList
+                            dataKey={valueKey as string}
+                            position="right"
+                            formatter={(v: any) => (unit ? `${v}${unit}` : v)}
+                            className="fill-[--foreground]"
+                            fontSize={12}
+                        />
+                    </Bar>
                 </BarChart>
             </ResponsiveContainer>
         </div>
