@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 /* ===================== UI ===================== */
@@ -17,8 +17,10 @@ type Option = { letter?: string; text: string };
 
 interface QuestionCardProps {
     id: string;                // id da questão
-    materiaId?: string | null; // <- ADICIONADO
-    assuntoId?: string | null; // <- ADICIONADO
+    materiaId?: string | null; // pode vir vazio
+    assuntoId?: string | null; // pode vir vazio
+    materiaNome?: string | null; // fallback por nome
+    assuntoNome?: string | null; // fallback por nome
 
     tags: string[];
     statement: string;
@@ -32,35 +34,99 @@ interface QuestionCardProps {
     onNovoComentario?: (comentario: string) => void;
 }
 
-/* ===================== PERSISTÊNCIA ===================== */
+/* ===================== HELPERS DE PERSISTÊNCIA ===================== */
+
+/** Resolve IDs a partir das props. Se não houver ID, tenta buscar por nome no Supabase. */
+async function ensureIds(
+    uid: string,
+    materiaId?: string | null,
+    assuntoId?: string | null,
+    materiaNome?: string | null,
+    assuntoNome?: string | null,
+    caches?: {
+        matByName: Map<string, string>;
+        assByName: Map<string, string>;
+    }
+): Promise<{ mid: string | null; aid: string | null }> {
+    const matCache = caches?.matByName ?? new Map<string, string>();
+    const assCache = caches?.assByName ?? new Map<string, string>();
+
+    let mid: string | null = materiaId ?? null;
+    let aid: string | null = assuntoId ?? null;
+
+    // resolve matéria por nome
+    if (!mid && materiaNome) {
+        const key = materiaNome.trim().toLowerCase();
+        if (key) {
+            if (matCache.has(key)) {
+                mid = matCache.get(key)!;
+            } else {
+                const { data } = await supabase
+                    .from("materias")
+                    .select("id")
+                    .eq("user_id", uid) // uid é string
+                    .ilike("nome", key) // key garantido como string
+                    .limit(1)
+                    .maybeSingle();
+                if (data?.id) {
+                    mid = data.id as string;
+                    matCache.set(key, mid);
+                }
+            }
+        }
+    }
+
+    // resolve assunto por nome (ajuda ter a matéria)
+    if (!aid && assuntoNome) {
+        const raw = assuntoNome.trim().toLowerCase();
+        if (raw) {
+            const cacheKey = (mid ?? "_no_materia_") + "|" + raw;
+            if (assCache.has(cacheKey)) {
+                aid = assCache.get(cacheKey)!;
+            } else {
+                let query = supabase.from("assuntos").select("id").eq("user_id", uid);
+                if (mid) {
+                    // TS garante string aqui com cast após o guard
+                    query = query.eq("materia_id", mid as string);
+                }
+                const { data } = await query.ilike("nome", raw).limit(1).maybeSingle();
+                if (data?.id) {
+                    aid = data.id as string;
+                    assCache.set(cacheKey, aid);
+                }
+            }
+        }
+    }
+
+    return { mid: mid ?? null, aid: aid ?? null };
+}
+
 /** Atualiza a tabela `estatisticas` (globais + JSON por matéria/assunto). */
 async function atualizarEstatisticasQuestao(
     acertou: boolean,
     materiaId?: string | null,
     assuntoId?: string | null
 ) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const { data: auth } = await supabase.auth.getUser();
+    const user = auth?.user;
+    if (!user?.id) return;
 
-    // busca linha atual
     const { data, error } = await supabase
         .from("estatisticas")
         .select("id, questoes_respondidas, taxa_acerto, progresso_semanal, acc_por_materia, acc_por_assunto")
-        .eq("user_id", user.id)
+        .eq("user_id", user.id as string)
         .maybeSingle();
 
     const hoje = new Date().toLocaleDateString("pt-BR");
     const bump = (obj: Record<string, any>, key?: string | null, ok?: boolean) => {
         if (!key) return obj;
         const cur = obj[key] ?? { total: 0, corretas: 0 };
-        const total = (cur.total ?? 0) + 1;
-        const corretas = (cur.corretas ?? 0) + (ok ? 1 : 0);
-        return { ...obj, [key]: { total, corretas } };
+        return { ...obj, [key]: { total: (cur.total ?? 0) + 1, corretas: (cur.corretas ?? 0) + (ok ? 1 : 0) } };
     };
 
     if (error || !data) {
         await supabase.from("estatisticas").insert({
-            user_id: user.id,
+            user_id: user.id as string,
             questoes_respondidas: 1,
             taxa_acerto: acertou ? 100 : 0,
             tempo_estudado: "00:00:00",
@@ -73,8 +139,8 @@ async function atualizarEstatisticasQuestao(
     }
 
     const novasQuestoes = (data.questoes_respondidas ?? 0) + 1;
-    const acertosAnteriores = Math.round(((data.taxa_acerto ?? 0) / 100) * (data.questoes_respondidas ?? 0));
-    const novosAcertos = acertosAnteriores + (acertou ? 1 : 0);
+    const acertosAnt = Math.round(((data.taxa_acerto ?? 0) / 100) * (data.questoes_respondidas ?? 0));
+    const novosAcertos = acertosAnt + (acertou ? 1 : 0);
     const taxa_acerto = Math.round((novosAcertos / novasQuestoes) * 100);
 
     let progresso = Array.isArray(data.progresso_semanal) ? [...data.progresso_semanal] : [];
@@ -82,7 +148,6 @@ async function atualizarEstatisticasQuestao(
     if (idx > -1) progresso[idx].questoes += 1;
     else progresso.push({ dia: hoje, questoes: 1 });
 
-    // incrementa os JSONs
     const acc_por_materia = bump(data.acc_por_materia ?? {}, materiaId, acertou);
     const acc_por_assunto = bump(data.acc_por_assunto ?? {}, assuntoId, acertou);
 
@@ -96,21 +161,22 @@ async function atualizarEstatisticasQuestao(
             acc_por_assunto,
             atualizado_em: new Date().toISOString(),
         })
-        .eq("id", data.id);
+        .eq("id", data.id as string);
 }
 
-/** Registra a resolução na tabela `resolucoes` (usada para estatísticas do PERÍODO). */
+/** Registra a resolução na tabela `resolucoes` (usada para estatísticas por período). */
 async function registrarResolucao(
     questaoId: string,
     correta: boolean,
     materiaId?: string | null,
     assuntoId?: string | null
 ) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const { data: auth } = await supabase.auth.getUser();
+    const user = auth?.user;
+    if (!user?.id) return;
 
     await supabase.from("resolucoes").insert({
-        user_id: user.id,
+        user_id: user.id as string,
         questao_id: questaoId,
         correta,
         materia_id: materiaId ?? null,
@@ -124,6 +190,8 @@ export function QuestionCard({
     id,
     materiaId,
     assuntoId,
+    materiaNome,
+    assuntoNome,
     tags,
     statement,
     options,
@@ -144,9 +212,17 @@ export function QuestionCard({
     const [loadingComentario, setLoadingComentario] = useState(false);
     const [eliminadas, setEliminadas] = useState<number[]>([]);
     const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
-
     const [comentariosState, setComentariosState] = useState<any[]>(comentarios || []);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // caches locais p/ resolver nomes -> ids sem bater no banco toda hora
+    const caches = useMemo(
+        () => ({
+            matByName: new Map<string, string>(),
+            assByName: new Map<string, string>(),
+        }),
+        []
+    );
 
     React.useEffect(() => {
         if (showModal) setTimeout(() => textareaRef.current?.focus(), 100);
@@ -154,7 +230,7 @@ export function QuestionCard({
 
     const showFeedback = (msg: string) => {
         setFeedbackMsg(msg);
-        setTimeout(() => setFeedbackMsg(null), 3000);
+        setTimeout(() => setFeedbackMsg(null), 2200);
     };
 
     const toggleEliminada = (idx: number) => {
@@ -164,11 +240,7 @@ export function QuestionCard({
     const compartilharQuestao = () => {
         const texto = `${statement}\n\n${options.map((opt) => opt.text).join("\n")}\n\nConheça a melhor plataforma de questões comentadas para concursos policiais:\n`;
         if (navigator.share) {
-            navigator.share({
-                title: "Questão para Concursos Policiais",
-                text: texto,
-                url: "https://vocacaomilitar.com.br",
-            });
+            navigator.share({ title: "Questão", text: texto, url: "https://vocacaomilitar.com.br" });
         } else {
             navigator.clipboard.writeText(texto);
             alert("Texto copiado para a área de transferência!");
@@ -178,11 +250,13 @@ export function QuestionCard({
     const enviarErro = async () => {
         if (!errorText.trim()) return;
         setLoadingErro(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        let userName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "Usuário";
+        const { data: auth } = await supabase.auth.getUser();
+        const user = auth?.user;
+        const userName =
+            user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "Usuário";
         const novoErro = { mensagem: errorText, data: new Date().toISOString(), usuario: userName };
         const novosErros = [...(erros || []), novoErro];
-        const { error } = await supabase.from("questoes").update({ erros: novosErros }).eq("id", id);
+        const { error } = await supabase.from("questoes").update({ comentarios: novosErros }).eq("id", id);
         setLoadingErro(false);
         if (!error) {
             setShowModal(false);
@@ -197,8 +271,10 @@ export function QuestionCard({
     const enviarComentario = async () => {
         if (!comentarioText.trim()) return;
         setLoadingComentario(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        let userName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "Usuário";
+        const { data: auth } = await supabase.auth.getUser();
+        const user = auth?.user;
+        const userName =
+            user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "Usuário";
         const novoComentario = { texto: comentarioText, data: new Date().toISOString(), usuario: userName };
         const novosComentarios = [...comentariosState, novoComentario];
         const { error } = await supabase.from("questoes").update({ comentarios: novosComentarios }).eq("id", id);
@@ -219,7 +295,7 @@ export function QuestionCard({
         <div className="bg-card rounded-2xl p-7 mb-6 shadow border border-border max-w-6xl w-full mx-auto transition-all font-inter relative">
             {/* FEEDBACK TOAST */}
             {feedbackMsg && (
-                <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground rounded-lg px-6 py-3 text-sm shadow-lg z-[200] animate-fade-in">
+                <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground rounded-lg px-6 py-3 text-sm shadow-lg z-[200]">
                     {feedbackMsg}
                 </div>
             )}
@@ -307,15 +383,36 @@ export function QuestionCard({
                     className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-5 rounded-xl text-sm transition"
                     onClick={async () => {
                         setShowResult(true);
-                        if (selected) {
-                            const correta = selected === correct;
-                            // grava período + globais (com matéria/assunto)
-                            await Promise.all([
-                                registrarResolucao(id, correta, materiaId, assuntoId),
-                                atualizarEstatisticasQuestao(correta, materiaId, assuntoId),
-                            ]);
-                            showFeedback(correta ? "Você acertou! ✅" : "Resposta incorreta. 😉");
+                        if (!selected) return;
+
+                        const correta = selected === correct;
+
+                        // garante IDs (usa os que vieram, senão tenta por nome)
+                        const { data: auth } = await supabase.auth.getUser();
+                        const uid: string | undefined = auth?.user?.id ?? undefined;
+
+                        let resolvedMid: string | null = materiaId ?? null;
+                        let resolvedAid: string | null = assuntoId ?? null;
+
+                        if (uid) {
+                            const resolved = await ensureIds(
+                                uid,
+                                materiaId ?? null,
+                                assuntoId ?? null,
+                                materiaNome ?? null,
+                                assuntoNome ?? null,
+                                caches
+                            );
+                            resolvedMid = resolved.mid;
+                            resolvedAid = resolved.aid;
                         }
+
+                        await Promise.all([
+                            registrarResolucao(id, correta, resolvedMid, resolvedAid),
+                            atualizarEstatisticasQuestao(correta, resolvedMid, resolvedAid),
+                        ]);
+
+                        showFeedback(correta ? "Você acertou! ✅" : "Resposta incorreta. 😉");
                     }}
                     disabled={!selected || showResult}
                 >
