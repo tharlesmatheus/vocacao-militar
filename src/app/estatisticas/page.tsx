@@ -14,21 +14,19 @@ import {
     Bar,
 } from "recharts";
 
-/* ============== helpers ============== */
+/* ============== helpers / consts ============== */
 type Daily = { dia: string; minutos: number; questoes?: number };
 type TopItem = { nome: string; valor: number };
+type AccItem = { nome: string; acerto: number; total: number };
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
 const startOfLocalDay = (t = Date.now()) => {
-    const d = new Date(t);
-    d.setHours(0, 0, 0, 0);
-    return d;
+    const d = new Date(t); d.setHours(0, 0, 0, 0); return d;
 };
-const fmtHMS = (s: number) => {
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    return h ? `${h}h ${m}m` : `${m}m`;
-};
+const fmtHMS = (s: number) => { const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); return h ? `${h}h ${m}m` : `${m}m`; };
+
+const WEAK_THRESHOLD = 70;      // < 70% = pior
+const MIN_QTD_FRACO = 5;        // min de questões para considerar “pior”
 
 /* ============== page ============== */
 export default function EstatisticasPage() {
@@ -59,7 +57,11 @@ export default function EstatisticasPage() {
     const [matAcc, setMatAcc] = useState<TopItem[]>([]);
     const [assAcc, setAssAcc] = useState<TopItem[]>([]);
 
-    // carrega listas para filtros
+    // piores
+    const [pioresMaterias, setPioresMaterias] = useState<AccItem[]>([]);
+    const [pioresAssuntos, setPioresAssuntos] = useState<AccItem[]>([]);
+
+    /* ---------- listas para filtros ---------- */
     useEffect(() => {
         (async () => {
             const { data: auth } = await supabase.auth.getUser();
@@ -85,7 +87,7 @@ export default function EstatisticasPage() {
         })();
     }, []);
 
-    // carrega dados (respeitando filtros)
+    /* ---------- dados (respeitando filtros) ---------- */
     useEffect(() => {
         (async () => {
             setLoading(true);
@@ -100,7 +102,7 @@ export default function EstatisticasPage() {
                 const from = new Date(today0.getTime() - (days - 1) * ONE_DAY);
                 const fromISO = from.toISOString();
 
-                /* ---------- POMODORO (filtrado) ---------- */
+                /* ===== POMODORO (filtrado) ===== */
                 let sessQuery = supabase
                     .from("pomodoro_sessions")
                     .select("phase,duration_seconds,started_at,materia_id,assunto_id")
@@ -118,47 +120,34 @@ export default function EstatisticasPage() {
                 const byDayMin: Record<string, number> = {};
                 const byMatSec: Record<string, number> = {};
                 const byAssSec: Record<string, number> = {};
-                let totalSec = 0;
-                let count = 0;
+                let totalSec = 0; let count = 0;
 
                 for (const s of sess ?? []) {
                     const dur = s.duration_seconds ?? 0;
-                    totalSec += dur;
-                    count++;
+                    totalSec += dur; count++;
                     const d = new Date(s.started_at);
-                    const key = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-                        .toISOString()
-                        .slice(0, 10);
+                    const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10);
                     byDayMin[key] = (byDayMin[key] ?? 0) + Math.round(dur / 60);
 
-                    if (!materiaId && s.materia_id)
-                        byMatSec[s.materia_id] = (byMatSec[s.materia_id] ?? 0) + dur;
-                    // se já filtrou por matéria, prioriza ranking de assuntos dentro dela
-                    if (s.assunto_id)
-                        byAssSec[s.assunto_id] = (byAssSec[s.assunto_id] ?? 0) + dur;
+                    if (!materiaId && s.materia_id) byMatSec[s.materia_id] = (byMatSec[s.materia_id] ?? 0) + dur;
+                    if (s.assunto_id) byAssSec[s.assunto_id] = (byAssSec[s.assunto_id] ?? 0) + dur;
                 }
 
                 setTempoTotalSeg(totalSec);
                 setSessoes(count);
 
-                // série (minutos). “questões/dia” só no geral (sem filtro)
+                // série de minutos (questões só no geral)
                 const s: Daily[] = [];
                 for (let i = 0; i < days; i++) {
                     const d = new Date(from.getTime() + i * ONE_DAY);
-                    const iso = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-                        .toISOString()
-                        .slice(0, 10);
-                    s.push({
-                        dia: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
-                        minutos: byDayMin[iso] ?? 0,
-                    });
+                    const iso = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10);
+                    s.push({ dia: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }), minutos: byDayMin[iso] ?? 0 });
                 }
                 setSerie(s);
 
-                // top tempo
                 setTopMateriasTempo(
                     materiaId
-                        ? [] // já filtrou a matéria; não faz sentido rankear matérias
+                        ? []
                         : Object.entries(byMatSec)
                             .map(([id, sec]) => ({ nome: matName[id] || id.slice(0, 8) + "…", valor: Math.round(sec / 60) }))
                             .sort((a, b) => b.valor - a.valor)
@@ -171,7 +160,7 @@ export default function EstatisticasPage() {
                         .slice(0, 5)
                 );
 
-                /* ---------- ESTATISTICAS (agregado) ---------- */
+                /* ===== ESTATISTICAS agregadas ===== */
                 const { data: est } = await supabase
                     .from("estatisticas")
                     .select("questoes_respondidas,taxa_acerto,progresso_semanal,acc_por_materia,acc_por_assunto")
@@ -181,7 +170,7 @@ export default function EstatisticasPage() {
                 const matAgg = (est?.acc_por_materia ?? {}) as Record<string, { total: number; corretas: number }>;
                 const assAgg = (est?.acc_por_assunto ?? {}) as Record<string, { total: number; corretas: number }>;
 
-                // cards “questões/acerto” respeitando filtro
+                // cards (respeita filtro)
                 if (materiaId && matAgg[materiaId]) {
                     const v = matAgg[materiaId];
                     setQuestoesTotal(v.total);
@@ -195,36 +184,76 @@ export default function EstatisticasPage() {
                     setAcertoTotal(Math.round(Number(est?.taxa_acerto ?? 0)));
                 }
 
-                // rankings de acerto (quando sem filtro = gerais; com filtro = mostra só o item filtrado)
+                // barras de acerto (TopItem percentual)
                 setMatAcc(
                     materiaId
                         ? matAgg[materiaId]
                             ? [{ nome: matName[materiaId] ?? "Matéria", valor: Math.round((matAgg[materiaId].corretas / matAgg[materiaId].total) * 100) }]
                             : []
                         : Object.entries(matAgg)
-                            .map(([id, v]) => ({
-                                nome: matName[id] || id.slice(0, 8) + "…",
-                                valor: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
-                            }))
+                            .map(([id, v]) => ({ nome: matName[id] || id.slice(0, 8) + "…", valor: v.total ? Math.round((v.corretas / v.total) * 100) : 0 }))
                             .sort((a, b) => b.valor - a.valor)
                             .slice(0, 8)
                 );
-
                 setAssAcc(
                     assuntoId
                         ? assAgg[assuntoId]
                             ? [{ nome: assName[assuntoId] ?? "Assunto", valor: Math.round((assAgg[assuntoId].corretas / assAgg[assuntoId].total) * 100) }]
                             : []
                         : Object.entries(assAgg)
-                            .map(([id, v]) => ({
-                                nome: assName[id] || id.slice(0, 8) + "…",
-                                valor: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
-                            }))
+                            .map(([id, v]) => ({ nome: assName[id] || id.slice(0, 8) + "…", valor: v.total ? Math.round((v.corretas / v.total) * 100) : 0 }))
                             .sort((a, b) => b.valor - a.valor)
                             .slice(0, 8)
                 );
 
-                // “questões por dia” global (sem filtro)
+                // piores (filtra < 70% e min questões)
+                const matListFull: AccItem[] = Object.entries(matAgg).map(([id, v]) => ({
+                    nome: matName[id] || id.slice(0, 8) + "…",
+                    acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
+                    total: v.total,
+                }));
+                const assListFull: AccItem[] = Object.entries(assAgg).map(([id, v]) => ({
+                    nome: assName[id] || id.slice(0, 8) + "…",
+                    acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
+                    total: v.total,
+                }));
+
+                const matWeak =
+                    materiaId
+                        ? matAgg[materiaId]
+                            ? [{
+                                nome: matName[materiaId] ?? "Matéria",
+                                acerto: Math.round((matAgg[materiaId].corretas / matAgg[materiaId].total) * 100),
+                                total: matAgg[materiaId].total,
+                            }].filter(x => x.total >= MIN_QTD_FRACO && x.acerto < WEAK_THRESHOLD)
+                            : []
+                        : matListFull.filter((x) => x.total >= MIN_QTD_FRACO && x.acerto < WEAK_THRESHOLD)
+                            .sort((a, b) => a.acerto - b.acerto)
+                            .slice(0, 8);
+
+                // piores assuntos: se houver matéria filtrada, mostra os assuntos daquela matéria
+                const assWeakSource = assuntoId
+                    ? assListFull.filter((a) => a.nome === (assName[assuntoId] ?? a.nome)) // só o selecionado, se abaixo de 70
+                    : assListFull;
+
+                const assWeakFiltered =
+                    materiaId
+                        ? assWeakSource.filter((a) => {
+                            // precisamos saber se este assunto pertence à matéria — usamos a lista "assuntos" carregada
+                            const obj = assuntos.find((x) => assName[x.id] === a.nome);
+                            return obj?.materia_id === materiaId;
+                        })
+                        : assWeakSource;
+
+                const assWeak = assWeakFiltered
+                    .filter((x) => x.total >= MIN_QTD_FRACO && x.acerto < WEAK_THRESHOLD)
+                    .sort((a, b) => a.acerto - b.acerto)
+                    .slice(0, 8);
+
+                setPioresMaterias(matWeak);
+                setPioresAssuntos(assWeak);
+
+                // “questões/dia” no geral (sem filtro)
                 if (!materiaId && !assuntoId) {
                     const progArr: Array<{ dia: string; questoes: number }> = Array.isArray(est?.progresso_semanal)
                         ? (est!.progresso_semanal as any[])
@@ -249,7 +278,7 @@ export default function EstatisticasPage() {
                 setLoading(false);
             }
         })();
-    }, [days, materiaId, assuntoId, matName, assName]);
+    }, [days, materiaId, assuntoId, matName, assName, assuntos]);
 
     const cards = useMemo(
         () => [
@@ -261,7 +290,6 @@ export default function EstatisticasPage() {
         [tempoTotalSeg, sessoes, questoesTotal, acertoTotal]
     );
 
-    // assuntos disponíveis considerando a matéria selecionada (se houver)
     const assuntosFiltrados = useMemo(
         () => (materiaId ? assuntos.filter((a) => a.materia_id === materiaId) : assuntos),
         [assuntos, materiaId]
@@ -277,8 +305,7 @@ export default function EstatisticasPage() {
                         <button
                             key={n}
                             onClick={() => setDays(n as 7 | 30 | 90)}
-                            className={`px-3 py-1.5 rounded-lg border ${days === n ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border"
-                                }`}
+                            className={`px-3 py-1.5 rounded-lg border ${days === n ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border"}`}
                         >
                             {n} dias
                         </button>
@@ -293,17 +320,10 @@ export default function EstatisticasPage() {
                     <select
                         className="bg-muted border border-border rounded-lg px-3 py-2 text-sm"
                         value={materiaId}
-                        onChange={(e) => {
-                            setMateriaId(e.target.value);
-                            setAssuntoId(""); // reset assunto ao trocar matéria
-                        }}
+                        onChange={(e) => { setMateriaId(e.target.value); setAssuntoId(""); }}
                     >
                         <option value="">Todas</option>
-                        {materias.map((m) => (
-                            <option key={m.id} value={m.id}>
-                                {m.nome}
-                            </option>
-                        ))}
+                        {materias.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
                     </select>
                 </div>
 
@@ -316,22 +336,12 @@ export default function EstatisticasPage() {
                         disabled={!assuntosFiltrados.length}
                     >
                         <option value="">Todos</option>
-                        {assuntosFiltrados.map((a) => (
-                            <option key={a.id} value={a.id}>
-                                {a.nome}
-                            </option>
-                        ))}
+                        {assuntosFiltrados.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
                     </select>
                 </div>
 
                 {(materiaId || assuntoId) && (
-                    <button
-                        className="ml-auto bg-muted border border-border rounded-lg px-3 py-2 text-sm"
-                        onClick={() => {
-                            setMateriaId("");
-                            setAssuntoId("");
-                        }}
-                    >
+                    <button className="ml-auto bg-muted border border-border rounded-lg px-3 py-2 text-sm" onClick={() => { setMateriaId(""); setAssuntoId(""); }}>
                         Limpar filtro
                     </button>
                 )}
@@ -353,12 +363,8 @@ export default function EstatisticasPage() {
             {/* SÉRIE: Minutos (e Questões global) */}
             <div className="rounded-2xl bg-card border border-border p-4">
                 <div className="flex items-center justify-between mb-2">
-                    <h2 className="font-semibold">
-                        Estudo diário {materiaId || assuntoId ? "(filtrado)" : "(geral)"}
-                    </h2>
-                    <span className="text-xs text-muted-foreground">
-                        {materiaId || assuntoId ? "Minutos" : "Minutos x Questões"}
-                    </span>
+                    <h2 className="font-semibold">Estudo diário {materiaId || assuntoId ? "(filtrado)" : "(geral)"}</h2>
+                    <span className="text-xs text-muted-foreground">{materiaId || assuntoId ? "Minutos" : "Minutos x Questões"}</span>
                 </div>
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
@@ -376,18 +382,9 @@ export default function EstatisticasPage() {
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                             <XAxis dataKey="dia" stroke="var(--muted-foreground)" />
                             <YAxis stroke="var(--muted-foreground)" allowDecimals={false} />
-                            <Tooltip
-                                contentStyle={{
-                                    background: "var(--muted)",
-                                    border: "1px solid var(--border)",
-                                    color: "var(--foreground)",
-                                    borderRadius: 12,
-                                }}
-                            />
+                            <Tooltip contentStyle={{ background: "var(--muted)", border: "1px solid var(--border)", color: "var(--foreground)", borderRadius: 12 }} />
                             <Area type="monotone" dataKey="minutos" name="Minutos" stroke="var(--primary)" fill="url(#gMin)" strokeWidth={2} />
-                            {!materiaId && !assuntoId && (
-                                <Area type="monotone" dataKey="questoes" name="Questões" stroke="#22c55e" fill="url(#gQst)" strokeWidth={2} />
-                            )}
+                            {!materiaId && !assuntoId && <Area type="monotone" dataKey="questoes" name="Questões" stroke="#22c55e" fill="url(#gQst)" strokeWidth={2} />}
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
@@ -414,6 +411,16 @@ export default function EstatisticasPage() {
                 </Panel>
             </div>
 
+            {/* PIORES (acerto < 70%) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Panel title={`Onde estou pior — Matérias (acerto < ${WEAK_THRESHOLD}%, min. ${MIN_QTD_FRACO} questões)`}>
+                    <WeakList items={pioresMaterias} empty="Sem itens abaixo do limite 👏" />
+                </Panel>
+                <Panel title={`Onde estou pior — Assuntos (acerto < ${WEAK_THRESHOLD}%, min. ${MIN_QTD_FRACO} questões)`}>
+                    <WeakList items={pioresAssuntos} empty="Sem itens abaixo do limite 👏" />
+                </Panel>
+            </div>
+
             {erro && <p className="text-destructive">{erro}</p>}
             {loading && <p className="text-muted-foreground">Carregando…</p>}
         </div>
@@ -437,31 +444,32 @@ function TinyBarH({ data, percent = false }: { data: TopItem[]; percent?: boolea
             <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data} layout="vertical" margin={{ top: 6, bottom: 6, left: 6, right: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis
-                        type="number"
-                        domain={percent ? [0, 100] : ["auto", "auto"]}
-                        stroke="var(--muted-foreground)"
-                        tick={{ fontSize: 11 }}
-                    />
-                    <YAxis
-                        type="category"
-                        dataKey="nome"
-                        width={140}
-                        stroke="var(--muted-foreground)"
-                        tick={{ fontSize: 11 }}
-                    />
+                    <XAxis type="number" domain={percent ? [0, 100] : ["auto", "auto"]} stroke="var(--muted-foreground)" tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="nome" width={140} stroke="var(--muted-foreground)" tick={{ fontSize: 11 }} />
                     <Tooltip
                         formatter={(v: any) => (percent ? [`${v}%`, "Acerto"] : [v, "Minutos"])}
-                        contentStyle={{
-                            background: "var(--muted)",
-                            border: "1px solid var(--border)",
-                            color: "var(--foreground)",
-                            borderRadius: 12,
-                        }}
+                        contentStyle={{ background: "var(--muted)", border: "1px solid var(--border)", color: "var(--foreground)", borderRadius: 12 }}
                     />
                     <Bar dataKey="valor" barSize={12} radius={[0, 8, 8, 0]} fill={percent ? "var(--primary)" : "#60a5fa"} />
                 </BarChart>
             </ResponsiveContainer>
         </div>
+    );
+}
+
+function WeakList({ items, empty }: { items: AccItem[]; empty: string }) {
+    if (!items.length) return <div className="text-sm text-muted-foreground">{empty}</div>;
+    return (
+        <ul className="space-y-2">
+            {items.map((it, i) => (
+                <li key={i} className="flex items-center justify-between rounded-xl border border-border bg-muted px-3 py-2">
+                    <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{it.nome}</div>
+                        <div className="text-xs text-muted-foreground">Total: {it.total} questões</div>
+                    </div>
+                    <span className="ml-3 text-sm font-bold text-red-600">{it.acerto}%</span>
+                </li>
+            ))}
+        </ul>
     );
 }
