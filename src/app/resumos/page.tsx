@@ -40,12 +40,12 @@ type RevItem = {
 export default function ResumosPage() {
     const [tab, setTab] = useState<"revisao" | "lista">("revisao");
 
-    // maps
+    // maps p/ nomes
     const [editalMap, setEditalMap] = useState<Record<string, string>>({});
     const [materiaMap, setMateriaMap] = useState<Record<string, string>>({});
     const [assuntoMap, setAssuntoMap] = useState<Record<string, string>>({});
 
-    // filters
+    // filtros da LISTA
     const [editais, setEditais] = useState<Opt[]>([]);
     const [materiasOpt, setMateriasOpt] = useState<Opt[]>([]);
     const [assuntosOpt, setAssuntosOpt] = useState<Opt[]>([]);
@@ -53,20 +53,20 @@ export default function ResumosPage() {
     const [materia, setMateria] = useState("");
     const [assunto, setAssunto] = useState("");
 
-    // list
+    // lista de resumos
     const [loadingList, setLoadingList] = useState(true);
     const [resumos, setResumos] = useState<ResumoRow[]>([]);
     const [viewingResumo, setViewingResumo] = useState<ResumoRow | null>(null);
     const [editing, setEditing] = useState(false);
     const [editText, setEditText] = useState("");
 
-    // reviews
+    // revisões
     const [today, setToday] = useState<string>(new Date().toISOString().slice(0, 10));
     const [loadingRev, setLoadingRev] = useState(true);
     const [revisoes, setRevisoes] = useState<RevItem[]>([]);
     const [viewingRev, setViewingRev] = useState<RevItem | null>(null);
 
-    // modal new
+    // modal novo resumo (estados do modal)
     const [openNew, setOpenNew] = useState(false);
     const [newTitulo, setNewTitulo] = useState("");
     const [newConteudo, setNewConteudo] = useState("");
@@ -76,12 +76,17 @@ export default function ResumosPage() {
     const [savingNew, setSavingNew] = useState(false);
     const newTextRef = useRef<HTMLTextAreaElement>(null);
 
-    /* maps */
+    // opções exclusivas do MODAL
+    const [optsNewEditais, setOptsNewEditais] = useState<Opt[]>([]);
+    const [optsNewMaterias, setOptsNewMaterias] = useState<Opt[]>([]);
+    const [optsNewAssuntos, setOptsNewAssuntos] = useState<Opt[]>([]);
+
+    /* ========= nomes/combos base ========= */
     useEffect(() => {
         (async () => {
             try {
-                const { data } = await supabase.auth.getUser();
-                const uid = data?.user?.id;
+                const { data: u } = await supabase.auth.getUser();
+                const uid = u?.user?.id;
                 if (!uid) return;
 
                 const [eds, mats, asss] = await Promise.all([
@@ -102,9 +107,7 @@ export default function ResumosPage() {
                 const aMap: Record<string, string> = {};
                 (asss.data ?? []).forEach((a: any) => (aMap[a.id] = a.nome));
                 setAssuntoMap(aMap);
-            } catch {
-                // silencia: evita quebrar a página
-            }
+            } catch { /* evita quebrar */ }
         })();
     }, []);
 
@@ -112,13 +115,21 @@ export default function ResumosPage() {
     const nameMateria = (id?: string | null) => (id && materiaMap[id]) || "Matéria";
     const nameAssunto = (id?: string | null) => (id && assuntoMap[id]) || "Assunto";
 
-    /* dependent filters */
+    /* ========= filtros dependentes (LISTA) ========= */
     useEffect(() => {
         (async () => {
             try {
                 setMateriasOpt([]); setMateria(""); setAssuntosOpt([]); setAssunto("");
                 if (!edital) return;
-                const { data } = await supabase.from("materias").select("id,nome").eq("edital_id", edital).order("nome");
+                const { data: u } = await supabase.auth.getUser();
+                const uid = u?.user?.id;
+                if (!uid) return;
+                const { data } = await supabase
+                    .from("materias")
+                    .select("id,nome")
+                    .eq("user_id", uid)
+                    .eq("edital_id", edital)
+                    .order("nome");
                 setMateriasOpt((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
             } catch { }
         })();
@@ -129,18 +140,26 @@ export default function ResumosPage() {
             try {
                 setAssuntosOpt([]); setAssunto("");
                 if (!materia) return;
-                const { data } = await supabase.from("assuntos").select("id,nome").eq("materia_id", materia).order("nome");
+                const { data: u } = await supabase.auth.getUser();
+                const uid = u?.user?.id;
+                if (!uid) return;
+                const { data } = await supabase
+                    .from("assuntos")
+                    .select("id,nome")
+                    .eq("user_id", uid)
+                    .eq("materia_id", materia)
+                    .order("nome");
                 setAssuntosOpt((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
             } catch { }
         })();
     }, [materia]);
 
-    /* list: resumos */
+    /* ========= lista de resumos ========= */
     const loadResumos = async () => {
         setLoadingList(true);
         try {
-            const { data } = await supabase.auth.getUser();
-            const uid = data?.user?.id;
+            const { data: u } = await supabase.auth.getUser();
+            const uid = u?.user?.id;
             if (!uid) { setResumos([]); return; }
 
             let q = supabase
@@ -168,17 +187,19 @@ export default function ResumosPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [edital, materia, assunto]);
 
-    /* reviews */
+    /* ========= revisões ========= */
     const loadRevisoes = async () => {
         setLoadingRev(true);
         try {
-            const { data } = await supabase.auth.getUser();
-            const uid = data?.user?.id;
+            const { data: u } = await supabase.auth.getUser();
+            const uid = u?.user?.id;
             if (!uid) { setRevisoes([]); return; }
 
             const { data: rows, error } = await supabase
                 .from("revisoes")
-                .select("id,etapa,scheduled_for,resumos(id,titulo,conteudo,created_at,edital_id,materia_id,assunto_id)")
+                .select(
+                    "id,etapa,scheduled_for,resumos:resumo_id(id,titulo,conteudo,created_at,edital_id,materia_id,assunto_id)"
+                ) // usa alias explícito da FK
                 .eq("user_id", uid)
                 .is("done_at", null)
                 .lte("scheduled_for", today)
@@ -189,7 +210,7 @@ export default function ResumosPage() {
                     id: r.id,
                     etapa: r.etapa,
                     scheduled_for: r.scheduled_for,
-                    resumo: (r.resumos?.[0] ?? {}) as ResumoRow,
+                    resumo: (r.resumos ?? {}) as ResumoRow,
                 })).filter(x => !!x.resumo?.id);
                 setRevisoes(items);
             } else {
@@ -207,7 +228,7 @@ export default function ResumosPage() {
         loadRevisoes();
     }, [today]);
 
-    /* actions */
+    /* ========= ações ========= */
     const openViewResumo = (row: ResumoRow) => {
         setViewingResumo(row);
         setEditing(false);
@@ -235,7 +256,7 @@ export default function ResumosPage() {
         setViewingRev(null);
     };
 
-    /* modal new */
+    /* ========= modal: helpers ========= */
     const addMarkNew = () => {
         const ta = newTextRef.current;
         if (!ta) return;
@@ -253,8 +274,8 @@ export default function ResumosPage() {
     const salvarNovo = async () => {
         try {
             setSavingNew(true);
-            const { data } = await supabase.auth.getUser();
-            const uid = data?.user?.id;
+            const { data: u } = await supabase.auth.getUser();
+            const uid = u?.user?.id;
             if (!uid) throw new Error("Você precisa estar autenticado.");
             if (!newEdital || !newMateria || !newAssunto || !newTitulo.trim() || !newConteudo.trim()) {
                 throw new Error("Preencha todos os campos.");
@@ -279,7 +300,58 @@ export default function ResumosPage() {
         }
     };
 
-    /* UI */
+    /* ========= opções do MODAL (separadas dos filtros) ========= */
+    useEffect(() => {
+        if (!openNew) return;
+        (async () => {
+            const { data: u } = await supabase.auth.getUser();
+            const uid = u?.user?.id;
+            if (!uid) return;
+            const { data } = await supabase
+                .from("editais")
+                .select("id,nome")
+                .eq("user_id", uid)
+                .order("created_at", { ascending: false });
+            setOptsNewEditais((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
+        })();
+    }, [openNew]);
+
+    useEffect(() => {
+        (async () => {
+            setOptsNewMaterias([]); setNewMateria("");
+            setOptsNewAssuntos([]); setNewAssunto("");
+            if (!newEdital) return;
+            const { data: u } = await supabase.auth.getUser();
+            const uid = u?.user?.id;
+            if (!uid) return;
+            const { data } = await supabase
+                .from("materias")
+                .select("id,nome")
+                .eq("user_id", uid)
+                .eq("edital_id", newEdital)
+                .order("nome");
+            setOptsNewMaterias((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
+        })();
+    }, [newEdital]);
+
+    useEffect(() => {
+        (async () => {
+            setOptsNewAssuntos([]); setNewAssunto("");
+            if (!newMateria) return;
+            const { data: u } = await supabase.auth.getUser();
+            const uid = u?.user?.id;
+            if (!uid) return;
+            const { data } = await supabase
+                .from("assuntos")
+                .select("id,nome")
+                .eq("user_id", uid)
+                .eq("materia_id", newMateria)
+                .order("nome");
+            setOptsNewAssuntos((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
+        })();
+    }, [newMateria]);
+
+    /* ========= UI ========= */
     return (
         <div className="mx-auto max-w-4xl p-4">
             <div className="mb-4 flex items-center justify-between">
@@ -291,7 +363,7 @@ export default function ResumosPage() {
                 </div>
             </div>
 
-            {/* Revisões */}
+            {/* ===== Revisões ===== */}
             {tab === "revisao" && (
                 <div>
                     <label className="text-sm text-gray-600">
@@ -302,7 +374,9 @@ export default function ResumosPage() {
                     <div className="mt-3 space-y-3">
                         {loadingRev && <div className="rounded border p-3">Carregando…</div>}
                         {!loadingRev && revisoes.length === 0 && !viewingRev && (
-                            <div className="rounded border p-3 text-gray-500">Sem revisões pendentes 🎉</div>
+                            <div className="rounded border p-3 text-gray-500">
+                                Sem revisões pendentes. Adicione um resumo e os agendamentos (1/3/7/15/30/60/90) serão criados.
+                            </div>
                         )}
 
                         {!viewingRev && revisoes.map((rv) => (
@@ -349,7 +423,7 @@ export default function ResumosPage() {
                 </div>
             )}
 
-            {/* Lista de Resumos */}
+            {/* ===== Lista de Resumos ===== */}
             {tab === "lista" && (
                 <>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -433,7 +507,7 @@ export default function ResumosPage() {
                 </>
             )}
 
-            {/* Modal novo resumo */}
+            {/* ===== Modal: Novo Resumo ===== */}
             {openNew && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
                     <div className="w-full max-w-2xl rounded-lg bg-white shadow">
@@ -447,21 +521,21 @@ export default function ResumosPage() {
                                     <span className="mb-1 block text-sm text-gray-600">Edital</span>
                                     <select value={newEdital} onChange={(e) => setNewEdital(e.target.value)} className="w-full rounded border p-2">
                                         <option value="">Selecione</option>
-                                        {editais.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                        {optsNewEditais.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                 </label>
                                 <label className="block">
                                     <span className="mb-1 block text-sm text-gray-600">Matéria</span>
                                     <select value={newMateria} onChange={(e) => setNewMateria(e.target.value)} className="w-full rounded border p-2" disabled={!newEdital}>
                                         <option value="">{newEdital ? "Selecione" : "Selecione um edital"}</option>
-                                        {materiasOpt.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                        {optsNewMaterias.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                 </label>
                                 <label className="block">
                                     <span className="mb-1 block text-sm text-gray-600">Assunto</span>
                                     <select value={newAssunto} onChange={(e) => setNewAssunto(e.target.value)} className="w-full rounded border p-2" disabled={!newMateria}>
                                         <option value="">{newMateria ? "Selecione" : "Selecione a matéria"}</option>
-                                        {assuntosOpt.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                        {optsNewAssuntos.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                 </label>
                             </div>
