@@ -8,7 +8,12 @@ import BadgeSeen from "@/components/BadgeSeen";
 /** Tipos */
 type Edital = { id: string; nome: string };
 type Materia = { id: string; nome: string };
-type Assunto = { id: string; nome: string; visto_count: number; importance_level: number };
+type Assunto = {
+    id: string;
+    nome: string;
+    visto_count: number;
+    importance_level: number;
+};
 
 /** Badge de importância (clicável) */
 function ImportanceBadge({
@@ -47,6 +52,13 @@ export default function EditalPage() {
     const [openNovo, setOpenNovo] = useState(false);
     const [openEditar, setOpenEditar] = useState(false);
     const [loading, setLoading] = useState(true);
+
+    // modal de edição de um assunto
+    const [editingAssunto, setEditingAssunto] = useState<{
+        open: boolean;
+        materiaId: string | null;
+        assunto: Assunto | null;
+    }>({ open: false, materiaId: null, assunto: null });
 
     // carrega lista de editais do usuário
     useEffect(() => {
@@ -101,7 +113,6 @@ export default function EditalPage() {
     }, [selEdital]);
 
     const refreshTudo = async (editalId: string) => {
-        // recarrega matérias + assuntos (após criar/editar)
         const uid = (await supabase.auth.getUser()).data.user?.id;
         if (!uid) return;
         const { data: mats } = await supabase
@@ -125,7 +136,7 @@ export default function EditalPage() {
     };
 
     return (
-        <div className="mx-auto max-w-5xl p-4">
+        <div className="mx-auto max-w-6xl p-4"> {/* mais largo */}
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <h1 className="text-2xl font-semibold">Edital</h1>
                 <div className="flex gap-2">
@@ -173,15 +184,28 @@ export default function EditalPage() {
                     {materias.map((m) => (
                         <div key={m.id} className="rounded-lg border p-3">
                             <div className="mb-2 text-lg font-medium">{m.nome}</div>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+
+                            {/* mais colunas nas telas maiores para caber confortável sem quebra */}
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                 {(assuntos[m.id] || []).map((a) => (
                                     <div
                                         key={a.id}
                                         className="flex items-center justify-between rounded bg-gray-50 p-2"
                                     >
-                                        <span className="truncate">{a.nome}</span>
-                                        <div className="flex items-center gap-3">
-                                            {/* badge de importância: clique para ciclar 0→1→2→3→0 */}
+                                        {/* Clicar no nome abre modal de edição */}
+                                        <button
+                                            type="button"
+                                            className="min-w-0 flex-1 text-left truncate hover:underline"
+                                            onClick={() =>
+                                                setEditingAssunto({ open: true, materiaId: m.id, assunto: a })
+                                            }
+                                            title="Clique para renomear ou excluir"
+                                        >
+                                            {a.nome}
+                                        </button>
+
+                                        {/* linha de ícones sem quebrar */}
+                                        <div className="ml-3 flex flex-none flex-nowrap items-center gap-4">
                                             <ImportanceBadge
                                                 level={a.importance_level ?? 0}
                                                 onClick={async () => {
@@ -190,7 +214,6 @@ export default function EditalPage() {
                                                         .from("assuntos")
                                                         .update({ importance_level: next })
                                                         .eq("id", a.id);
-                                                    // atualiza somente no estado local
                                                     setAssuntos((prev) => {
                                                         const copy = { ...prev };
                                                         copy[m.id] = (copy[m.id] || []).map((x) =>
@@ -200,13 +223,14 @@ export default function EditalPage() {
                                                     });
                                                 }}
                                             />
-
-                                            {/* “olhinho” + vezes visto */}
-                                            <span title="vezes visto">👁️</span>
-                                            <BadgeSeen count={a.visto_count} />
+                                            <div className="flex items-center gap-2 whitespace-nowrap">
+                                                <span title="vezes visto">👁️</span>
+                                                <BadgeSeen count={a.visto_count} />
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
+
                                 {(!assuntos[m.id] || assuntos[m.id].length === 0) && (
                                     <div className="rounded bg-white p-2 text-sm text-gray-400">
                                         Sem assuntos ainda.
@@ -223,7 +247,6 @@ export default function EditalPage() {
                 <NovoEdital
                     onCreated={async (id) => {
                         setOpenNovo(false);
-                        // recarrega lista de editais do usuário e seleciona o novo
                         const uid = (await supabase.auth.getUser()).data.user?.id;
                         const { data } = await supabase
                             .from("editais")
@@ -236,7 +259,7 @@ export default function EditalPage() {
                 />
             </Modal>
 
-            {/* MODAL: Editar matérias e assuntos */}
+            {/* MODAL: Editar matérias e assuntos (adicionar) */}
             <Modal
                 open={openEditar}
                 onClose={() => setOpenEditar(false)}
@@ -249,6 +272,45 @@ export default function EditalPage() {
                         if (selEdital) await refreshTudo(selEdital);
                     }}
                 />
+            </Modal>
+
+            {/* MODAL: Editar/Excluir um assunto */}
+            <Modal
+                open={editingAssunto.open}
+                onClose={() => setEditingAssunto({ open: false, materiaId: null, assunto: null })}
+                title="Editar assunto"
+            >
+                {editingAssunto.assunto && editingAssunto.materiaId && (
+                    <EditarAssuntoForm
+                        assunto={editingAssunto.assunto}
+                        onCancel={() =>
+                            setEditingAssunto({ open: false, materiaId: null, assunto: null })
+                        }
+                        onSaved={async (updated) => {
+                            // atualiza no estado local
+                            const mId = editingAssunto.materiaId!;
+                            setAssuntos((prev) => {
+                                const copy = { ...prev };
+                                copy[mId] = (copy[mId] || []).map((x) =>
+                                    x.id === updated.id ? { ...x, nome: updated.nome } : x
+                                );
+                                return copy;
+                            });
+                            setEditingAssunto({ open: false, materiaId: null, assunto: null });
+                        }}
+                        onDeleted={async () => {
+                            const mId = editingAssunto.materiaId!;
+                            setAssuntos((prev) => {
+                                const copy = { ...prev };
+                                copy[mId] = (copy[mId] || []).filter(
+                                    (x) => x.id !== editingAssunto.assunto!.id
+                                );
+                                return copy;
+                            });
+                            setEditingAssunto({ open: false, materiaId: null, assunto: null });
+                        }}
+                    />
+                )}
             </Modal>
         </div>
     );
@@ -331,9 +393,7 @@ function EditarEstrutura({
     return (
         <div className="space-y-4">
             {!editalId && (
-                <p className="text-sm text-gray-500">
-                    Selecione um edital na tela principal.
-                </p>
+                <p className="text-sm text-gray-500">Selecione um edital na tela principal.</p>
             )}
 
             {/* Adicionar Matéria */}
@@ -384,7 +444,8 @@ function EditarEstrutura({
                     </select>
                 </div>
 
-                <div className="flex flex-col gap-2 sm:flex-row">
+                {/* linha sem quebra: input (cresce), select e botão mantêm-se lado a lado */}
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <input
                         className="flex-1 rounded border p-2"
                         placeholder="Nome do assunto"
@@ -392,21 +453,23 @@ function EditarEstrutura({
                         onChange={(e) => setAssuntoNome(e.target.value)}
                     />
 
-                    {/* Seleção de importância ao criar */}
-                    <select
-                        className="rounded border p-2"
-                        value={assuntoImport}
-                        onChange={(e) => setAssuntoImport(Number(e.target.value))}
-                        title="Grau de importância"
-                    >
-                        <option value={0}>⚪ Normal</option>
-                        <option value={1}>⚠️ Relevante</option>
-                        <option value={2}>🚨 Importante</option>
-                        <option value={3}>🔥 Cai sempre</option>
-                    </select>
+                    <div className="flex flex-none items-center gap-2 whitespace-nowrap">
+                        <label className="text-sm text-gray-600">Importância:</label>
+                        <select
+                            className="rounded border p-2"
+                            value={assuntoImport}
+                            onChange={(e) => setAssuntoImport(Number(e.target.value))}
+                            title="Grau de importância"
+                        >
+                            <option value={0}>⚪ Normal</option>
+                            <option value={1}>⚠️ Relevante</option>
+                            <option value={2}>🚨 Importante</option>
+                            <option value={3}>🔥 Cai sempre</option>
+                        </select>
+                    </div>
 
                     <button
-                        className="rounded bg-gray-800 px-3 py-2 text-white"
+                        className="flex-none rounded bg-gray-800 px-3 py-2 text-white"
                         onClick={async () => {
                             if (!selMateria || !assuntoNome) return;
                             const { data: mat } = await supabase
@@ -419,7 +482,7 @@ function EditarEstrutura({
                                 edital_id: mat?.edital_id,
                                 nome: assuntoNome,
                                 user_id: await getUid(),
-                                importance_level: assuntoImport, // grava a importância
+                                importance_level: assuntoImport,
                             });
                             setAssuntoNome("");
                             setAssuntoImport(0);
@@ -427,6 +490,70 @@ function EditarEstrutura({
                         }}
                     >
                         Adicionar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/** Form de edição/remoção de um assunto */
+function EditarAssuntoForm({
+    assunto,
+    onSaved,
+    onDeleted,
+    onCancel,
+}: {
+    assunto: Assunto;
+    onSaved: (updated: { id: string; nome: string }) => void;
+    onDeleted: () => void;
+    onCancel: () => void;
+}) {
+    const [nome, setNome] = useState(assunto.nome);
+    const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+
+    return (
+        <div className="space-y-3">
+            <label className="block text-sm text-gray-600">
+                Nome do assunto
+                <input
+                    className="mt-1 w-full rounded border p-2"
+                    value={nome}
+                    onChange={(e) => setNome(e.target.value)}
+                />
+            </label>
+
+            <div className="flex items-center justify-between">
+                <button
+                    className="rounded bg-red-600 px-3 py-2 text-white disabled:opacity-50"
+                    disabled={deleting}
+                    onClick={async () => {
+                        if (!confirm("Excluir este assunto? Os resumos relacionados também podem ser removidos em cascata.")) return;
+                        setDeleting(true);
+                        await supabase.from("assuntos").delete().eq("id", assunto.id);
+                        setDeleting(false);
+                        onDeleted();
+                    }}
+                >
+                    {deleting ? "Excluindo..." : "Excluir"}
+                </button>
+
+                <div className="flex gap-2">
+                    <button className="rounded bg-gray-200 px-3 py-2" onClick={onCancel}>
+                        Cancelar
+                    </button>
+                    <button
+                        className="rounded bg-green-600 px-3 py-2 text-white disabled:opacity-50"
+                        disabled={saving || nome.trim().length === 0}
+                        onClick={async () => {
+                            setSaving(true);
+                            await supabase.from("assuntos").update({ nome: nome.trim() }).eq("id", assunto.id);
+                            setSaving(false);
+                            onSaved({ id: assunto.id, nome: nome.trim() });
+                        }}
+                    >
+                        {saving ? "Salvando..." : "Salvar"}
                     </button>
                 </div>
             </div>
