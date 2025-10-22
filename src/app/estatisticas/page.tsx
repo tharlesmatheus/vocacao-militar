@@ -10,21 +10,13 @@ import {
     ResponsiveContainer,
     Tooltip,
     CartesianGrid,
-    LabelList,
 } from "recharts";
 
 /* ===================== CONFIG ===================== */
-const ANSWERS_TABLE = "resolucoes";
-const ANSWERS_CORRECT_FIELD = "correta";
-const ANSWERS_MATERIA_FIELD = "materia_id";
-const ANSWERS_ASSUNTO_FIELD = "assunto_id";
-const ANSWERS_CREATED_FIELD = "created_at";
-
 const GOOD_THRESHOLD = 80;
 const BAD_THRESHOLD = 50;
 const MIN_QUESTOES = 10;
 
-/* ===================== TYPES & HELPERS ===================== */
 type Daily = { dia: string; tempo_min: number };
 type TopItem = { nome: string; minutos: number };
 type Phase = "study" | "break";
@@ -57,8 +49,11 @@ function fmtHMS(totalSeconds: number) {
     if (m || (!d && !h)) parts.push(`${m}m`);
     return parts.join(" ");
 }
+/** formata Date -> "dd/MM/yyyy" (como salvo em progresso_semanal) */
+function ptBR(d: Date) {
+    return d.toLocaleDateString("pt-BR");
+}
 
-/* ===================== PAGE ===================== */
 export default function EstatisticasPage() {
     const [days, setDays] = useState<7 | 30 | 90>(7);
     const [loading, setLoading] = useState(true);
@@ -77,22 +72,28 @@ export default function EstatisticasPage() {
     const [topMaterias, setTopMaterias] = useState<TopItem[]>([]);
     const [topAssuntos, setTopAssuntos] = useState<TopItem[]>([]);
 
-    // — Resumos/Revisões
+    // — Resumos/Revisões (se existirem)
     const [resumosPeriodo, setResumosPeriodo] = useState(0);
     const [resumosTotal, setResumosTotal] = useState(0);
     const [revisoesPeriodo, setRevisoesPeriodo] = useState(0);
     const [revisoesTotal, setRevisoesTotal] = useState(0);
     const [revisoesPendentes, setRevisoesPendentes] = useState(0);
 
-    // — Questões (PERÍODO)
+    // — Questões (PERÍODO via progresso_semanal) e TOTAL (estatisticas)
     const [questoesPeriodo, setQuestoesPeriodo] = useState(0);
     const [acertoPeriodo, setAcertoPeriodo] = useState(0);
-    const [byMateriaAcc, setByMateriaAcc] = useState<
+    const [questoesTotal, setQuestoesTotal] = useState(0);
+    const [acertoTotal, setAcertoTotal] = useState(0);
+
+    // TOTAL (histórico) – vindo de acc_por_materia/assunto
+    const [byMateriaAccTotal, setByMateriaAccTotal] = useState<
         Array<{ nome: string; acerto: number; total: number }>
     >([]);
-    const [byAssuntoAcc, setByAssuntoAcc] = useState<
+    const [byAssuntoAccTotal, setByAssuntoAccTotal] = useState<
         Array<{ nome: string; acerto: number; total: number }>
     >([]);
+
+    // Indicadores (usam TOTAL por falta de série no período)
     const [fortesMaterias, setFortesMaterias] = useState<
         Array<{ nome: string; acerto: number; total: number }>
     >([]);
@@ -103,16 +104,6 @@ export default function EstatisticasPage() {
         Array<{ nome: string; acerto: number; total: number }>
     >([]);
     const [fracosAssuntos, setFracosAssuntos] = useState<
-        Array<{ nome: string; acerto: number; total: number }>
-    >([]);
-
-    // — Questões (TOTAL / histórico — ESTATISTICAS)
-    const [questoesTotal, setQuestoesTotal] = useState(0);
-    const [acertoTotal, setAcertoTotal] = useState(0);
-    const [byMateriaAccTotal, setByMateriaAccTotal] = useState<
-        Array<{ nome: string; acerto: number; total: number }>
-    >([]);
-    const [byAssuntoAccTotal, setByAssuntoAccTotal] = useState<
         Array<{ nome: string; acerto: number; total: number }>
     >([]);
 
@@ -162,7 +153,7 @@ export default function EstatisticasPage() {
                         assunto_id: string | null;
                     }>;
 
-                // diária base
+                // base diária (minutos/dia)
                 const baseDays: Daily[] = Array.from({ length: days }, (_, i) => {
                     const d = new Date(from.getTime() + i * ONE_DAY);
                     return { dia: toLocalDateLabel(d), tempo_min: 0 };
@@ -205,7 +196,7 @@ export default function EstatisticasPage() {
                 setSessoesCount(count);
                 setMediaSessaoMin(count ? Math.round(totalSeconds / 60 / count) : 0);
 
-                // streak (dias consecutivos com >0 min)
+                // streak (dias seguidos com >0 min)
                 let streak = 0;
                 for (let i = baseDays.length - 1; i >= 0; i--) {
                     if (baseDays[i].tempo_min > 0) streak++;
@@ -213,7 +204,7 @@ export default function EstatisticasPage() {
                 }
                 setStreakDias(streak);
 
-                // top 5 tempo
+                // top 5 tempo (matérias/assuntos)
                 const tM: TopItem[] = Object.entries(byMateriaTime)
                     .map(([id, sec]) => ({
                         nome: mMap[id] || id.slice(0, 8) + "…",
@@ -231,7 +222,94 @@ export default function EstatisticasPage() {
                 setTopMaterias(tM);
                 setTopAssuntos(tA);
 
-                /* ================= Resumos / Revisões ================= */
+                /* ================= ESTATISTICAS (única tabela) ================= */
+                const { data: est } = await supabase
+                    .from("estatisticas")
+                    .select(
+                        "questoes_respondidas,taxa_acerto,progresso_semanal,acc_por_materia,acc_por_assunto"
+                    )
+                    .eq("user_id", uid)
+                    .maybeSingle();
+
+                // Totais básicos
+                const totalQuestoes = est?.questoes_respondidas ?? 0;
+                const taxa = est?.taxa_acerto ?? 0;
+                setQuestoesTotal(totalQuestoes);
+                setAcertoTotal(typeof taxa === "number" ? Math.round(taxa) : Number(taxa));
+
+                // Questões no PERÍODO = soma de progresso_semanal nos últimos N dias
+                const diasAlvo = new Set(
+                    Array.from({ length: days }, (_, i) =>
+                        ptBR(new Date(startOfLocalDay().getTime() - i * ONE_DAY))
+                    )
+                );
+                let somaPeriodo = 0;
+                const prog = Array.isArray(est?.progresso_semanal)
+                    ? (est!.progresso_semanal as Array<{ dia: string; questoes: number }>)
+                    : [];
+                for (const row of prog) {
+                    if (row?.dia && diasAlvo.has(row.dia)) {
+                        somaPeriodo += Number(row.questoes ?? 0);
+                    }
+                }
+                setQuestoesPeriodo(somaPeriodo);
+
+                // Sem série por acerto diário: usamos taxa_acerto como “acerto no período”
+                setAcertoPeriodo(
+                    typeof taxa === "number" ? Math.round(taxa) : Number(taxa ?? 0)
+                );
+
+                // Listas TOTAL/histórico por matéria/assunto
+                const matObj = (est?.acc_por_materia ?? {}) as Record<
+                    string,
+                    { total: number; corretas: number }
+                >;
+                const assObj = (est?.acc_por_assunto ?? {}) as Record<
+                    string,
+                    { total: number; corretas: number }
+                >;
+
+                const matList = Object.entries(matObj).map(([id, v]) => ({
+                    nome: mMap[id] || id.slice(0, 8) + "…",
+                    acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
+                    total: v.total,
+                }));
+                const assList = Object.entries(assObj).map(([id, v]) => ({
+                    nome: aMap[id] || id.slice(0, 8) + "…",
+                    acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
+                    total: v.total,
+                }));
+
+                setByMateriaAccTotal(matList.sort((a, b) => b.total - a.total).slice(0, 10));
+                setByAssuntoAccTotal(assList.sort((a, b) => b.total - a.total).slice(0, 10));
+
+                // Indicadores (com TOTAL)
+                setFortesMaterias(
+                    matList
+                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
+                        .sort((a, b) => b.acerto - a.acerto)
+                        .slice(0, 5)
+                );
+                setFracasMaterias(
+                    matList
+                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
+                        .sort((a, b) => a.acerto - b.acerto)
+                        .slice(0, 5)
+                );
+                setFortesAssuntos(
+                    assList
+                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
+                        .sort((a, b) => b.acerto - a.acerto)
+                        .slice(0, 5)
+                );
+                setFracosAssuntos(
+                    assList
+                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
+                        .sort((a, b) => a.acerto - b.acerto)
+                        .slice(0, 5)
+                );
+
+                /* ================= Resumos / Revisões (se você usa essas tabelas) ================= */
                 const [resPeriodo, resTot] = await Promise.all([
                     supabase
                         .from("resumos")
@@ -267,136 +345,13 @@ export default function EstatisticasPage() {
                 setRevisoesPeriodo(revPeriodo.count ?? 0);
                 setRevisoesTotal(revTot.count ?? 0);
                 setRevisoesPendentes(revPend.count ?? 0);
-
-                /* ================= Questões ================= */
-                // — PERÍODO
-                const { data: ansPer } = await supabase
-                    .from(ANSWERS_TABLE)
-                    .select(
-                        `id, ${ANSWERS_CORRECT_FIELD}, ${ANSWERS_MATERIA_FIELD}, ${ANSWERS_ASSUNTO_FIELD}, ${ANSWERS_CREATED_FIELD}`
-                    )
-                    .eq("user_id", uid)
-                    .gte(ANSWERS_CREATED_FIELD, fromISO);
-
-                const per = (ansPer ?? []) as any[];
-                const perTotal = per.length;
-                const perCorretas = per.reduce(
-                    (acc, r) => acc + (r[ANSWERS_CORRECT_FIELD] ? 1 : 0),
-                    0
-                );
-                setQuestoesPeriodo(perTotal);
-                setAcertoPeriodo(perTotal ? Math.round((perCorretas / perTotal) * 100) : 0);
-
-                // — TOTAL / HISTÓRICO (estatisticas)
-                const { data: est } = await supabase
-                    .from("estatisticas")
-                    .select("questoes_respondidas,taxa_acerto,acc_por_materia,acc_por_assunto")
-                    .eq("user_id", uid)
-                    .maybeSingle();
-
-                if (est) {
-                    setQuestoesTotal(est.questoes_respondidas ?? 0);
-                    setAcertoTotal(
-                        typeof est.taxa_acerto === "number"
-                            ? Math.round(est.taxa_acerto)
-                            : Number(est.taxa_acerto ?? 0)
-                    );
-
-                    const matObj = (est.acc_por_materia ?? {}) as Record<
-                        string,
-                        { total: number; corretas: number }
-                    >;
-                    const assObj = (est.acc_por_assunto ?? {}) as Record<
-                        string,
-                        { total: number; corretas: number }
-                    >;
-
-                    const matList = Object.entries(matObj).map(([id, v]) => ({
-                        nome: materiaMap[id] || id.slice(0, 8) + "…",
-                        acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
-                        total: v.total,
-                    }));
-                    const assList = Object.entries(assObj).map(([id, v]) => ({
-                        nome: assuntoMap[id] || id.slice(0, 8) + "…",
-                        acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
-                        total: v.total,
-                    }));
-
-                    setByMateriaAccTotal(matList.sort((a, b) => b.total - a.total).slice(0, 10));
-                    setByAssuntoAccTotal(assList.sort((a, b) => b.total - a.total).slice(0, 10));
-                } else {
-                    setQuestoesTotal(0);
-                    setAcertoTotal(0);
-                    setByMateriaAccTotal([]);
-                    setByAssuntoAccTotal([]);
-                }
-
-                // — por matéria/assunto (PERÍODO)
-                const materAgg: Record<string, { total: number; corretas: number }> = {};
-                const assuntoAgg: Record<string, { total: number; corretas: number }> = {};
-
-                for (const r of per) {
-                    const mid = r[ANSWERS_MATERIA_FIELD] as string | null;
-                    const aid = r[ANSWERS_ASSUNTO_FIELD] as string | null;
-                    const ok = !!r[ANSWERS_CORRECT_FIELD];
-
-                    if (mid) {
-                        materAgg[mid] = materAgg[mid] || { total: 0, corretas: 0 };
-                        materAgg[mid].total += 1;
-                        if (ok) materAgg[mid].corretas += 1;
-                    }
-                    if (aid) {
-                        assuntoAgg[aid] = assuntoAgg[aid] || { total: 0, corretas: 0 };
-                        assuntoAgg[aid].total += 1;
-                        if (ok) assuntoAgg[aid].corretas += 1;
-                    }
-                }
-
-                const materList = Object.entries(materAgg).map(([id, v]) => ({
-                    nome: materiaMap[id] || id.slice(0, 8) + "…",
-                    acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
-                    total: v.total,
-                }));
-                const assuntoList = Object.entries(assuntoAgg).map(([id, v]) => ({
-                    nome: assuntoMap[id] || id.slice(0, 8) + "…",
-                    acerto: v.total ? Math.round((v.corretas / v.total) * 100) : 0,
-                    total: v.total,
-                }));
-
-                setByMateriaAcc(materList.sort((a, b) => b.total - a.total).slice(0, 10));
-                setByAssuntoAcc(assuntoList.sort((a, b) => b.total - a.total).slice(0, 10));
-
-                setFortesMaterias(
-                    materList
-                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
-                        .sort((a, b) => b.acerto - a.acerto)
-                        .slice(0, 5)
-                );
-                setFracasMaterias(
-                    materList
-                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
-                        .sort((a, b) => a.acerto - b.acerto)
-                        .slice(0, 5)
-                );
-                setFortesAssuntos(
-                    assuntoList
-                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto >= GOOD_THRESHOLD)
-                        .sort((a, b) => b.acerto - a.acerto)
-                        .slice(0, 5)
-                );
-                setFracosAssuntos(
-                    assuntoList
-                        .filter((x) => x.total >= MIN_QUESTOES && x.acerto < BAD_THRESHOLD)
-                        .sort((a, b) => a.acerto - b.acerto)
-                        .slice(0, 5)
-                );
             } catch (e: any) {
                 setErro(e?.message || "Falha ao carregar estatísticas.");
             } finally {
                 setLoading(false);
             }
         })();
-    }, [days, materiaMap, assuntoMap]);
+    }, [days]); // <— só depende do range de dias (evita loop)
 
     const cards = useMemo(() => {
         return [
@@ -440,7 +395,7 @@ export default function EstatisticasPage() {
 
             {!loading && !erro && (
                 <>
-                    {/* Cards (pomodoro/resumos/revisões) */}
+                    {/* Cards principais */}
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
                         {cards.map((c, i) => (
                             <div
@@ -465,14 +420,14 @@ export default function EstatisticasPage() {
                         <StatMini title="Acerto (total)" value={`${acertoTotal}%`} />
                     </div>
 
-                    {/* Série diária: tempo estudado (mais compacto) */}
+                    {/* Série diária: tempo estudado */}
                     <Section title="Tempo estudado por dia (min)">
-                        <div className="w-full h-40">
+                        <div className="w-full h-48 sm:h-64">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={diario} barCategoryGap="35%" margin={{ left: 6, right: 6 }}>
+                                <BarChart data={diario}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                                    <XAxis dataKey="dia" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} />
-                                    <YAxis stroke="var(--muted-foreground)" fontSize={12} allowDecimals={false} tickLine={false} />
+                                    <XAxis dataKey="dia" stroke="var(--muted-foreground)" fontSize={13} />
+                                    <YAxis stroke="var(--muted-foreground)" fontSize={13} allowDecimals={false} />
                                     <Tooltip
                                         contentStyle={{
                                             background: "var(--muted)",
@@ -481,56 +436,36 @@ export default function EstatisticasPage() {
                                             fontFamily: "inherit",
                                             borderRadius: 12,
                                         }}
-                                        cursor={{ fill: "var(--primary)", opacity: 0.08 }}
+                                        cursor={{ fill: "var(--primary)", opacity: 0.1 }}
                                     />
-                                    <Bar dataKey="tempo_min" fill="var(--primary)" radius={[6, 6, 0, 0]} barSize={10} />
+                                    <Bar dataKey="tempo_min" fill="var(--primary)" radius={[8, 8, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
                     </Section>
 
-                    {/* Rankings de tempo (HORIZONTAL, barras finas, estilo lista) */}
+                    {/* Rankings de tempo (HORIZONTAL, compacto) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <Section title="Top 5 matérias por tempo (min)">
-                            <CompactBarList data={topMaterias} nameKey="nome" valueKey="minutos" unit="min" />
+                            <BarSimpleH data={topMaterias} dataKey="minutos" nameKey="nome" />
                         </Section>
                         <Section title="Top 5 assuntos por tempo (min)">
-                            <CompactBarList data={topAssuntos} nameKey="nome" valueKey="minutos" unit="min" />
-                        </Section>
-                    </div>
-
-                    {/* PERÍODO — Acerto por Matéria/Assunto (HORIZONTAL compacto) */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <Section title="Acerto por Matéria (período)">
-                            <CompactBarList data={byMateriaAcc} nameKey="nome" valueKey="acerto" unit="%" max={100} />
-                            {!byMateriaAcc.length && (
-                                <p className="text-sm text-muted-foreground mt-2">
-                                    Sem dados no período. Resolva questões para ver esta seção.
-                                </p>
-                            )}
-                        </Section>
-                        <Section title="Acerto por Assunto (período)">
-                            <CompactBarList data={byAssuntoAcc} nameKey="nome" valueKey="acerto" unit="%" max={100} />
-                            {!byAssuntoAcc.length && (
-                                <p className="text-sm text-muted-foreground mt-2">
-                                    Sem dados no período. Resolva questões para ver esta seção.
-                                </p>
-                            )}
+                            <BarSimpleH data={topAssuntos} dataKey="minutos" nameKey="nome" />
                         </Section>
                     </div>
 
                     {/* TOTAL / HISTÓRICO — a partir da TABELA ESTATISTICAS */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <Section title="Acerto por Matéria (TOTAL / histórico)">
-                            <CompactBarList data={byMateriaAccTotal} nameKey="nome" valueKey="acerto" unit="%" max={100} />
+                        <Section title="Acerto por Matéria (TOTAL)">
+                            <BarPercentH data={byMateriaAccTotal} />
                             {!byMateriaAccTotal.length && (
                                 <p className="text-sm text-muted-foreground mt-2">
                                     Ainda não há histórico agregado por matéria.
                                 </p>
                             )}
                         </Section>
-                        <Section title="Acerto por Assunto (TOTAL / histórico)">
-                            <CompactBarList data={byAssuntoAccTotal} nameKey="nome" valueKey="acerto" unit="%" max={100} />
+                        <Section title="Acerto por Assunto (TOTAL)">
+                            <BarPercentH data={byAssuntoAccTotal} />
                             {!byAssuntoAccTotal.length && (
                                 <p className="text-sm text-muted-foreground mt-2">
                                     Ainda não há histórico agregado por assunto.
@@ -539,7 +474,7 @@ export default function EstatisticasPage() {
                         </Section>
                     </div>
 
-                    {/* Indicadores: Fortes x Prioridades */}
+                    {/* Indicadores: Fortes x Prioridades (TOTAL) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <Section title="Fortes (≥ 80% de acerto, min. 10 questões)">
                             <ListBadges items={fortesMaterias} empty="Ainda sem dados suficientes." />
@@ -598,60 +533,30 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     );
 }
 
-/**
- * Lista compacta de barras horizontais.
- * - Altura dinâmica em função do número de itens
- * - Barras finas (barSize/maxBarSize)
- * - Rótulo do valor no fim da barra
- */
-function CompactBarList<T extends Record<string, any>>({
+/** Barras horizontais simples (tempo) — compactas */
+function BarSimpleH({
     data,
+    dataKey,
     nameKey,
-    valueKey,
-    unit,
-    max,
 }: {
-    data: T[];
-    nameKey: keyof T;
-    valueKey: keyof T;
-    unit?: string; // "min" ou "%"
-    max?: number;  // se 100, vira medidor de %; caso indefinido usa dataMax
+    data: any[];
+    dataKey: string;
+    nameKey: string;
 }) {
-    // altura: ~34px por item (mínimo 140px)
-    const height = Math.max((data?.length ?? 0) * 34 + 20, 140);
-
-    // domínio do eixo X
-    const xDomain: any = max === undefined ? [0, "dataMax + 5"] : [0, max];
-
     return (
-        <div className="w-full" style={{ height }}>
+        <div className="w-full h-56 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                    data={data}
-                    layout="vertical"
-                    barCategoryGap={12}
-                    margin={{ left: 6, right: 10, top: 6, bottom: 6 }}
-                >
-                    <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" />
-                    <XAxis
-                        type="number"
-                        domain={xDomain}
-                        stroke="var(--muted-foreground)"
-                        tickLine={false}
-                        axisLine={false}
-                        fontSize={11}
-                    />
+                <BarChart data={data} layout="vertical" margin={{ left: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis type="number" stroke="var(--muted-foreground)" />
                     <YAxis
                         type="category"
-                        dataKey={nameKey as string}
+                        dataKey={nameKey}
                         stroke="var(--muted-foreground)"
-                        width={160}
+                        width={140}
                         tick={{ fontSize: 12 }}
-                        tickLine={false}
-                        axisLine={false}
                     />
                     <Tooltip
-                        formatter={(v: any) => (unit ? [`${v}${unit}`, ""] : [v, ""])}
                         contentStyle={{
                             background: "var(--muted)",
                             border: "1px solid var(--border)",
@@ -659,23 +564,46 @@ function CompactBarList<T extends Record<string, any>>({
                             fontFamily: "inherit",
                             borderRadius: 12,
                         }}
-                        cursor={{ fill: "var(--primary)", opacity: 0.06 }}
+                        cursor={{ fill: "var(--primary)", opacity: 0.08 }}
                     />
-                    <Bar
-                        dataKey={valueKey as string}
-                        fill="var(--primary)"
-                        radius={[0, 6, 6, 0]}
-                        barSize={10}
-                        maxBarSize={12}
-                    >
-                        <LabelList
-                            dataKey={valueKey as string}
-                            position="right"
-                            formatter={(v: any) => (unit ? `${v}${unit}` : v)}
-                            className="fill-[--foreground]"
-                            fontSize={12}
-                        />
-                    </Bar>
+                    <Bar dataKey={dataKey} fill="var(--primary)" radius={[0, 8, 8, 0]} />
+                </BarChart>
+            </ResponsiveContainer>
+        </div>
+    );
+}
+
+/** Barras horizontais de % acerto (0–100) — compactas */
+function BarPercentH({
+    data,
+}: {
+    data: Array<{ nome: string; acerto: number; total: number }>;
+}) {
+    return (
+        <div className="w-full h-56 sm:h-72">
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data} layout="vertical" margin={{ left: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis type="number" domain={[0, 100]} stroke="var(--muted-foreground)" />
+                    <YAxis
+                        type="category"
+                        dataKey="nome"
+                        stroke="var(--muted-foreground)"
+                        width={160}
+                        tick={{ fontSize: 12 }}
+                    />
+                    <Tooltip
+                        formatter={(v: any, _n, p: any) => [`${v}%`, `Acerto (${p?.payload?.total ?? 0} q.)`]}
+                        contentStyle={{
+                            background: "var(--muted)",
+                            border: "1px solid var(--border)",
+                            color: "var(--foreground)",
+                            fontFamily: "inherit",
+                            borderRadius: 12,
+                        }}
+                        cursor={{ fill: "var(--primary)", opacity: 0.08 }}
+                    />
+                    <Bar dataKey="acerto" fill="var(--primary)" radius={[0, 8, 8, 0]} />
                 </BarChart>
             </ResponsiveContainer>
         </div>
