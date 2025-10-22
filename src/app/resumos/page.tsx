@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-/* utils */
+/* ========== utils ========== */
 function renderWithMarks(text?: string) {
     const t = text ?? "";
     return t
@@ -19,7 +19,7 @@ function plainSnippet(text?: string, size = 140) {
     return trimmed.length > size ? trimmed.slice(0, size) + "…" : trimmed;
 }
 
-/* types */
+/* ========== types ========== */
 type Opt = { value: string; label: string };
 type ResumoRow = {
     id: string;
@@ -37,6 +37,43 @@ type RevItem = {
     resumo: ResumoRow;
 };
 
+/* ========== Modal com tokens ========== */
+function TokenModal({
+    open,
+    title,
+    onClose,
+    children,
+    width = "max-w-3xl",
+}: {
+    open: boolean;
+    title?: string;
+    onClose: () => void;
+    children: React.ReactNode;
+    width?: string;
+}) {
+    if (!open) return null;
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
+            <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+            <div
+                className={`relative z-[101] w-full ${width} rounded-2xl bg-card text-foreground border border-border shadow-xl`}
+            >
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border rounded-t-2xl">
+                    <h2 className="text-lg font-semibold">{title}</h2>
+                    <button
+                        className="rounded p-2 hover:bg-muted text-muted-foreground"
+                        onClick={onClose}
+                        aria-label="Fechar"
+                    >
+                        ✕
+                    </button>
+                </div>
+                <div className="p-5">{children}</div>
+            </div>
+        </div>
+    );
+}
+
 export default function ResumosPage() {
     const [tab, setTab] = useState<"revisao" | "lista">("revisao");
 
@@ -45,7 +82,7 @@ export default function ResumosPage() {
     const [materiaMap, setMateriaMap] = useState<Record<string, string>>({});
     const [assuntoMap, setAssuntoMap] = useState<Record<string, string>>({});
 
-    // filtros da LISTA
+    // filtros LISTA
     const [editais, setEditais] = useState<Opt[]>([]);
     const [materiasOpt, setMateriasOpt] = useState<Opt[]>([]);
     const [assuntosOpt, setAssuntosOpt] = useState<Opt[]>([]);
@@ -53,7 +90,7 @@ export default function ResumosPage() {
     const [materia, setMateria] = useState("");
     const [assunto, setAssunto] = useState("");
 
-    // lista de resumos
+    // lista
     const [loadingList, setLoadingList] = useState(true);
     const [resumos, setResumos] = useState<ResumoRow[]>([]);
     const [viewingResumo, setViewingResumo] = useState<ResumoRow | null>(null);
@@ -61,14 +98,12 @@ export default function ResumosPage() {
     const [editText, setEditText] = useState("");
 
     // revisões
-    const [today, setToday] = useState<string>(
-        new Date().toISOString().slice(0, 10)
-    );
+    const [today, setToday] = useState<string>(new Date().toISOString().slice(0, 10));
     const [loadingRev, setLoadingRev] = useState(true);
     const [revisoes, setRevisoes] = useState<RevItem[]>([]);
     const [viewingRev, setViewingRev] = useState<RevItem | null>(null);
 
-    // modal novo resumo (estados do modal)
+    // modal novo resumo
     const [openNew, setOpenNew] = useState(false);
     const [newTitulo, setNewTitulo] = useState("");
     const [newConteudo, setNewConteudo] = useState("");
@@ -78,12 +113,12 @@ export default function ResumosPage() {
     const [savingNew, setSavingNew] = useState(false);
     const newTextRef = useRef<HTMLTextAreaElement>(null);
 
-    // opções exclusivas do MODAL
+    // opções do modal
     const [optsNewEditais, setOptsNewEditais] = useState<Opt[]>([]);
     const [optsNewMaterias, setOptsNewMaterias] = useState<Opt[]>([]);
     const [optsNewAssuntos, setOptsNewAssuntos] = useState<Opt[]>([]);
 
-    /* ========= nomes/combos base ========= */
+    /* ========= nomes / combos base ========= */
     useEffect(() => {
         (async () => {
             try {
@@ -104,9 +139,7 @@ export default function ResumosPage() {
                 const eMap: Record<string, string> = {};
                 (eds.data ?? []).forEach((e: any) => (eMap[e.id] = e.nome));
                 setEditalMap(eMap);
-                setEditais(
-                    (eds.data ?? []).map((d: any) => ({ value: d.id, label: d.nome }))
-                );
+                setEditais((eds.data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
 
                 const mMap: Record<string, string> = {};
                 (mats.data ?? []).forEach((m: any) => (mMap[m.id] = m.nome));
@@ -116,16 +149,14 @@ export default function ResumosPage() {
                 (asss.data ?? []).forEach((a: any) => (aMap[a.id] = a.nome));
                 setAssuntoMap(aMap);
             } catch {
-                /* evita quebrar */
+                /* noop */
             }
         })();
     }, []);
 
     const nameEdital = (id?: string | null) => (id && editalMap[id]) || "Edital";
-    const nameMateria = (id?: string | null) =>
-        (id && materiaMap[id]) || "Matéria";
-    const nameAssunto = (id?: string | null) =>
-        (id && assuntoMap[id]) || "Assunto";
+    const nameMateria = (id?: string | null) => (id && materiaMap[id]) || "Matéria";
+    const nameAssunto = (id?: string | null) => (id && assuntoMap[id]) || "Assunto";
 
     /* ========= filtros dependentes (LISTA) ========= */
     useEffect(() => {
@@ -145,9 +176,7 @@ export default function ResumosPage() {
                     .eq("user_id", uid)
                     .eq("edital_id", edital)
                     .order("nome");
-                setMateriasOpt(
-                    (data ?? []).map((d: any) => ({ value: d.id, label: d.nome }))
-                );
+                setMateriasOpt((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
             } catch { }
         })();
     }, [edital]);
@@ -167,9 +196,7 @@ export default function ResumosPage() {
                     .eq("user_id", uid)
                     .eq("materia_id", materia)
                     .order("nome");
-                setAssuntosOpt(
-                    (data ?? []).map((d: any) => ({ value: d.id, label: d.nome }))
-                );
+                setAssuntosOpt((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
             } catch { }
         })();
     }, [materia]);
@@ -187,9 +214,7 @@ export default function ResumosPage() {
 
             let q = supabase
                 .from("resumos")
-                .select(
-                    "id,titulo,conteudo,created_at,edital_id,materia_id,assunto_id"
-                )
+                .select("id,titulo,conteudo,created_at,edital_id,materia_id,assunto_id")
                 .eq("user_id", uid)
                 .order("created_at", { ascending: false })
                 .limit(100);
@@ -267,22 +292,14 @@ export default function ResumosPage() {
 
     const salvarEdicao = async () => {
         if (!viewingResumo) return;
-        await supabase
-            .from("resumos")
-            .update({ conteudo: editText })
-            .eq("id", viewingResumo.id);
+        await supabase.from("resumos").update({ conteudo: editText }).eq("id", viewingResumo.id);
         setViewingResumo({ ...viewingResumo, conteudo: editText });
         setEditing(false);
     };
 
     const excluirResumo = async () => {
         if (!viewingResumo) return;
-        if (
-            !confirm(
-                "Excluir este resumo? Isso também removerá as revisões relacionadas."
-            )
-        )
-            return;
+        if (!confirm("Excluir este resumo? Isso também removerá as revisões relacionadas.")) return;
         await supabase.from("resumos").delete().eq("id", viewingResumo.id);
         setViewingResumo(null);
         await Promise.all([loadResumos(), loadRevisoes()]);
@@ -318,13 +335,7 @@ export default function ResumosPage() {
             const { data: u } = await supabase.auth.getUser();
             const uid = u?.user?.id;
             if (!uid) throw new Error("Você precisa estar autenticado.");
-            if (
-                !newEdital ||
-                !newMateria ||
-                !newAssunto ||
-                !newTitulo.trim() ||
-                !newConteudo.trim()
-            ) {
+            if (!newEdital || !newMateria || !newAssunto || !newTitulo.trim() || !newConteudo.trim()) {
                 throw new Error("Preencha todos os campos.");
             }
             const { error } = await supabase.from("resumos").insert({
@@ -350,7 +361,7 @@ export default function ResumosPage() {
         }
     };
 
-    /* ========= opções do MODAL ========= */
+    /* ========= opções MODAL ========= */
     useEffect(() => {
         if (!openNew) return;
         (async () => {
@@ -362,9 +373,7 @@ export default function ResumosPage() {
                 .select("id,nome")
                 .eq("user_id", uid)
                 .order("created_at", { ascending: false });
-            setOptsNewEditais(
-                (data ?? []).map((d: any) => ({ value: d.id, label: d.nome }))
-            );
+            setOptsNewEditais((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
         })();
     }, [openNew]);
 
@@ -384,9 +393,7 @@ export default function ResumosPage() {
                 .eq("user_id", uid)
                 .eq("edital_id", newEdital)
                 .order("nome");
-            setOptsNewMaterias(
-                (data ?? []).map((d: any) => ({ value: d.id, label: d.nome }))
-            );
+            setOptsNewMaterias((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
         })();
     }, [newEdital]);
 
@@ -404,35 +411,38 @@ export default function ResumosPage() {
                 .eq("user_id", uid)
                 .eq("materia_id", newMateria)
                 .order("nome");
-            setOptsNewAssuntos(
-                (data ?? []).map((d: any) => ({ value: d.id, label: d.nome }))
-            );
+            setOptsNewAssuntos((data ?? []).map((d: any) => ({ value: d.id, label: d.nome })));
         })();
     }, [newMateria]);
 
+    /* ========= helpers de UI (tokens) ========= */
+    const inputBase =
+        "rounded border border-border p-2 bg-input text-foreground placeholder:text-muted-foreground " +
+        "focus:outline-none focus:ring-2 focus:ring-primary/20";
+    const selectBase =
+        "rounded border border-border p-2 bg-input text-foreground appearance-none " +
+        "focus:outline-none focus:ring-2 focus:ring-primary/20";
+    const btnTab = (active: boolean) =>
+        `rounded px-3 py-2 ${active
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-foreground border border-border"
+        }`;
+
     /* ========= UI ========= */
     return (
-        <div className="mx-auto max-w-4xl p-4 overflow-x-hidden">
-            {/* header: agora quebra linha no mobile */}
+        <div className="mx-auto max-w-4xl p-4 overflow-x-hidden text-foreground">
+            {/* header */}
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <h1 className="text-2xl font-semibold">Estudos</h1>
                 <div className="flex flex-wrap items-center gap-2">
-                    <button
-                        onClick={() => setTab("revisao")}
-                        className={`rounded px-3 py-2 ${tab === "revisao" ? "bg-indigo-600 text-white" : "bg-gray-200"
-                            }`}
-                    >
+                    <button onClick={() => setTab("revisao")} className={btnTab(tab === "revisao")}>
                         Revisões
                     </button>
-                    <button
-                        onClick={() => setTab("lista")}
-                        className={`rounded px-3 py-2 ${tab === "lista" ? "bg-indigo-600 text-white" : "bg-gray-200"
-                            }`}
-                    >
+                    <button onClick={() => setTab("lista")} className={btnTab(tab === "lista")}>
                         Resumos
                     </button>
                     <button
-                        className="ml-0 sm:ml-2 rounded bg-indigo-600 px-3 py-2 text-white"
+                        className="ml-0 sm:ml-2 rounded bg-primary px-3 py-2 text-primary-foreground"
                         onClick={() => setOpenNew(true)}
                     >
                         + Novo Resumo
@@ -443,20 +453,20 @@ export default function ResumosPage() {
             {/* ===== Revisões ===== */}
             {tab === "revisao" && (
                 <div>
-                    <label className="text-sm text-gray-600 block">
+                    <label className="text-sm text-muted-foreground block">
                         <span className="mr-2">Mostrar pendentes até:</span>
                         <input
                             type="date"
                             value={today}
                             onChange={(e) => setToday(e.target.value)}
-                            className="rounded border p-1"
+                            className="rounded border border-border p-1 bg-input text-foreground"
                         />
                     </label>
 
                     <div className="mt-3 space-y-3">
-                        {loadingRev && <div className="rounded border p-3">Carregando…</div>}
+                        {loadingRev && <div className="rounded border border-border p-3">Carregando…</div>}
                         {!loadingRev && revisoes.length === 0 && !viewingRev && (
-                            <div className="rounded border p-3 text-gray-500">
+                            <div className="rounded border border-border p-3 text-muted-foreground">
                                 Sem revisões pendentes. Adicione um resumo e os agendamentos
                                 (1/3/7/15/30/60/90) serão criados.
                             </div>
@@ -466,30 +476,27 @@ export default function ResumosPage() {
                             revisoes.map((rv) => (
                                 <div
                                     key={rv.id}
-                                    className="rounded border p-3 hover:bg-gray-50 transition"
+                                    className="rounded border border-border p-3 hover:bg-muted transition"
                                 >
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
-                                            <div className="text-xs text-gray-500 break-words">
-                                                {nameMateria(rv.resumo.materia_id)} •{" "}
-                                                {nameAssunto(rv.resumo.assunto_id)}
+                                            <div className="text-xs text-muted-foreground break-words">
+                                                {nameMateria(rv.resumo.materia_id)} • {nameAssunto(rv.resumo.assunto_id)}
                                             </div>
-                                            <div className="font-medium truncate">
-                                                {rv.resumo.titulo || "Resumo"}
-                                            </div>
+                                            <div className="font-medium truncate">{rv.resumo.titulo || "Resumo"}</div>
                                             {rv.resumo.conteudo && (
-                                                <div className="mt-1 text-sm text-gray-700 line-clamp-2 break-words">
+                                                <div className="mt-1 text-sm text-foreground/90 line-clamp-2 break-words">
                                                     {plainSnippet(rv.resumo.conteudo)}
                                                 </div>
                                             )}
-                                            <div className="mt-1 text-xs text-gray-500">
+                                            <div className="mt-1 text-xs text-muted-foreground">
                                                 Etapa {rv.etapa} •{" "}
                                                 {new Date(rv.scheduled_for).toLocaleDateString("pt-BR")}
                                             </div>
                                         </div>
                                         <button
                                             onClick={() => setViewingRev(rv)}
-                                            className="shrink-0 rounded bg-indigo-600 px-3 py-2 text-white"
+                                            className="shrink-0 rounded bg-primary px-3 py-2 text-primary-foreground"
                                         >
                                             Ver
                                         </button>
@@ -498,18 +505,16 @@ export default function ResumosPage() {
                             ))}
 
                         {viewingRev && (
-                            <div className="rounded border">
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b p-3">
+                            <div className="rounded border border-border bg-card">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border p-3">
                                     <div className="min-w-0">
-                                        <div className="text-sm text-gray-500 break-words">
+                                        <div className="text-sm text-muted-foreground break-words">
                                             {nameMateria(viewingRev.resumo.materia_id)} •{" "}
                                             {nameAssunto(viewingRev.resumo.assunto_id)}
                                         </div>
-                                        <div className="text-xs text-gray-500">
+                                        <div className="text-xs text-muted-foreground">
                                             Etapa {viewingRev.etapa} •{" "}
-                                            {new Date(viewingRev.scheduled_for).toLocaleDateString(
-                                                "pt-BR"
-                                            )}
+                                            {new Date(viewingRev.scheduled_for).toLocaleDateString("pt-BR")}
                                         </div>
                                         <h2 className="mt-1 truncate text-lg font-semibold">
                                             {viewingRev.resumo.titulo || "Resumo"}
@@ -518,7 +523,7 @@ export default function ResumosPage() {
                                     <div className="flex flex-wrap gap-2">
                                         <button
                                             onClick={() => setViewingRev(null)}
-                                            className="rounded bg-gray-200 px-3 py-2"
+                                            className="rounded bg-transparent text-foreground border border-border px-3 py-2"
                                         >
                                             Voltar
                                         </button>
@@ -531,7 +536,7 @@ export default function ResumosPage() {
                                     </div>
                                 </div>
                                 <div
-                                    className="prose max-w-none p-4 break-words"
+                                    className="prose max-w-none p-4 break-words text-foreground"
                                     dangerouslySetInnerHTML={{
                                         __html: renderWithMarks(viewingRev.resumo.conteudo ?? ""),
                                     }}
@@ -547,11 +552,11 @@ export default function ResumosPage() {
                 <>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <label className="block">
-                            <span className="mb-1 block text-sm text-gray-600">Edital</span>
+                            <span className="mb-1 block text-sm text-muted-foreground">Edital</span>
                             <select
                                 value={edital}
                                 onChange={(e) => setEdital(e.target.value)}
-                                className="w-full rounded border p-2"
+                                className={`w-full ${selectBase}`}
                             >
                                 <option value="">Todos</option>
                                 {editais.map((o) => (
@@ -562,11 +567,11 @@ export default function ResumosPage() {
                             </select>
                         </label>
                         <label className="block">
-                            <span className="mb-1 block text-sm text-gray-600">Matéria</span>
+                            <span className="mb-1 block text-sm text-muted-foreground">Matéria</span>
                             <select
                                 value={materia}
                                 onChange={(e) => setMateria(e.target.value)}
-                                className="w-full rounded border p-2"
+                                className={`w-full ${selectBase}`}
                                 disabled={!edital}
                             >
                                 <option value="">{edital ? "Todas" : "Selecione um edital"}</option>
@@ -578,16 +583,14 @@ export default function ResumosPage() {
                             </select>
                         </label>
                         <label className="block">
-                            <span className="mb-1 block text-sm text-gray-600">Assunto</span>
+                            <span className="mb-1 block text-sm text-muted-foreground">Assunto</span>
                             <select
                                 value={assunto}
                                 onChange={(e) => setAssunto(e.target.value)}
-                                className="w-full rounded border p-2"
+                                className={`w-full ${selectBase}`}
                                 disabled={!materia}
                             >
-                                <option value="">
-                                    {materia ? "Todos" : "Selecione a matéria"}
-                                </option>
+                                <option value="">{materia ? "Todos" : "Selecione a matéria"}</option>
                                 {assuntosOpt.map((o) => (
                                     <option key={o.value} value={o.value}>
                                         {o.label}
@@ -598,9 +601,9 @@ export default function ResumosPage() {
                     </div>
 
                     <div className="mt-3 space-y-3">
-                        {loadingList && <div className="rounded border p-3">Carregando…</div>}
+                        {loadingList && <div className="rounded border border-border p-3">Carregando…</div>}
                         {!loadingList && resumos.length === 0 && !viewingResumo && (
-                            <div className="rounded border p-3 text-gray-500">
+                            <div className="rounded border border-border p-3 text-muted-foreground">
                                 Nenhum resumo encontrado.
                             </div>
                         )}
@@ -609,19 +612,18 @@ export default function ResumosPage() {
                             resumos.map((r) => (
                                 <div
                                     key={r.id}
-                                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded border p-3"
+                                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded border border-border p-3 bg-card"
                                 >
                                     <div className="min-w-0">
-                                        <div className="text-sm text-gray-500 break-words">
-                                            {nameEdital(r.edital_id)} • {nameMateria(r.materia_id)} •{" "}
-                                            {nameAssunto(r.assunto_id)} •{" "}
+                                        <div className="text-sm text-muted-foreground break-words">
+                                            {nameEdital(r.edital_id)} • {nameMateria(r.materia_id)} • {nameAssunto(r.assunto_id)} •{" "}
                                             {new Date(r.created_at).toLocaleDateString("pt-BR")}
                                         </div>
                                         <div className="font-medium truncate">{r.titulo}</div>
                                     </div>
                                     <button
                                         onClick={() => openViewResumo(r)}
-                                        className="shrink-0 rounded bg-indigo-600 px-3 py-2 text-white"
+                                        className="shrink-0 rounded bg-primary px-3 py-2 text-primary-foreground"
                                     >
                                         Ver
                                     </button>
@@ -629,26 +631,21 @@ export default function ResumosPage() {
                             ))}
 
                         {viewingResumo && (
-                            <div className="rounded border">
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b p-3">
+                            <div className="rounded border border-border bg-card">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border p-3">
                                     <div className="min-w-0">
-                                        <div className="text-sm text-gray-500 break-words">
-                                            {nameEdital(viewingResumo.edital_id)} •{" "}
-                                            {nameMateria(viewingResumo.materia_id)} •{" "}
+                                        <div className="text-sm text-muted-foreground break-words">
+                                            {nameEdital(viewingResumo.edital_id)} • {nameMateria(viewingResumo.materia_id)} •{" "}
                                             {nameAssunto(viewingResumo.assunto_id)} •{" "}
-                                            {new Date(viewingResumo.created_at).toLocaleDateString(
-                                                "pt-BR"
-                                            )}
+                                            {new Date(viewingResumo.created_at).toLocaleDateString("pt-BR")}
                                         </div>
-                                        <h2 className="mt-1 truncate text-lg font-semibold">
-                                            {viewingResumo.titulo}
-                                        </h2>
+                                        <h2 className="mt-1 truncate text-lg font-semibold">{viewingResumo.titulo}</h2>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
                                         {!editing ? (
                                             <button
                                                 onClick={() => setEditing(true)}
-                                                className="rounded bg-gray-800 px-3 py-2 text-white"
+                                                className="rounded bg-primary px-3 py-2 text-primary-foreground"
                                             >
                                                 Editar
                                             </button>
@@ -665,7 +662,7 @@ export default function ResumosPage() {
                                                         setEditing(false);
                                                         setEditText(viewingResumo.conteudo ?? "");
                                                     }}
-                                                    className="rounded bg-gray-200 px-3 py-2"
+                                                    className="rounded bg-transparent text-foreground border border-border px-3 py-2"
                                                 >
                                                     Cancelar
                                                 </button>
@@ -673,13 +670,13 @@ export default function ResumosPage() {
                                         )}
                                         <button
                                             onClick={excluirResumo}
-                                            className="rounded bg-red-600 px-3 py-2 text-white"
+                                            className="rounded bg-destructive px-3 py-2 text-destructive-foreground"
                                         >
                                             Excluir
                                         </button>
                                         <button
                                             onClick={() => setViewingResumo(null)}
-                                            className="rounded bg-gray-200 px-3 py-2"
+                                            className="rounded bg-transparent text-foreground border border-border px-3 py-2"
                                         >
                                             Voltar
                                         </button>
@@ -688,18 +685,18 @@ export default function ResumosPage() {
 
                                 {!editing ? (
                                     <div
-                                        className="prose max-w-none p-4 break-words"
+                                        className="prose max-w-none p-4 break-words text-foreground"
                                         dangerouslySetInnerHTML={{
                                             __html: renderWithMarks(viewingResumo.conteudo ?? ""),
                                         }}
                                     />
                                 ) : (
                                     <div className="p-4">
-                                        <div className="mb-2 text-sm text-gray-600">
+                                        <div className="mb-2 text-sm text-muted-foreground">
                                             Dica: use <code>==texto==</code> para <mark>grifar</mark>
                                         </div>
                                         <textarea
-                                            className="h-64 w-full rounded border p-2"
+                                            className="h-64 w-full rounded border border-border p-2 bg-input text-foreground"
                                             value={editText}
                                             onChange={(e) => setEditText(e.target.value)}
                                         />
@@ -711,127 +708,105 @@ export default function ResumosPage() {
                 </>
             )}
 
-            {/* ===== Modal: Novo Resumo ===== */}
-            {openNew && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                    <div className="w-full max-w-2xl rounded-lg bg-white shadow">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b p-3">
-                            <h3 className="text-lg font-semibold">Novo Resumo</h3>
-                            <button
-                                onClick={() => setOpenNew(false)}
-                                className="rounded px-2 py-1 hover:bg-gray-100 self-start sm:self-auto"
+            {/* ===== Modal: Novo Resumo (Tokenizado) ===== */}
+            <TokenModal open={openNew} onClose={() => setOpenNew(false)} title="Novo Resumo">
+                <div className="space-y-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <label className="block">
+                            <span className="mb-1 block text-sm text-muted-foreground">Edital</span>
+                            <select
+                                value={newEdital}
+                                onChange={(e) => setNewEdital(e.target.value)}
+                                className={`w-full ${selectBase}`}
                             >
-                                ✕
+                                <option value="">Selecione</option>
+                                {optsNewEditais.map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                        {o.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label className="block">
+                            <span className="mb-1 block text-sm text-muted-foreground">Matéria</span>
+                            <select
+                                value={newMateria}
+                                onChange={(e) => setNewMateria(e.target.value)}
+                                className={`w-full ${selectBase}`}
+                                disabled={!newEdital}
+                            >
+                                <option value="">{newEdital ? "Selecione" : "Selecione um edital"}</option>
+                                {optsNewMaterias.map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                        {o.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label className="block">
+                            <span className="mb-1 block text-sm text-muted-foreground">Assunto</span>
+                            <select
+                                value={newAssunto}
+                                onChange={(e) => setNewAssunto(e.target.value)}
+                                className={`w-full ${selectBase}`}
+                                disabled={!newMateria}
+                            >
+                                <option value="">{newMateria ? "Selecione" : "Selecione a matéria"}</option>
+                                {optsNewAssuntos.map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                        {o.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    </div>
+
+                    <input
+                        className={inputBase}
+                        placeholder="Título do resumo"
+                        value={newTitulo}
+                        onChange={(e) => setNewTitulo(e.target.value)}
+                    />
+
+                    <div className="rounded border border-border bg-card">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border p-2">
+                            <div className="text-sm text-muted-foreground">
+                                Dica: use <code>==texto==</code> para <mark>grifar</mark>
+                            </div>
+                            <button
+                                className="rounded bg-muted px-2 py-1 text-sm text-foreground border border-border self-start sm:self-auto"
+                                onClick={addMarkNew}
+                                disabled={!newConteudo}
+                            >
+                                Grifar seleção
                             </button>
                         </div>
+                        <textarea
+                            ref={newTextRef}
+                            className="h-64 w-full p-3 outline-none bg-input text-foreground"
+                            value={newConteudo}
+                            onChange={(e) => setNewConteudo(e.target.value)}
+                            placeholder="Escreva seu resumo…"
+                        />
+                    </div>
 
-                        <div className="p-4 space-y-3">
-                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                <label className="block">
-                                    <span className="mb-1 block text-sm text-gray-600">Edital</span>
-                                    <select
-                                        value={newEdital}
-                                        onChange={(e) => setNewEdital(e.target.value)}
-                                        className="w-full rounded border p-2"
-                                    >
-                                        <option value="">Selecione</option>
-                                        {optsNewEditais.map((o) => (
-                                            <option key={o.value} value={o.value}>
-                                                {o.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <label className="block">
-                                    <span className="mb-1 block text-sm text-gray-600">
-                                        Matéria
-                                    </span>
-                                    <select
-                                        value={newMateria}
-                                        onChange={(e) => setNewMateria(e.target.value)}
-                                        className="w-full rounded border p-2"
-                                        disabled={!newEdital}
-                                    >
-                                        <option value="">
-                                            {newEdital ? "Selecione" : "Selecione um edital"}
-                                        </option>
-                                        {optsNewMaterias.map((o) => (
-                                            <option key={o.value} value={o.value}>
-                                                {o.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <label className="block">
-                                    <span className="mb-1 block text-sm text-gray-600">
-                                        Assunto
-                                    </span>
-                                    <select
-                                        value={newAssunto}
-                                        onChange={(e) => setNewAssunto(e.target.value)}
-                                        className="w-full rounded border p-2"
-                                        disabled={!newMateria}
-                                    >
-                                        <option value="">
-                                            {newMateria ? "Selecione" : "Selecione a matéria"}
-                                        </option>
-                                        {optsNewAssuntos.map((o) => (
-                                            <option key={o.value} value={o.value}>
-                                                {o.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                            </div>
-
-                            <input
-                                className="w-full rounded border p-2"
-                                placeholder="Título do resumo"
-                                value={newTitulo}
-                                onChange={(e) => setNewTitulo(e.target.value)}
-                            />
-
-                            <div className="rounded border">
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b p-2">
-                                    <div className="text-sm text-gray-600">
-                                        Dica: use <code>==texto==</code> para <mark>grifar</mark>
-                                    </div>
-                                    <button
-                                        className="rounded bg-gray-100 px-2 py-1 text-sm self-start sm:self-auto"
-                                        onClick={addMarkNew}
-                                        disabled={!newConteudo}
-                                    >
-                                        Grifar seleção
-                                    </button>
-                                </div>
-                                <textarea
-                                    ref={newTextRef}
-                                    className="h-64 w-full p-3 outline-none"
-                                    value={newConteudo}
-                                    onChange={(e) => setNewConteudo(e.target.value)}
-                                    placeholder="Escreva seu resumo…"
-                                />
-                            </div>
-
-                            <div className="flex flex-wrap items-center justify-end gap-2">
-                                <button
-                                    onClick={() => setOpenNew(false)}
-                                    className="rounded bg-gray-200 px-3 py-2"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={salvarNovo}
-                                    disabled={savingNew}
-                                    className="rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-50"
-                                >
-                                    {savingNew ? "Salvando..." : "Salvar resumo"}
-                                </button>
-                            </div>
-                        </div>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                        <button
+                            onClick={() => setOpenNew(false)}
+                            className="rounded bg-transparent text-foreground border border-border px-3 py-2"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={salvarNovo}
+                            disabled={savingNew}
+                            className="rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
+                        >
+                            {savingNew ? "Salvando..." : "Salvar resumo"}
+                        </button>
                     </div>
                 </div>
-            )}
+            </TokenModal>
         </div>
     );
 }
