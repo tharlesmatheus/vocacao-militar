@@ -35,7 +35,8 @@ function ImportanceBadge({
             type="button"
             title={cfg.txt}
             onClick={onClick}
-            className={`inline-flex items-center gap-1 text-sm ${onClick ? "hover:opacity-80" : ""}`}
+            className={`inline-flex items-center gap-1 text-sm ${onClick ? "hover:opacity-80" : ""
+                }`}
         >
             <span>{cfg.icon}</span>
             <span className={cfg.className}>{cfg.txt}</span>
@@ -134,15 +135,15 @@ export default function EditalPage() {
         setAssuntos(byMateria);
     };
 
-    /** helpers de classes para inputs/selects no dark mode (transparente + borda branca) */
+    /** helpers (escuro: transparente + borda branca) */
     const inputBase =
-        // light
         "rounded border p-2 bg-white text-gray-900 placeholder:text-gray-500 border-gray-300 " +
-        // dark
-        "dark:bg-transparent dark:text-white dark:placeholder-white/60 dark:border-white/30 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-white/20";
+        "dark:bg-transparent dark:text-white dark:placeholder-white/60 dark:border-white/30 " +
+        "focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-white/20";
     const selectBase =
-        "rounded border p-2 bg-white text-gray-900 border-gray-300 " +
-        "dark:bg-transparent dark:text-white dark:border-white/30 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-white/20";
+        "rounded border p-2 bg-white text-gray-900 border-gray-300 appearance-none " +
+        "dark:bg-transparent dark:text-white dark:border-white/30 dark:appearance-none " +
+        "focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-white/20";
 
     return (
         <div className="mx-auto max-w-6xl p-4 text-gray-900 dark:text-white">
@@ -156,7 +157,7 @@ export default function EditalPage() {
                         + Novo Edital
                     </button>
                     <button
-                        className="rounded-lg bg-gray-200 px-3 py-2 text-gray-900 dark:bg-transparent dark:border dark:border-white/30 dark:text-white disabled:opacity-60"
+                        className="rounded-lg px-3 py-2 bg-gray-200 text-gray-900 dark:bg-transparent dark:text-white dark:border dark:border-white/30 disabled:opacity-60"
                         onClick={() => setOpenEditar(true)}
                         disabled={!selEdital}
                         title={!selEdital ? "Selecione um edital" : "Editar"}
@@ -181,7 +182,7 @@ export default function EditalPage() {
                 >
                     <option value="">--</option>
                     {editais.map((e) => (
-                        <option key={e.id} value={e.id} className="dark:bg-gray-900">
+                        <option key={e.id} value={e.id} className="dark:bg-gray-900 dark:text-white">
                             {e.nome}
                         </option>
                     ))}
@@ -207,8 +208,11 @@ export default function EditalPage() {
                                 {(assuntos[m.id] || []).map((a) => (
                                     <div
                                         key={a.id}
-                                        className="flex items-center justify-between rounded p-2 bg-white border border-gray-200
-                               dark:bg-transparent dark:border-white/15"
+                                        className="
+                      flex items-center justify-between rounded p-2
+                      bg-white border border-gray-200
+                      dark:bg-transparent dark:border-white/15 dark:text-white
+                    "
                                     >
                                         <button
                                             type="button"
@@ -249,8 +253,11 @@ export default function EditalPage() {
 
                                 {(!assuntos[m.id] || assuntos[m.id].length === 0) && (
                                     <div
-                                        className="rounded p-2 text-sm text-gray-500 bg-white border border-gray-200
-                               dark:bg-transparent dark:border-white/15 dark:text-white/60"
+                                        className="
+                      rounded p-2 text-sm
+                      bg-white border border-gray-200 text-gray-500
+                      dark:bg-transparent dark:border-white/15 dark:text-white/70
+                    "
                                     >
                                         Sem assuntos ainda.
                                     </div>
@@ -343,7 +350,8 @@ function NovoEdital({ onCreated }: { onCreated: (id: string) => void }) {
 
     const inputBase =
         "w-full rounded border p-2 bg-white text-gray-900 placeholder:text-gray-500 border-gray-300 " +
-        "dark:bg-transparent dark:text-white dark:placeholder-white/60 dark:border-white/30 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-white/20";
+        "dark:bg-transparent dark:text-white dark:placeholder-white/60 dark:border-white/30 " +
+        "focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-white/20";
 
     return (
         <form
@@ -416,10 +424,12 @@ function EditarEstrutura({
 
     const inputBase =
         "rounded border p-2 bg-white text-gray-900 placeholder:text-gray-500 border-gray-300 " +
-        "dark:bg-transparent dark:text-white dark:placeholder-white/60 dark:border-white/30 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-white/20";
+        "dark:bg-transparent dark:text-white dark:placeholder-white/60 dark:border-white/30 " +
+        "focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-white/20";
     const selectBase =
-        "rounded border p-2 bg-white text-gray-900 border-gray-300 " +
-        "dark:bg-transparent dark:text-white dark:border-white/30 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-white/20";
+        "rounded border p-2 bg-white text-gray-900 border-gray-300 appearance-none " +
+        "dark:bg-transparent dark:text-white dark:border-white/30 dark:appearance-none " +
+        "focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-white/20";
 
     return (
         <div className="space-y-4">
@@ -468,7 +478,7 @@ function EditarEstrutura({
                     >
                         <option value="">Selecione a matéria</option>
                         {materias.map((m) => (
-                            <option key={m.id} value={m.id} className="dark:bg-gray-900">
+                            <option key={m.id} value={m.id} className="dark:bg-gray-900 dark:text-white">
                                 {m.nome}
                             </option>
                         ))}
@@ -545,7 +555,8 @@ function EditarAssuntoForm({
 
     const inputBase =
         "mt-1 w-full rounded border p-2 bg-white text-gray-900 placeholder:text-gray-500 border-gray-300 " +
-        "dark:bg-transparent dark:text-white dark:placeholder-white/60 dark:border-white/30 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-white/20";
+        "dark:bg-transparent dark:text-white dark:placeholder-white/60 dark:border-white/30 " +
+        "focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-white/20";
 
     return (
         <div className="space-y-3">
@@ -580,7 +591,7 @@ function EditarAssuntoForm({
 
                 <div className="flex gap-2">
                     <button
-                        className="rounded bg-gray-200 px-3 py-2 text-gray-900 dark:bg-transparent dark:border dark:border-white/30 dark:text-white"
+                        className="rounded px-3 py-2 bg-gray-200 text-gray-900 dark:bg-transparent dark:text-white dark:border dark:border-white/30"
                         onClick={onCancel}
                     >
                         Cancelar
