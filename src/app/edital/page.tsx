@@ -24,10 +24,10 @@ function ImportanceBadge({
     onClick?: () => void;
 }) {
     const map = [
-        { txt: "Normal", icon: "⚪", className: "text-gray-400" },
-        { txt: "Relevante", icon: "⚠️", className: "text-amber-500" },
-        { txt: "Importante", icon: "🚨", className: "text-orange-600" },
-        { txt: "Cai sempre", icon: "🔥", className: "text-red-600" },
+        { txt: "Normal", icon: "⚪", className: "text-gray-500 dark:text-gray-400" },
+        { txt: "Relevante", icon: "⚠️", className: "text-amber-600 dark:text-amber-400" },
+        { txt: "Importante", icon: "🚨", className: "text-orange-600 dark:text-orange-400" },
+        { txt: "Cai sempre", icon: "🔥", className: "text-red-600 dark:text-red-400" },
     ];
     const cfg = map[level] ?? map[0];
     return (
@@ -135,8 +135,16 @@ export default function EditalPage() {
         setAssuntos(byMateria);
     };
 
+    /** helpers de classes para inputs/selects no dark mode */
+    const inputBase =
+        "rounded border p-2 bg-white text-gray-900 placeholder:text-gray-400 border-gray-300 " +
+        "dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:border-gray-700";
+    const selectBase =
+        "rounded border p-2 bg-white text-gray-900 border-gray-300 " +
+        "dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700";
+
     return (
-        <div className="mx-auto max-w-6xl p-4"> {/* mais largo */}
+        <div className="mx-auto max-w-6xl p-4 text-gray-900 dark:text-gray-100">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <h1 className="text-2xl font-semibold">Edital</h1>
                 <div className="flex gap-2">
@@ -147,7 +155,7 @@ export default function EditalPage() {
                         + Novo Edital
                     </button>
                     <button
-                        className="rounded-lg bg-gray-200 px-3 py-2"
+                        className="rounded-lg bg-gray-200 px-3 py-2 text-gray-900 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-60"
                         onClick={() => setOpenEditar(true)}
                         disabled={!selEdital}
                         title={!selEdital ? "Selecione um edital" : "Editar"}
@@ -157,12 +165,16 @@ export default function EditalPage() {
                 </div>
             </div>
 
-            {loading && <div className="rounded border p-3">Carregando…</div>}
+            {loading && (
+                <div className="rounded border border-gray-200 p-3 dark:border-gray-700">
+                    Carregando…
+                </div>
+            )}
 
-            <label className="mb-4 block text-sm text-gray-600">
+            <label className="mb-4 block text-sm text-gray-600 dark:text-gray-300">
                 Selecione um edital
                 <select
-                    className="mt-1 w-full rounded-lg border p-2"
+                    className={`mt-1 w-full ${selectBase}`}
                     value={selEdital}
                     onChange={(e) => setSelEdital(e.target.value)}
                 >
@@ -176,26 +188,31 @@ export default function EditalPage() {
             </label>
 
             {!selEdital && !loading && (
-                <p className="text-gray-500">Escolha um edital para ver matérias e assuntos.</p>
+                <p className="text-gray-500 dark:text-gray-400">
+                    Escolha um edital para ver matérias e assuntos.
+                </p>
             )}
 
             {!!selEdital && (
                 <div className="space-y-6">
                     {materias.map((m) => (
-                        <div key={m.id} className="rounded-lg border p-3">
+                        <div
+                            key={m.id}
+                            className="rounded-lg border border-gray-200 p-3 dark:border-gray-700"
+                        >
                             <div className="mb-2 text-lg font-medium">{m.nome}</div>
 
-                            {/* mais colunas nas telas maiores para caber confortável sem quebra */}
+                            {/* grid responsiva */}
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                 {(assuntos[m.id] || []).map((a) => (
                                     <div
                                         key={a.id}
-                                        className="flex items-center justify-between rounded bg-gray-50 p-2"
+                                        className="flex items-center justify-between rounded bg-gray-50 p-2 dark:bg-gray-800"
                                     >
                                         {/* Clicar no nome abre modal de edição */}
                                         <button
                                             type="button"
-                                            className="min-w-0 flex-1 text-left truncate hover:underline"
+                                            className="min-w-0 flex-1 truncate text-left hover:underline"
                                             onClick={() =>
                                                 setEditingAssunto({ open: true, materiaId: m.id, assunto: a })
                                             }
@@ -232,7 +249,7 @@ export default function EditalPage() {
                                 ))}
 
                                 {(!assuntos[m.id] || assuntos[m.id].length === 0) && (
-                                    <div className="rounded bg-white p-2 text-sm text-gray-400">
+                                    <div className="rounded bg-white p-2 text-sm text-gray-400 dark:bg-gray-900 dark:text-gray-500">
                                         Sem assuntos ainda.
                                     </div>
                                 )}
@@ -277,7 +294,9 @@ export default function EditalPage() {
             {/* MODAL: Editar/Excluir um assunto */}
             <Modal
                 open={editingAssunto.open}
-                onClose={() => setEditingAssunto({ open: false, materiaId: null, assunto: null })}
+                onClose={() =>
+                    setEditingAssunto({ open: false, materiaId: null, assunto: null })
+                }
                 title="Editar assunto"
             >
                 {editingAssunto.assunto && editingAssunto.materiaId && (
@@ -287,7 +306,6 @@ export default function EditalPage() {
                             setEditingAssunto({ open: false, materiaId: null, assunto: null })
                         }
                         onSaved={async (updated) => {
-                            // atualiza no estado local
                             const mId = editingAssunto.materiaId!;
                             setAssuntos((prev) => {
                                 const copy = { ...prev };
@@ -321,6 +339,10 @@ function NovoEdital({ onCreated }: { onCreated: (id: string) => void }) {
     const [nome, setNome] = useState("");
     const [loading, setLoading] = useState(false);
 
+    const inputBase =
+        "w-full rounded border p-2 bg-white text-gray-900 placeholder:text-gray-400 border-gray-300 " +
+        "dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:border-gray-700";
+
     return (
         <form
             className="space-y-3"
@@ -339,7 +361,7 @@ function NovoEdital({ onCreated }: { onCreated: (id: string) => void }) {
             }}
         >
             <input
-                className="w-full rounded border p-2"
+                className={inputBase}
                 placeholder="Nome do edital"
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
@@ -390,18 +412,27 @@ function EditarEstrutura({
 
     const getUid = async () => (await supabase.auth.getUser()).data.user?.id;
 
+    const inputBase =
+        "rounded border p-2 bg-white text-gray-900 placeholder:text-gray-400 border-gray-300 " +
+        "dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:border-gray-700";
+    const selectBase =
+        "rounded border p-2 bg-white text-gray-900 border-gray-300 " +
+        "dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700";
+
     return (
         <div className="space-y-4">
             {!editalId && (
-                <p className="text-sm text-gray-500">Selecione um edital na tela principal.</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Selecione um edital na tela principal.
+                </p>
             )}
 
             {/* Adicionar Matéria */}
-            <div className="rounded border p-3">
+            <div className="rounded border border-gray-200 p-3 dark:border-gray-700">
                 <div className="mb-2 font-medium">Adicionar Matéria</div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                     <input
-                        className="flex-1 rounded border p-2"
+                        className={`flex-1 ${inputBase}`}
                         placeholder="Nome da matéria"
                         value={materiaNome}
                         onChange={(e) => setMateriaNome(e.target.value)}
@@ -410,13 +441,11 @@ function EditarEstrutura({
                         className="rounded bg-gray-800 px-3 py-2 text-white"
                         onClick={async () => {
                             if (!editalId || !materiaNome) return;
-                            await supabase
-                                .from("materias")
-                                .insert({
-                                    edital_id: editalId,
-                                    nome: materiaNome,
-                                    user_id: await getUid(),
-                                });
+                            await supabase.from("materias").insert({
+                                edital_id: editalId,
+                                nome: materiaNome,
+                                user_id: await getUid(),
+                            });
                             setMateriaNome("");
                             onChanged();
                         }}
@@ -427,11 +456,11 @@ function EditarEstrutura({
             </div>
 
             {/* Adicionar Assunto */}
-            <div className="rounded border p-3">
+            <div className="rounded border border-gray-200 p-3 dark:border-gray-700">
                 <div className="mb-2 font-medium">Adicionar Assunto</div>
                 <div className="mb-2">
                     <select
-                        className="w-full rounded border p-2"
+                        className={`w-full ${selectBase}`}
                         value={selMateria}
                         onChange={(e) => setSelMateria(e.target.value)}
                     >
@@ -444,19 +473,21 @@ function EditarEstrutura({
                     </select>
                 </div>
 
-                {/* linha sem quebra: input (cresce), select e botão mantêm-se lado a lado */}
+                {/* linha sem quebra: input (cresce), select e botão lado a lado */}
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <input
-                        className="flex-1 rounded border p-2"
+                        className={`flex-1 ${inputBase}`}
                         placeholder="Nome do assunto"
                         value={assuntoNome}
                         onChange={(e) => setAssuntoNome(e.target.value)}
                     />
 
                     <div className="flex flex-none items-center gap-2 whitespace-nowrap">
-                        <label className="text-sm text-gray-600">Importância:</label>
+                        <label className="text-sm text-gray-600 dark:text-gray-300">
+                            Importância:
+                        </label>
                         <select
-                            className="rounded border p-2"
+                            className={selectBase}
                             value={assuntoImport}
                             onChange={(e) => setAssuntoImport(Number(e.target.value))}
                             title="Grau de importância"
@@ -513,12 +544,16 @@ function EditarAssuntoForm({
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
+    const inputBase =
+        "mt-1 w-full rounded border p-2 bg-white text-gray-900 placeholder:text-gray-400 border-gray-300 " +
+        "dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500 dark:border-gray-700";
+
     return (
         <div className="space-y-3">
-            <label className="block text-sm text-gray-600">
+            <label className="block text-sm text-gray-600 dark:text-gray-300">
                 Nome do assunto
                 <input
-                    className="mt-1 w-full rounded border p-2"
+                    className={inputBase}
                     value={nome}
                     onChange={(e) => setNome(e.target.value)}
                 />
@@ -529,7 +564,12 @@ function EditarAssuntoForm({
                     className="rounded bg-red-600 px-3 py-2 text-white disabled:opacity-50"
                     disabled={deleting}
                     onClick={async () => {
-                        if (!confirm("Excluir este assunto? Os resumos relacionados também podem ser removidos em cascata.")) return;
+                        if (
+                            !confirm(
+                                "Excluir este assunto? Os resumos relacionados também podem ser removidos em cascata."
+                            )
+                        )
+                            return;
                         setDeleting(true);
                         await supabase.from("assuntos").delete().eq("id", assunto.id);
                         setDeleting(false);
@@ -540,7 +580,10 @@ function EditarAssuntoForm({
                 </button>
 
                 <div className="flex gap-2">
-                    <button className="rounded bg-gray-200 px-3 py-2" onClick={onCancel}>
+                    <button
+                        className="rounded bg-gray-200 px-3 py-2 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
+                        onClick={onCancel}
+                    >
                         Cancelar
                     </button>
                     <button
@@ -548,7 +591,10 @@ function EditarAssuntoForm({
                         disabled={saving || nome.trim().length === 0}
                         onClick={async () => {
                             setSaving(true);
-                            await supabase.from("assuntos").update({ nome: nome.trim() }).eq("id", assunto.id);
+                            await supabase
+                                .from("assuntos")
+                                .update({ nome: nome.trim() })
+                                .eq("id", assunto.id);
                             setSaving(false);
                             onSaved({ id: assunto.id, nome: nome.trim() });
                         }}
