@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-/** Util: converte ==texto== para <mark> */
+/** Escapa básico + ==grifo== -> <mark> */
 function renderWithMarks(text: string) {
     return text
         .replace(/&/g, "&amp;")
@@ -14,37 +14,38 @@ function renderWithMarks(text: string) {
 }
 
 type Opt = { value: string; label: string };
-
 type ResumoRow = {
     id: string;
     titulo: string;
     conteudo: string;
     created_at: string;
-    edital_id: string;
-    materia_id: string;
-    assunto_id: string;
-    assuntos?: { id: string; nome: string }[] | null;
-    materias?: { id: string; nome: string }[] | null;
-    editais?: { id: string; nome: string }[] | null;
+    edital_id: string | null;
+    materia_id: string | null;
+    assunto_id: string | null;
 };
 
 export default function ResumosPage() {
-    // Filtros
+    // filtros
     const [editais, setEditais] = useState<Opt[]>([]);
-    const [materias, setMaterias] = useState<Opt[]>([]);
-    const [assuntos, setAssuntos] = useState<Opt[]>([]);
+    const [materiasOpt, setMateriasOpt] = useState<Opt[]>([]);
+    const [assuntosOpt, setAssuntosOpt] = useState<Opt[]>([]);
     const [edital, setEdital] = useState("");
     const [materia, setMateria] = useState("");
     const [assunto, setAssunto] = useState("");
 
-    // Lista
+    // mapas de nomes
+    const [materiaMap, setMateriaMap] = useState<Record<string, string>>({});
+    const [assuntoMap, setAssuntoMap] = useState<Record<string, string>>({});
+    const [editalMap, setEditalMap] = useState<Record<string, string>>({});
+
+    // lista & view
     const [loading, setLoading] = useState(true);
     const [resumos, setResumos] = useState<ResumoRow[]>([]);
     const [viewing, setViewing] = useState<ResumoRow | null>(null);
     const [editing, setEditing] = useState(false);
     const [editText, setEditText] = useState("");
 
-    // Modal "Novo resumo"
+    // modal novo resumo
     const [openNew, setOpenNew] = useState(false);
     const [newTitulo, setNewTitulo] = useState("");
     const [newConteudo, setNewConteudo] = useState("");
@@ -54,33 +55,52 @@ export default function ResumosPage() {
     const [savingNew, setSavingNew] = useState(false);
     const newTextRef = useRef<HTMLTextAreaElement>(null);
 
-    // Carregar opções de filtros
+    // Carrega mapas + opções
     useEffect(() => {
         (async () => {
-            const { data } = await supabase.from("editais").select("id,nome").order("created_at", { ascending: false });
-            setEditais((data || []).map((d: any) => ({ value: d.id, label: d.nome })));
+            const uid = (await supabase.auth.getUser()).data.user?.id;
+            if (!uid) return;
+            const [eds, mats, asss] = await Promise.all([
+                supabase.from("editais").select("id,nome").eq("user_id", uid).order("created_at", { ascending: false }),
+                supabase.from("materias").select("id,nome,edital_id").eq("user_id", uid),
+                supabase.from("assuntos").select("id,nome,materia_id").eq("user_id", uid),
+            ]);
+
+            const eMap: Record<string, string> = {};
+            (eds.data || []).forEach((e: any) => (eMap[e.id] = e.nome));
+            setEditalMap(eMap);
+            setEditais((eds.data || []).map((d: any) => ({ value: d.id, label: d.nome })));
+
+            const mMap: Record<string, string> = {};
+            (mats.data || []).forEach((m: any) => (mMap[m.id] = m.nome));
+            setMateriaMap(mMap);
+
+            const aMap: Record<string, string> = {};
+            (asss.data || []).forEach((a: any) => (aMap[a.id] = a.nome));
+            setAssuntoMap(aMap);
         })();
     }, []);
 
+    // opções dependentes (filtros)
     useEffect(() => {
         (async () => {
-            setMaterias([]); setMateria(""); setAssuntos([]); setAssunto("");
+            setMateriasOpt([]); setMateria(""); setAssuntosOpt([]); setAssunto("");
             if (!edital) return;
             const { data } = await supabase.from("materias").select("id,nome").eq("edital_id", edital).order("nome");
-            setMaterias((data || []).map((d: any) => ({ value: d.id, label: d.nome })));
+            setMateriasOpt((data || []).map((d: any) => ({ value: d.id, label: d.nome })));
         })();
     }, [edital]);
 
     useEffect(() => {
         (async () => {
-            setAssuntos([]); setAssunto("");
+            setAssuntosOpt([]); setAssunto("");
             if (!materia) return;
             const { data } = await supabase.from("assuntos").select("id,nome").eq("materia_id", materia).order("nome");
-            setAssuntos((data || []).map((d: any) => ({ value: d.id, label: d.nome })));
+            setAssuntosOpt((data || []).map((d: any) => ({ value: d.id, label: d.nome })));
         })();
     }, [materia]);
 
-    // Carregar lista de resumos
+    // Carrega lista de resumos (sem join; usa mapas para nomes)
     const loadResumos = async () => {
         setLoading(true);
         const uid = (await supabase.auth.getUser()).data.user?.id;
@@ -89,7 +109,7 @@ export default function ResumosPage() {
         }
         let q = supabase
             .from("resumos")
-            .select("id,titulo,conteudo,created_at,edital_id,materia_id,assunto_id,editais(id,nome),materias(id,nome),assuntos(id,nome)")
+            .select("id,titulo,conteudo,created_at,edital_id,materia_id,assunto_id")
             .eq("user_id", uid)
             .order("created_at", { ascending: false })
             .limit(100);
@@ -99,8 +119,7 @@ export default function ResumosPage() {
         if (assunto) q = q.eq("assunto_id", assunto);
 
         const { data, error } = await q;
-        if (!error && data) setResumos(data as ResumoRow[]);
-        else setResumos([]);
+        setResumos(!error && data ? (data as ResumoRow[]) : []);
         setLoading(false);
     };
 
@@ -109,7 +128,6 @@ export default function ResumosPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [edital, materia, assunto]);
 
-    // Ver/Editar/Excluir
     const openView = (row: ResumoRow) => {
         setViewing(row);
         setEditing(false);
@@ -125,13 +143,13 @@ export default function ResumosPage() {
 
     const excluirResumo = async () => {
         if (!viewing) return;
-        if (!confirm("Excluir este resumo? Isso também removerá revisões relacionadas.")) return;
+        if (!confirm("Excluir este resumo? Isso também removerá as revisões relacionadas.")) return;
         await supabase.from("resumos").delete().eq("id", viewing.id);
         setViewing(null);
         await loadResumos();
     };
 
-    // Novo resumo (modal)
+    // Modal "Novo resumo"
     const addMarkNew = () => {
         const ta = newTextRef.current;
         if (!ta) return;
@@ -151,11 +169,9 @@ export default function ResumosPage() {
             setSavingNew(true);
             const uid = (await supabase.auth.getUser()).data.user?.id;
             if (!uid) throw new Error("Você precisa estar autenticado.");
-
             if (!newEdital || !newMateria || !newAssunto || !newTitulo.trim() || !newConteudo.trim()) {
                 throw new Error("Preencha todos os campos.");
             }
-
             const { error } = await supabase.from("resumos").insert({
                 edital_id: newEdital,
                 materia_id: newMateria,
@@ -165,8 +181,6 @@ export default function ResumosPage() {
                 user_id: uid,
             });
             if (error) throw error;
-
-            // Limpa modal e recarrega lista
             setOpenNew(false);
             setNewTitulo(""); setNewConteudo("");
             setNewEdital(""); setNewMateria(""); setNewAssunto("");
@@ -178,7 +192,7 @@ export default function ResumosPage() {
         }
     };
 
-    // Quando abre o modal "Novo Resumo", carregar selects de novo (independentes do filtro da lista)
+    // opções do modal
     const [optsNewEditais, setOptsNewEditais] = useState<Opt[]>([]);
     const [optsNewMaterias, setOptsNewMaterias] = useState<Opt[]>([]);
     const [optsNewAssuntos, setOptsNewAssuntos] = useState<Opt[]>([]);
@@ -189,7 +203,6 @@ export default function ResumosPage() {
             setOptsNewEditais((data || []).map((d: any) => ({ value: d.id, label: d.nome })));
         })();
     }, [openNew]);
-
     useEffect(() => {
         (async () => {
             setOptsNewMaterias([]); setNewMateria(""); setOptsNewAssuntos([]); setNewAssunto("");
@@ -198,7 +211,6 @@ export default function ResumosPage() {
             setOptsNewMaterias((data || []).map((d: any) => ({ value: d.id, label: d.nome })));
         })();
     }, [newEdital]);
-
     useEffect(() => {
         (async () => {
             setOptsNewAssuntos([]); setNewAssunto("");
@@ -208,14 +220,15 @@ export default function ResumosPage() {
         })();
     }, [newMateria]);
 
+    const nameEdital = (id: string | null) => (id && editalMap[id]) || "Edital";
+    const nameMateria = (id: string | null) => (id && materiaMap[id]) || "Matéria";
+    const nameAssunto = (id: string | null) => (id && assuntoMap[id]) || "Assunto";
+
     return (
         <div className="mx-auto max-w-4xl p-4">
             <div className="mb-4 flex items-center justify-between gap-2">
                 <h1 className="text-2xl font-semibold">Resumos</h1>
-                <button
-                    className="rounded bg-indigo-600 px-3 py-2 text-white"
-                    onClick={() => setOpenNew(true)}
-                >
+                <button className="rounded bg-indigo-600 px-3 py-2 text-white" onClick={() => setOpenNew(true)}>
                     + Novo Resumo
                 </button>
             </div>
@@ -224,11 +237,7 @@ export default function ResumosPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <label className="block">
                     <span className="mb-1 block text-sm text-gray-600">Edital</span>
-                    <select
-                        value={edital}
-                        onChange={(e) => setEdital(e.target.value)}
-                        className="w-full rounded border p-2"
-                    >
+                    <select value={edital} onChange={(e) => setEdital(e.target.value)} className="w-full rounded border p-2">
                         <option value="">Todos</option>
                         {editais.map((o) => (
                             <option key={o.value} value={o.value}>
@@ -247,7 +256,7 @@ export default function ResumosPage() {
                         disabled={!edital}
                     >
                         <option value="">{edital ? "Todas" : "Selecione um edital"}</option>
-                        {materias.map((o) => (
+                        {materiasOpt.map((o) => (
                             <option key={o.value} value={o.value}>
                                 {o.label}
                             </option>
@@ -264,7 +273,7 @@ export default function ResumosPage() {
                         disabled={!materia}
                     >
                         <option value="">{materia ? "Todos" : "Selecione a matéria"}</option>
-                        {assuntos.map((o) => (
+                        {assuntosOpt.map((o) => (
                             <option key={o.value} value={o.value}>
                                 {o.label}
                             </option>
@@ -282,75 +291,58 @@ export default function ResumosPage() {
 
                 {!viewing &&
                     resumos.map((r) => (
-                        <div
-                            key={r.id}
-                            className="flex flex-col justify-between gap-2 rounded border p-3 sm:flex-row sm:items-center"
-                        >
-                            <div>
-                                <div className="font-medium">{r.titulo}</div>
+                        <div key={r.id} className="flex flex-col justify-between gap-2 rounded border p-3 sm:flex-row sm:items-center">
+                            <div className="min-w-0">
                                 <div className="text-sm text-gray-500">
-                                    {r.editais?.[0]?.nome || "Edital"} • {r.materias?.[0]?.nome || "Matéria"} •{" "}
-                                    {r.assuntos?.[0]?.nome || "Assunto"} • {new Date(r.created_at).toLocaleDateString("pt-BR")}
+                                    {nameEdital(r.edital_id)} • {nameMateria(r.materia_id)} • {nameAssunto(r.assunto_id)} •{" "}
+                                    {new Date(r.created_at).toLocaleDateString("pt-BR")}
                                 </div>
+                                <div className="font-medium truncate">{r.titulo}</div>
                             </div>
                             <div className="flex gap-2">
-                                <button
-                                    onClick={() => openView(r)}
-                                    className="rounded bg-indigo-600 px-3 py-2 text-white"
-                                >
+                                <button onClick={() => openView(r)} className="rounded bg-indigo-600 px-3 py-2 text-white">
                                     Ver
                                 </button>
                             </div>
                         </div>
                     ))}
 
-                {/* Visualização do resumo (com Editar/Excluir) */}
+                {/* Visualização + editar/excluir */}
                 {viewing && (
                     <div className="rounded border">
                         <div className="flex items-center justify-between border-b p-3">
-                            <div>
+                            <div className="min-w-0">
                                 <div className="text-sm text-gray-500">
-                                    {viewing.editais?.[0]?.nome || "Edital"} •{" "}
-                                    {viewing.materias?.[0]?.nome || "Matéria"} •{" "}
-                                    {viewing.assuntos?.[0]?.nome || "Assunto"} •{" "}
-                                    {new Date(viewing.created_at).toLocaleDateString("pt-BR")}
+                                    {nameEdital(viewing.edital_id)} • {nameMateria(viewing.materia_id)} •{" "}
+                                    {nameAssunto(viewing.assunto_id)} • {new Date(viewing.created_at).toLocaleDateString("pt-BR")}
                                 </div>
-                                <h2 className="text-lg font-semibold">{viewing.titulo}</h2>
+                                <h2 className="mt-1 truncate text-lg font-semibold">{viewing.titulo}</h2>
                             </div>
                             <div className="flex gap-2">
                                 {!editing ? (
-                                    <button
-                                        onClick={() => setEditing(true)}
-                                        className="rounded bg-gray-800 px-3 py-2 text-white"
-                                    >
+                                    <button onClick={() => setEditing(true)} className="rounded bg-gray-800 px-3 py-2 text-white">
                                         Editar
                                     </button>
                                 ) : (
                                     <>
-                                        <button
-                                            onClick={salvarEdicao}
-                                            className="rounded bg-green-600 px-3 py-2 text-white"
-                                        >
+                                        <button onClick={async () => { await salvarEdicao(); }} className="rounded bg-green-600 px-3 py-2 text-white">
                                             Salvar
                                         </button>
                                         <button
-                                            onClick={() => { setEditing(false); setEditText(viewing.conteudo); }}
+                                            onClick={() => {
+                                                setEditing(false);
+                                                setEditText(viewing.conteudo);
+                                            }}
                                             className="rounded bg-gray-200 px-3 py-2"
                                         >
                                             Cancelar
                                         </button>
                                     </>
                                 )}
-                                <button
-                                    onClick={excluirResumo}
-                                    className="rounded bg-red-600 px-3 py-2 text-white"
-                                >
+                                <button onClick={excluirResumo} className="rounded bg-red-600 px-3 py-2 text-white">
                                     Excluir
                                 </button>
-                                <button
-                                    onClick={() => setViewing(null)}
-                                    className="rounded bg-gray-200 px-3 py-2"
-                                >
+                                <button onClick={() => setViewing(null)} className="rounded bg-gray-200 px-3 py-2">
                                     Voltar
                                 </button>
                             </div>
@@ -377,30 +369,27 @@ export default function ResumosPage() {
                 )}
             </div>
 
-            {/* MODAL: Novo Resumo */}
+            {/* MODAL: Novo resumo */}
             {openNew && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
                     <div className="w-full max-w-2xl rounded-lg bg-white shadow">
                         <div className="flex items-center justify-between border-b p-3">
                             <h3 className="text-lg font-semibold">Novo Resumo</h3>
-                            <button onClick={() => setOpenNew(false)} className="rounded px-2 py-1 hover:bg-gray-100">✕</button>
+                            <button onClick={() => setOpenNew(false)} className="rounded px-2 py-1 hover:bg-gray-100">
+                                ✕
+                            </button>
                         </div>
                         <div className="p-4 space-y-3">
                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                 <label className="block">
                                     <span className="mb-1 block text-sm text-gray-600">Edital</span>
-                                    <select
-                                        value={newEdital}
-                                        onChange={(e) => setNewEdital(e.target.value)}
-                                        className="w-full rounded border p-2"
-                                    >
+                                    <select value={newEdital} onChange={(e) => setNewEdital(e.target.value)} className="w-full rounded border p-2">
                                         <option value="">Selecione</option>
-                                        {optsNewEditais.map((o) => (
+                                        {editais.map((o) => (
                                             <option key={o.value} value={o.value}>{o.label}</option>
                                         ))}
                                     </select>
                                 </label>
-
                                 <label className="block">
                                     <span className="mb-1 block text-sm text-gray-600">Matéria</span>
                                     <select
@@ -410,12 +399,11 @@ export default function ResumosPage() {
                                         disabled={!newEdital}
                                     >
                                         <option value="">{newEdital ? "Selecione" : "Selecione um edital"}</option>
-                                        {optsNewMaterias.map((o) => (
+                                        {materiasOpt.map((o) => (
                                             <option key={o.value} value={o.value}>{o.label}</option>
                                         ))}
                                     </select>
                                 </label>
-
                                 <label className="block">
                                     <span className="mb-1 block text-sm text-gray-600">Assunto</span>
                                     <select
@@ -425,7 +413,7 @@ export default function ResumosPage() {
                                         disabled={!newMateria}
                                     >
                                         <option value="">{newMateria ? "Selecione" : "Selecione a matéria"}</option>
-                                        {optsNewAssuntos.map((o) => (
+                                        {assuntosOpt.map((o) => (
                                             <option key={o.value} value={o.value}>{o.label}</option>
                                         ))}
                                     </select>
@@ -444,11 +432,7 @@ export default function ResumosPage() {
                                     <div className="text-sm text-gray-600">
                                         Dica: use <code>==texto==</code> para <mark>grifar</mark>
                                     </div>
-                                    <button
-                                        className="rounded bg-gray-100 px-2 py-1 text-sm"
-                                        onClick={addMarkNew}
-                                        disabled={!newConteudo}
-                                    >
+                                    <button className="rounded bg-gray-100 px-2 py-1 text-sm" onClick={addMarkNew} disabled={!newConteudo}>
                                         Grifar seleção
                                     </button>
                                 </div>
@@ -465,11 +449,7 @@ export default function ResumosPage() {
                                 <button onClick={() => setOpenNew(false)} className="rounded bg-gray-200 px-3 py-2">
                                     Cancelar
                                 </button>
-                                <button
-                                    onClick={salvarNovo}
-                                    disabled={savingNew}
-                                    className="rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-50"
-                                >
+                                <button onClick={salvarNovo} disabled={savingNew} className="rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-50">
                                     {savingNew ? "Salvando..." : "Salvar resumo"}
                                 </button>
                             </div>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-/** Util: converte ==texto== para <mark> e faz escape básico */
+/** Escapa básico + ==grifo== -> <mark> */
 function renderWithMarks(text: string) {
     return text
         .replace(/&/g, "&amp;")
@@ -12,7 +12,6 @@ function renderWithMarks(text: string) {
         .replace(/==(.+?)==/g, "<mark>$1</mark>")
         .replace(/\n/g, "<br/>");
 }
-/** Gera um snippet simples (sem HTML) para preview do card */
 function plainSnippet(text: string, size = 140) {
     const noMarks = text.replace(/==(.+?)==/g, "$1");
     const trimmed = noMarks.replace(/\s+/g, " ").trim();
@@ -22,38 +21,47 @@ function plainSnippet(text: string, size = 140) {
 type Resumo = {
     id: string;
     titulo: string;
-    conteudo?: string;
+    conteudo: string | null;
     assunto_id: string | null;
-    materia_id?: string | null;
-    // relações (Supabase retorna arrays)
-    materias?: { id: string; nome: string }[] | null;
-    assuntos?: { id: string; nome: string }[] | null;
+    materia_id: string | null;
 };
-
 type Rev = {
-    id: string;
-    etapa: number;
-    scheduled_for: string; // YYYY-MM-DD
-    resumo_id: string;
-    resumo: Resumo | null;
-};
-
-// Linha "crua" do Supabase (relação pode vir como array)
-type RevRow = {
     id: string;
     etapa: number;
     scheduled_for: string;
     resumo_id: string;
-    resumos: Resumo[] | null;
+    resumo: Resumo | null;
 };
 
 export default function RevisaoPage() {
     const [today, setToday] = useState<string>(new Date().toISOString().slice(0, 10));
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState<Rev[]>([]);
-    const [viewing, setViewing] = useState<Rev | null>(null); // item em visualização
+    const [viewing, setViewing] = useState<Rev | null>(null);
 
-    // Carrega revisões pendentes com matéria/assunto do resumo
+    // 🔎 mapas de nomes (evita depender de join)
+    const [materiaMap, setMateriaMap] = useState<Record<string, string>>({});
+    const [assuntoMap, setAssuntoMap] = useState<Record<string, string>>({});
+
+    // Carrega mapas de nomes
+    useEffect(() => {
+        (async () => {
+            const uid = (await supabase.auth.getUser()).data.user?.id;
+            if (!uid) return;
+            const [mats, asss] = await Promise.all([
+                supabase.from("materias").select("id,nome").eq("user_id", uid),
+                supabase.from("assuntos").select("id,nome").eq("user_id", uid),
+            ]);
+            const mm: Record<string, string> = {};
+            (mats.data || []).forEach((m: any) => (mm[m.id] = m.nome));
+            const am: Record<string, string> = {};
+            (asss.data || []).forEach((a: any) => (am[a.id] = a.nome));
+            setMateriaMap(mm);
+            setAssuntoMap(am);
+        })();
+    }, []);
+
+    // Carrega revisões pendentes + resumo (sem join de nomes)
     useEffect(() => {
         (async () => {
             setLoading(true);
@@ -66,21 +74,14 @@ export default function RevisaoPage() {
 
             const { data, error } = await supabase
                 .from("revisoes")
-                .select(`
-          id, etapa, scheduled_for, resumo_id,
-          resumos (
-            id, titulo, conteudo, assunto_id, materia_id,
-            materias ( id, nome ),
-            assuntos ( id, nome )
-          )
-        `)
+                .select("id,etapa,scheduled_for,resumo_id,resumos(id,titulo,conteudo,assunto_id,materia_id)")
                 .eq("user_id", uid)
                 .is("done_at", null)
                 .lte("scheduled_for", today)
                 .order("scheduled_for", { ascending: true });
 
             if (!error && data) {
-                const normalized: Rev[] = (data as RevRow[]).map((r) => ({
+                const normalized: Rev[] = (data as any[]).map((r) => ({
                     id: r.id,
                     etapa: r.etapa,
                     scheduled_for: r.scheduled_for,
@@ -96,13 +97,16 @@ export default function RevisaoPage() {
         })();
     }, [today]);
 
-    // Concluir revisão (apenas dentro da visualização)
     const concluir = async (id: string) => {
         await supabase.from("revisoes").update({ done_at: new Date().toISOString() }).eq("id", id);
-        // Trigger já incrementa visto_count no assunto
         setRows((rs) => rs.filter((r) => r.id !== id));
         setViewing(null);
     };
+
+    const nomeMateria = (resumo: Resumo | null) =>
+        (resumo?.materia_id && materiaMap[resumo.materia_id]) || "Matéria";
+    const nomeAssunto = (resumo: Resumo | null) =>
+        (resumo?.assunto_id && assuntoMap[resumo.assunto_id]) || "Assunto";
 
     return (
         <div className="mx-auto max-w-3xl p-4">
@@ -125,26 +129,19 @@ export default function RevisaoPage() {
                     <div className="rounded border p-3 text-gray-500">Sem revisões pendentes 🎉</div>
                 )}
 
-                {/* Fila de flashcards (estilo Anki) */}
+                {/* Flashcards */}
                 {!viewing &&
                     rows.map((r) => {
-                        const mat = r.resumo?.materias?.[0]?.nome || "Matéria";
-                        const ass = r.resumo?.assuntos?.[0]?.nome || "Assunto";
                         const snippet = plainSnippet(r.resumo?.conteudo || "");
                         return (
-                            <div
-                                key={r.id}
-                                className="rounded border p-3 hover:bg-gray-50 transition"
-                            >
+                            <div key={r.id} className="rounded border p-3 hover:bg-gray-50 transition">
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0">
                                         <div className="text-xs text-gray-500">
-                                            {mat} • {ass}
+                                            {nomeMateria(r.resumo)} • {nomeAssunto(r.resumo)}
                                         </div>
                                         <div className="font-medium truncate">{r.resumo?.titulo || "Resumo"}</div>
-                                        {snippet && (
-                                            <div className="mt-1 text-sm text-gray-700 line-clamp-2">{snippet}</div>
-                                        )}
+                                        {snippet && <div className="mt-1 text-sm text-gray-700 line-clamp-2">{snippet}</div>}
                                         <div className="mt-1 text-xs text-gray-500">
                                             Etapa {r.etapa} • {new Date(r.scheduled_for).toLocaleDateString("pt-BR")}
                                         </div>
@@ -160,14 +157,13 @@ export default function RevisaoPage() {
                         );
                     })}
 
-                {/* Visualização do resumo (conteúdo + concluir) */}
+                {/* Visualização */}
                 {viewing && (
                     <div className="rounded border">
                         <div className="flex items-center justify-between border-b p-3">
                             <div className="min-w-0">
                                 <div className="text-sm text-gray-500">
-                                    {viewing.resumo?.materias?.[0]?.nome || "Matéria"} •{" "}
-                                    {viewing.resumo?.assuntos?.[0]?.nome || "Assunto"}
+                                    {nomeMateria(viewing.resumo)} • {nomeAssunto(viewing.resumo)}
                                 </div>
                                 <div className="text-xs text-gray-500">
                                     Etapa {viewing.etapa} •{" "}
@@ -178,10 +174,7 @@ export default function RevisaoPage() {
                                 </h2>
                             </div>
                             <div className="flex gap-2">
-                                <button
-                                    onClick={() => setViewing(null)}
-                                    className="rounded bg-gray-200 px-3 py-2"
-                                >
+                                <button onClick={() => setViewing(null)} className="rounded bg-gray-200 px-3 py-2">
                                     Voltar
                                 </button>
                                 <button
