@@ -178,6 +178,9 @@ export default function EditalPage() {
     };
 
     /** helpers (tokens) */
+    const inputBase =
+        "rounded border border-border p-2 bg-input text-foreground placeholder:text-muted-foreground " +
+        "focus:outline-none focus:ring-2 focus:ring-primary/20";
     const selectBase =
         "rounded border border-border p-2 bg-input text-foreground appearance-none " +
         "focus:outline-none focus:ring-2 focus:ring-primary/20";
@@ -250,11 +253,7 @@ export default function EditalPage() {
                                             type="button"
                                             className="min-w-0 flex-1 truncate text-left hover:underline"
                                             onClick={() =>
-                                                setEditingAssunto({
-                                                    open: true,
-                                                    materiaId: m.id,
-                                                    assunto: a,
-                                                })
+                                                setEditingAssunto({ open: true, materiaId: m.id, assunto: a })
                                             }
                                             title="Clique para renomear ou excluir"
                                         >
@@ -273,9 +272,7 @@ export default function EditalPage() {
                                                     setAssuntos((prev) => {
                                                         const copy = { ...prev };
                                                         copy[m.id] = (copy[m.id] || []).map((x) =>
-                                                            x.id === a.id
-                                                                ? { ...x, importance_level: next }
-                                                                : x
+                                                            x.id === a.id ? { ...x, importance_level: next } : x
                                                         );
                                                         return copy;
                                                     });
@@ -359,11 +356,7 @@ export default function EditalPage() {
                                 );
                                 return copy;
                             });
-                            setEditingAssunto({
-                                open: false,
-                                materiaId: null,
-                                assunto: null,
-                            });
+                            setEditingAssunto({ open: false, materiaId: null, assunto: null });
                         }}
                         onDeleted={async () => {
                             const mId = editingAssunto.materiaId!;
@@ -374,11 +367,7 @@ export default function EditalPage() {
                                 );
                                 return copy;
                             });
-                            setEditingAssunto({
-                                open: false,
-                                materiaId: null,
-                                assunto: null,
-                            });
+                            setEditingAssunto({ open: false, materiaId: null, assunto: null });
                         }}
                     />
                 )}
@@ -441,16 +430,10 @@ function EditarEstrutura({
     onChanged: () => void;
 }) {
     const [materiaNome, setMateriaNome] = useState("");
+    const [assuntoNome, setAssuntoNome] = useState("");
+    const [assuntoImport, setAssuntoImport] = useState<number>(0);
     const [materias, setMaterias] = useState<Materia[]>([]);
     const [selMateria, setSelMateria] = useState("");
-
-    // NOVO: lote de assuntos
-    type AssuntoLote = { nome: string; importance_level: number };
-    const [assuntosLote, setAssuntosLote] = useState<AssuntoLote[]>([
-        { nome: "", importance_level: 0 },
-    ]);
-    const [savingLote, setSavingLote] = useState(false);
-    const [erroLote, setErroLote] = useState<string | null>(null);
 
     useEffect(() => {
         (async () => {
@@ -478,39 +461,6 @@ function EditarEstrutura({
         "rounded border border-border p-2 bg-input text-foreground appearance-none " +
         "focus:outline-none focus:ring-2 focus:ring-primary/20";
 
-    // helpers de lote
-    const addLinha = () =>
-        setAssuntosLote((prev) => [...prev, { nome: "", importance_level: 0 }]);
-
-    const removeLinha = (idx: number) =>
-        setAssuntosLote((prev) => prev.filter((_, i) => i !== idx));
-
-    const atualizarLinha = (
-        idx: number,
-        patch: Partial<AssuntoLote>
-    ) =>
-        setAssuntosLote((prev) =>
-            prev.map((row, i) => (i === idx ? { ...row, ...patch } : row))
-        );
-
-    const limparLote = () => setAssuntosLote([{ nome: "", importance_level: 0 }]);
-
-    const linhasValidas = () => {
-        const nomes = new Set<string>();
-        return assuntosLote
-            .map((r) => ({ ...r, nome: r.nome.trim() }))
-            .filter((r) => r.nome.length > 0)
-            .filter((r) => {
-                const key = r.nome.toLowerCase();
-                if (nomes.has(key)) return false; // evita duplicados na tela
-                nomes.add(key);
-                return true;
-            });
-    };
-
-    const podeSalvar =
-        !!selMateria && linhasValidas().length > 0 && !savingLote;
-
     return (
         <div className="space-y-4">
             {!editalId && (
@@ -532,22 +482,14 @@ function EditarEstrutura({
                     <button
                         className="rounded bg-primary px-3 py-2 text-primary-foreground"
                         onClick={async () => {
-                            if (!editalId || !materiaNome.trim()) return;
+                            if (!editalId || !materiaNome) return;
                             await supabase.from("materias").insert({
                                 edital_id: editalId,
-                                nome: materiaNome.trim(),
+                                nome: materiaNome,
                                 user_id: await getUid(),
                             });
                             setMateriaNome("");
-                            // recarrega lista
-                            const uid = await getUid();
-                            const { data } = await supabase
-                                .from("materias")
-                                .select("id,nome")
-                                .eq("user_id", uid)
-                                .eq("edital_id", editalId)
-                                .order("nome");
-                            setMaterias(data || []);
+                            onChanged();
                         }}
                     >
                         Adicionar
@@ -555,15 +497,9 @@ function EditarEstrutura({
                 </div>
             </div>
 
-            {/* Adicionar Assuntos (LOTE) */}
+            {/* Adicionar Assunto */}
             <div className="rounded border border-border p-3 bg-card">
-                <div className="mb-2 font-medium flex items-center justify-between">
-                    <span>Adicionar Assuntos (vários de uma vez)</span>
-                    <span className="text-xs text-muted-foreground">
-                        Linhas válidas: {linhasValidas().length}/{assuntosLote.length}
-                    </span>
-                </div>
-
+                <div className="mb-2 font-medium">Adicionar Assunto</div>
                 <div className="mb-2">
                     <select
                         className={`w-full ${selectBase}`}
@@ -579,140 +515,53 @@ function EditarEstrutura({
                     </select>
                 </div>
 
-                {/* Tabela simples de linhas */}
-                <div className="space-y-2">
-                    {assuntosLote.map((row, idx) => (
-                        <div
-                            key={idx}
-                            className="flex flex-col gap-2 sm:flex-row sm:items-center"
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <input
+                        className={`flex-1 ${inputBase}`}
+                        placeholder="Nome do assunto"
+                        value={assuntoNome}
+                        onChange={(e) => setAssuntoNome(e.target.value)}
+                    />
+
+                    <div className="flex flex-none items-center gap-2 whitespace-nowrap">
+                        <label className="text-sm text-muted-foreground">Importância:</label>
+                        <select
+                            className={selectBase}
+                            value={assuntoImport}
+                            onChange={(e) => setAssuntoImport(Number(e.target.value))}
+                            title="Grau de importância"
                         >
-                            <input
-                                className={`flex-1 ${inputBase}`}
-                                placeholder={`Assunto ${idx + 1}`}
-                                value={row.nome}
-                                onChange={(e) =>
-                                    atualizarLinha(idx, { nome: e.target.value })
-                                }
-                            />
-                            <select
-                                className={selectBase}
-                                value={row.importance_level}
-                                onChange={(e) =>
-                                    atualizarLinha(idx, { importance_level: Number(e.target.value) })
-                                }
-                                title="Grau de importância"
-                            >
-                                <option value={0}>⚪ Normal</option>
-                                <option value={1}>⚠️ Relevante</option>
-                                <option value={2}>🚨 Importante</option>
-                                <option value={3}>🔥 Cai sempre</option>
-                            </select>
-                            <div className="flex gap-2">
-                                <button
-                                    type="button"
-                                    className="rounded px-3 py-2 bg-transparent text-foreground border border-border"
-                                    onClick={() => removeLinha(idx)}
-                                    title="Remover esta linha"
-                                    disabled={assuntosLote.length === 1}
-                                >
-                                    Remover
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Ações de lote */}
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        className="rounded px-3 py-2 bg-transparent text-foreground border border-border"
-                        onClick={addLinha}
-                        title="Adicionar nova linha"
-                    >
-                        + Adicionar linha
-                    </button>
-                    <button
-                        type="button"
-                        className="rounded px-3 py-2 bg-transparent text-foreground border border-border"
-                        onClick={limparLote}
-                        title="Limpar todos os campos"
-                        disabled={assuntosLote.length === 1 && !assuntosLote[0].nome}
-                    >
-                        Limpar
-                    </button>
-
-                    <div className="ml-auto flex items-center gap-2">
-                        {erroLote && (
-                            <span className="text-sm text-red-600">{erroLote}</span>
-                        )}
-                        <button
-                            className="rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
-                            disabled={!podeSalvar}
-                            onClick={async () => {
-                                setErroLote(null);
-                                if (!selMateria) {
-                                    setErroLote("Selecione a matéria.");
-                                    return;
-                                }
-                                const uid = await getUid();
-                                if (!uid) {
-                                    setErroLote("Usuário não autenticado.");
-                                    return;
-                                }
-
-                                const linhas = linhasValidas();
-                                if (linhas.length === 0) {
-                                    setErroLote("Preencha ao menos um assunto válido.");
-                                    return;
-                                }
-
-                                setSavingLote(true);
-                                try {
-                                    // pegar edital_id da matéria selecionada
-                                    const { data: mat } = await supabase
-                                        .from("materias")
-                                        .select("edital_id")
-                                        .eq("id", selMateria)
-                                        .single();
-
-                                    const payload = linhas.map((r) => ({
-                                        materia_id: selMateria,
-                                        edital_id: mat?.edital_id,
-                                        nome: r.nome.trim(),
-                                        user_id: uid,
-                                        importance_level: r.importance_level ?? 0,
-                                    }));
-
-                                    const { error } = await supabase
-                                        .from("assuntos")
-                                        .insert(payload);
-
-                                    if (error) {
-                                        setErroLote(error.message);
-                                    } else {
-                                        // sucesso
-                                        limparLote();
-                                        setErroLote(null);
-                                        onChanged();
-                                    }
-                                } catch (e: any) {
-                                    setErroLote(e?.message || "Erro ao salvar os assuntos.");
-                                } finally {
-                                    setSavingLote(false);
-                                }
-                            }}
-                        >
-                            {savingLote ? "Salvando..." : "Salvar todos"}
-                        </button>
+                            <option value={0}>⚪ Normal</option>
+                            <option value={1}>⚠️ Relevante</option>
+                            <option value={2}>🚨 Importante</option>
+                            <option value={3}>🔥 Cai sempre</option>
+                        </select>
                     </div>
-                </div>
 
-                <p className="mt-2 text-xs text-muted-foreground">
-                    Dica: você pode preencher vários nomes e escolher importâncias
-                    diferentes por linha. Linhas em branco são ignoradas e nomes
-                    duplicados (na própria lista) são filtrados automaticamente.
-                </p>
+                    <button
+                        className="flex-none rounded bg-primary px-3 py-2 text-primary-foreground"
+                        onClick={async () => {
+                            if (!selMateria || !assuntoNome) return;
+                            const { data: mat } = await supabase
+                                .from("materias")
+                                .select("edital_id")
+                                .eq("id", selMateria)
+                                .single();
+                            await supabase.from("assuntos").insert({
+                                materia_id: selMateria,
+                                edital_id: mat?.edital_id,
+                                nome: assuntoNome,
+                                user_id: await getUid(),
+                                importance_level: assuntoImport,
+                            });
+                            setAssuntoNome("");
+                            setAssuntoImport(0);
+                            onChanged();
+                        }}
+                    >
+                        Adicionar
+                    </button>
+                </div>
             </div>
         </div>
     );
