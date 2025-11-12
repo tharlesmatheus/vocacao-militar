@@ -3,6 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import BadgeSeen from "@/components/BadgeSeen";
+import {
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    Cell,
+} from "recharts";
 
 /** Tipos */
 type Edital = { id: string; nome: string };
@@ -94,9 +105,9 @@ function SeenBadge({
     longPressMs = 700,
 }: {
     count: number;
-    onShortPress?: () => void;   // incrementa (+1)
-    onLongPress?: () => void;    // zera (0)
-    longPressMs?: number;        // tempo para considerar "segurar"
+    onShortPress?: () => void; // incrementa (+1)
+    onLongPress?: () => void; // zera (0)
+    longPressMs?: number; // tempo para considerar "segurar"
 }) {
     const timerRef = useRef<number | null>(null);
     const handledByLongPress = useRef(false);
@@ -160,6 +171,10 @@ export default function EditalPage() {
         materiaId: string | null;
         assunto: Assunto | null;
     }>({ open: false, materiaId: null, assunto: null });
+
+    // NOVOS: filtro e gráfico
+    const [showOnlyNeverSeen, setShowOnlyNeverSeen] = useState(false);
+    const [showGrafico, setShowGrafico] = useState(false);
 
     // carrega lista de editais do usuário
     useEffect(() => {
@@ -241,6 +256,58 @@ export default function EditalPage() {
         "rounded border border-border p-2 bg-input text-foreground appearance-none " +
         "focus:outline-none focus:ring-2 focus:ring-primary/20";
 
+    /** ======= LÓGICA DO GRÁFICO =======
+     * Para cada matéria:
+     * - convertemos cada assunto em um nível:
+     *   visto_count 0 => nível 0 (vermelho)
+     *   visto_count 1 => nível 0.5 (amarelo)
+     *   visto_count >=2 => nível 1 (verde)
+     * - média_nivel = média desses níveis
+     * - valor da barra = média_nivel * 100 (0–100)
+     * - cor da barra: <=33 vermelho, 34–66 amarelo, >=67 verde
+     */
+    type ChartRow = { name: string; valor: number; cor: string; legenda: string };
+
+    const nivelFromVisto = (v: number | undefined | null) => {
+        const n = v ?? 0;
+        if (n <= 0) return 0; // vermelho
+        if (n === 1) return 0.5; // amarelo
+        return 1; // verde
+    };
+
+    const colorFromValor = (valor: number) => {
+        if (valor <= 33) return "#ef4444"; // red-500
+        if (valor <= 66) return "#f59e0b"; // amber-500
+        return "#10b981"; // emerald-500
+    };
+
+    const legendaFromValor = (valor: number) => {
+        if (valor <= 33) return "Predomínio Vermelho (pouco ou nunca visto)";
+        if (valor <= 66) return "Predomínio Amarelo (vistos ~1x)";
+        return "Predomínio Verde (vistos 2+ vezes)";
+    };
+
+    const chartData: ChartRow[] = (materias || []).map((m) => {
+        const lista = assuntos[m.id] || [];
+        if (lista.length === 0) {
+            return {
+                name: m.nome,
+                valor: 0,
+                cor: colorFromValor(0),
+                legenda: legendaFromValor(0),
+            };
+        }
+        const niveis = lista.map((a) => nivelFromVisto(a.visto_count));
+        const media = niveis.reduce((s, n) => s + n, 0) / niveis.length; // 0..1
+        const valor = Math.round(media * 100); // 0..100
+        return {
+            name: m.nome,
+            valor,
+            cor: colorFromValor(valor),
+            legenda: legendaFromValor(valor),
+        };
+    });
+
     return (
         <div className="mx-auto max-w-6xl p-4 text-foreground">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -290,107 +357,178 @@ export default function EditalPage() {
             )}
 
             {!!selEdital && (
-                <div className="space-y-6">
-                    {materias.map((m) => (
-                        <div
-                            key={m.id}
-                            className="rounded-lg border border-border p-3 bg-card"
+                <>
+                    {/* Ações globais */}
+                    <div className="flex flex-wrap items-center gap-2 mb-4">
+                        <button
+                            onClick={() => setShowOnlyNeverSeen((v) => !v)}
+                            className={`rounded px-3 py-2 border border-border ${showOnlyNeverSeen ? "bg-amber-100 text-amber-700" : "bg-transparent"
+                                }`}
+                            title="Exibir apenas assuntos com 0 vistas"
                         >
-                            <div className="mb-2 text-lg font-medium">{m.nome}</div>
+                            {showOnlyNeverSeen ? "Mostrar todos" : "Somente nunca vistos"}
+                        </button>
 
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                {(assuntos[m.id] || []).map((a) => (
-                                    <div
-                                        key={a.id}
-                                        className="flex items-center justify-between rounded p-2 bg-card border border-border text-foreground"
-                                    >
-                                        {/* Clicar no nome abre modal de edição */}
-                                        <button
-                                            type="button"
-                                            className="min-w-0 flex-1 truncate text-left hover:underline"
-                                            onClick={() =>
-                                                setEditingAssunto({
-                                                    open: true,
-                                                    materiaId: m.id,
-                                                    assunto: a,
-                                                })
+                        <button
+                            onClick={() => setShowGrafico((v) => !v)}
+                            className={`rounded px-3 py-2 border border-border ${showGrafico ? "bg-green-100 text-green-700" : "bg-transparent"
+                                }`}
+                            title="Ver um resumo por matéria"
+                        >
+                            {showGrafico ? "Ocultar gráfico" : "Gráfico de evolução"}
+                        </button>
+                    </div>
+
+                    {/* Gráfico de Evolução */}
+                    {showGrafico && (
+                        <div className="mb-8 w-full h-80 border border-border rounded-lg bg-card p-4">
+                            <div className="flex items-center justify-between mb-2">
+                                <h2 className="font-medium text-lg">📊 Gráfico de Evolução</h2>
+                                <span className="text-xs text-muted-foreground">
+                                    Escala: 0% (vermelho) → 100% (verde)
+                                </span>
+                            </div>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart
+                                    data={chartData}
+                                    margin={{ top: 10, right: 20, left: 0, bottom: 20 }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="name" />
+                                    <YAxis domain={[0, 100]} />
+                                    <Tooltip
+                                        formatter={(value: any, name: any, props: any) => {
+                                            if (name === "Progresso") {
+                                                return [`${value}%`, "Progresso"];
                                             }
-                                            title="Clique para renomear ou excluir"
-                                        >
-                                            {a.nome}
-                                        </button>
-
-                                        <div className="ml-3 flex flex-none flex-nowrap items-center gap-4">
-                                            <ImportanceBadge
-                                                level={a.importance_level ?? 0}
-                                                onClick={async () => {
-                                                    const next = ((a.importance_level ?? 0) + 1) % 4;
-                                                    await supabase
-                                                        .from("assuntos")
-                                                        .update({ importance_level: next })
-                                                        .eq("id", a.id);
-                                                    setAssuntos((prev) => {
-                                                        const copy = { ...prev };
-                                                        copy[m.id] = (copy[m.id] || []).map((x) =>
-                                                            x.id === a.id
-                                                                ? { ...x, importance_level: next }
-                                                                : x
-                                                        );
-                                                        return copy;
-                                                    });
-                                                }}
-                                            />
-
-                                            {/* 👇 Agora o contador é clicável para aumentar e, segurando, zera */}
-                                            <SeenBadge
-                                                count={a.visto_count ?? 0}
-                                                onShortPress={async () => {
-                                                    const next = (a.visto_count ?? 0) + 1;
-                                                    await supabase
-                                                        .from("assuntos")
-                                                        .update({ visto_count: next })
-                                                        .eq("id", a.id);
-                                                    setAssuntos((prev) => {
-                                                        const copy = { ...prev };
-                                                        copy[m.id] = (copy[m.id] || []).map((x) =>
-                                                            x.id === a.id
-                                                                ? { ...x, visto_count: next }
-                                                                : x
-                                                        );
-                                                        return copy;
-                                                    });
-                                                }}
-                                                onLongPress={async () => {
-                                                    const next = 0;
-                                                    await supabase
-                                                        .from("assuntos")
-                                                        .update({ visto_count: next })
-                                                        .eq("id", a.id);
-                                                    setAssuntos((prev) => {
-                                                        const copy = { ...prev };
-                                                        copy[m.id] = (copy[m.id] || []).map((x) =>
-                                                            x.id === a.id
-                                                                ? { ...x, visto_count: next }
-                                                                : x
-                                                        );
-                                                        return copy;
-                                                    });
-                                                }}
-                                                longPressMs={700}
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
-
-                                {(!assuntos[m.id] || assuntos[m.id].length === 0) && (
-                                    <div className="rounded p-2 text-sm bg-transparent border border-border text-muted-foreground">
-                                        Sem assuntos ainda.
-                                    </div>
-                                )}
+                                            return [value, name];
+                                        }}
+                                        labelFormatter={(label: any) => `Matéria: ${label}`}
+                                    />
+                                    <Legend />
+                                    <Bar dataKey="valor" name="Progresso">
+                                        {chartData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.cor} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                            <div className="mt-2 text-xs text-muted-foreground">
+                                Dica: a cor e a altura refletem a média por matéria — se todos os
+                                assuntos estiverem <b>verdes</b> (2+ vistas), a barra fica no topo; se
+                                a maioria for <b>amarela</b> (1 vista) ou <b>vermelha</b> (0 vistas),
+                                a barra fica mais abaixo.
                             </div>
                         </div>
-                    ))}
-                </div>
+                    )}
+
+                    {/* Listagem por matéria */}
+                    <div className="space-y-6">
+                        {materias.map((m) => {
+                            const listaAssuntos = showOnlyNeverSeen
+                                ? (assuntos[m.id] || []).filter((a) => (a.visto_count ?? 0) === 0)
+                                : assuntos[m.id] || [];
+
+                            return (
+                                <div
+                                    key={m.id}
+                                    className="rounded-lg border border-border p-3 bg-card"
+                                >
+                                    <div className="mb-2 text-lg font-medium">{m.nome}</div>
+
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                        {listaAssuntos.map((a) => (
+                                            <div
+                                                key={a.id}
+                                                className="flex items-center justify-between rounded p-2 bg-card border border-border text-foreground"
+                                            >
+                                                {/* Clicar no nome abre modal de edição */}
+                                                <button
+                                                    type="button"
+                                                    className="min-w-0 flex-1 truncate text-left hover:underline"
+                                                    onClick={() =>
+                                                        setEditingAssunto({
+                                                            open: true,
+                                                            materiaId: m.id,
+                                                            assunto: a,
+                                                        })
+                                                    }
+                                                    title="Clique para renomear ou excluir"
+                                                >
+                                                    {a.nome}
+                                                </button>
+
+                                                <div className="ml-3 flex flex-none flex-nowrap items-center gap-4">
+                                                    <ImportanceBadge
+                                                        level={a.importance_level ?? 0}
+                                                        onClick={async () => {
+                                                            const next = ((a.importance_level ?? 0) + 1) % 4;
+                                                            await supabase
+                                                                .from("assuntos")
+                                                                .update({ importance_level: next })
+                                                                .eq("id", a.id);
+                                                            setAssuntos((prev) => {
+                                                                const copy = { ...prev };
+                                                                copy[m.id] = (copy[m.id] || []).map((x) =>
+                                                                    x.id === a.id
+                                                                        ? { ...x, importance_level: next }
+                                                                        : x
+                                                                );
+                                                                return copy;
+                                                            });
+                                                        }}
+                                                    />
+
+                                                    {/* Contador clicável (curto: +1, longo: zera) */}
+                                                    <SeenBadge
+                                                        count={a.visto_count ?? 0}
+                                                        onShortPress={async () => {
+                                                            const next = (a.visto_count ?? 0) + 1;
+                                                            await supabase
+                                                                .from("assuntos")
+                                                                .update({ visto_count: next })
+                                                                .eq("id", a.id);
+                                                            setAssuntos((prev) => {
+                                                                const copy = { ...prev };
+                                                                copy[m.id] = (copy[m.id] || []).map((x) =>
+                                                                    x.id === a.id ? { ...x, visto_count: next } : x
+                                                                );
+                                                                return copy;
+                                                            });
+                                                        }}
+                                                        onLongPress={async () => {
+                                                            const next = 0;
+                                                            await supabase
+                                                                .from("assuntos")
+                                                                .update({ visto_count: next })
+                                                                .eq("id", a.id);
+                                                            setAssuntos((prev) => {
+                                                                const copy = { ...prev };
+                                                                copy[m.id] = (copy[m.id] || []).map((x) =>
+                                                                    x.id === a.id ? { ...x, visto_count: next } : x
+                                                                );
+                                                                return copy;
+                                                            });
+                                                        }}
+                                                        longPressMs={700}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {(!listaAssuntos || listaAssuntos.length === 0) && (
+                                            <div className="rounded p-2 text-sm bg-transparent border border-border text-muted-foreground">
+                                                {showOnlyNeverSeen
+                                                    ? "Todos os assuntos desta matéria já foram vistos."
+                                                    : "Sem assuntos ainda."}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </>
             )}
 
             {/* MODAL: Novo Edital */}
@@ -578,10 +716,7 @@ function EditarEstrutura({
     const removeLinha = (idx: number) =>
         setAssuntosLote((prev) => prev.filter((_, i) => i !== idx));
 
-    const atualizarLinha = (
-        idx: number,
-        patch: Partial<AssuntoLote>
-    ) =>
+    const atualizarLinha = (idx: number, patch: Partial<AssuntoLote>) =>
         setAssuntosLote((prev) =>
             prev.map((row, i) => (i === idx ? { ...row, ...patch } : row))
         );
@@ -601,8 +736,7 @@ function EditarEstrutura({
             });
     };
 
-    const podeSalvar =
-        !!selMateria && linhasValidas().length > 0 && !savingLote;
+    const podeSalvar = !!selMateria && linhasValidas().length > 0 && !savingLote;
 
     return (
         <div className="space-y-4">
@@ -683,9 +817,7 @@ function EditarEstrutura({
                                 className={`flex-1 ${inputBase}`}
                                 placeholder={`Assunto ${idx + 1}`}
                                 value={row.nome}
-                                onChange={(e) =>
-                                    atualizarLinha(idx, { nome: e.target.value })
-                                }
+                                onChange={(e) => atualizarLinha(idx, { nome: e.target.value })}
                             />
                             <select
                                 className={selectBase}
@@ -736,9 +868,7 @@ function EditarEstrutura({
                     </button>
 
                     <div className="ml-auto flex items-center gap-2">
-                        {erroLote && (
-                            <span className="text-sm text-red-600">{erroLote}</span>
-                        )}
+                        {erroLote && <span className="text-sm text-red-600">{erroLote}</span>}
                         <button
                             className="rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
                             disabled={!podeSalvar}
@@ -803,8 +933,8 @@ function EditarEstrutura({
 
                 <p className="mt-2 text-xs text-muted-foreground">
                     Dica: você pode preencher vários nomes e escolher importâncias
-                    diferentes por linha. Linhas em branco são ignoradas e nomes
-                    duplicados (na própria lista) são filtrados automaticamente.
+                    diferentes por linha. Linhas em branco são ignoradas e nomes duplicados
+                    (na própria lista) são filtrados automaticamente.
                 </p>
             </div>
         </div>
