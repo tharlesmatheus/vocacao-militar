@@ -257,23 +257,19 @@ export default function EditalPage() {
         "focus:outline-none focus:ring-2 focus:ring-primary/20";
 
     /** ======= LÓGICA DO GRÁFICO =======
-     * Para cada matéria:
-     * - convertemos cada assunto em um nível:
-     *   visto_count 0 => nível 0 (vermelho)
-     *   visto_count 1 => nível 0.5 (amarelo)
-     *   visto_count >=2 => nível 1 (verde)
-     * - média_nivel = média desses níveis
-     * - valor da barra = média_nivel * 100 (0–100)
-     * - cor da barra: <=33 vermelho, 34–66 amarelo, >=67 verde
-     * - SEMPRE inclui a matéria, mesmo se não houver assuntos (barra = 0).
+     * Objetivo: topo (100%) somente se TODOS os assuntos da matéria tiverem >= 7 vistas.
+     * Para isso:
+     * - normalizamos cada assunto: nivel = min(visto_count / 7, 1)  // 0..1
+     * - média_nivel = média de todos os níveis da matéria            // 0..1
+     * - valor = média_nivel * 100                                    // 0..100
+     * - cor: <=33 vermelho, 34–66 amarelo, >=67 verde
+     * - matérias sem assuntos aparecem com valor 0.
      */
     type ChartRow = { name: string; valor: number; cor: string; legenda: string };
 
-    const nivelFromVisto = (v: number | undefined | null): number => {
+    const normBySeven = (v: number | undefined | null): number => {
         const n = v ?? 0;
-        if (n <= 0) return 0; // vermelho
-        if (n === 1) return 0.5; // amarelo
-        return 1; // verde
+        return Math.min(n / 7, 1);
     };
 
     const colorFromValor = (valor: number) => {
@@ -283,12 +279,11 @@ export default function EditalPage() {
     };
 
     const legendaFromValor = (valor: number) => {
-        if (valor <= 33) return "Predomínio Vermelho (pouco ou nunca visto)";
-        if (valor <= 66) return "Predomínio Amarelo (vistos ~1x)";
-        return "Predomínio Verde (vistos 2+ vezes)";
+        if (valor <= 33) return "Predomínio Vermelho (abaixo da meta de 7x)";
+        if (valor <= 66) return "Predomínio Amarelo (aproximando 7x)";
+        return "Predomínio Verde (>= 7x por assunto)";
     };
 
-    // 🔸 Gera dados para TODAS as matérias do edital selecionado.
     const chartData: ChartRow[] = (materias || []).map((m) => {
         const lista = assuntos[m.id] || [];
         if (lista.length === 0) {
@@ -299,7 +294,7 @@ export default function EditalPage() {
                 legenda: legendaFromValor(0),
             };
         }
-        const niveis = lista.map((a) => nivelFromVisto(a.visto_count));
+        const niveis = lista.map((a) => normBySeven(a.visto_count)); // 0..1 por assunto
         const media = niveis.reduce((s: number, n) => s + n, 0) / niveis.length; // 0..1
         const valor = Math.round(media * 100); // 0..100
         return {
@@ -381,13 +376,13 @@ export default function EditalPage() {
                         </button>
                     </div>
 
-                    {/* Gráfico de Evolução (SEMPRE inclui todas as matérias) */}
+                    {/* Gráfico de Evolução – inclui TODAS as matérias */}
                     {showGrafico && (
                         <div className="mb-8 w-full h-80 border border-border rounded-lg bg-card p-4">
                             <div className="flex items-center justify-between mb-2">
                                 <h2 className="font-medium text-lg">📊 Gráfico de Evolução</h2>
                                 <span className="text-xs text-muted-foreground">
-                                    Escala: 0% (vermelho) → 100% (verde)
+                                    Meta: 7x por assunto • Escala: 0% → 100%
                                 </span>
                             </div>
 
@@ -403,7 +398,6 @@ export default function EditalPage() {
                                         barCategoryGap={12}
                                     >
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        {/* interval={0} força exibir TODAS as matérias no eixo X */}
                                         <XAxis
                                             dataKey="name"
                                             interval={0}
@@ -413,10 +407,8 @@ export default function EditalPage() {
                                         />
                                         <YAxis domain={[0, 100]} />
                                         <Tooltip
-                                            formatter={(value: any, name: any, props: any) => {
-                                                if (name === "Progresso") {
-                                                    return [`${value}%`, "Progresso"];
-                                                }
+                                            formatter={(value: any, name: any) => {
+                                                if (name === "Progresso") return [`${value}%`, "Progresso"];
                                                 return [value, name];
                                             }}
                                             labelFormatter={(label: any) => `Matéria: ${label}`}
@@ -432,10 +424,9 @@ export default function EditalPage() {
                             )}
 
                             <div className="mt-2 text-xs text-muted-foreground">
-                                Dica: a cor e a altura refletem a média por matéria — se todos os
-                                assuntos estiverem <b>verdes</b> (2+ vistas), a barra fica no topo; se
-                                a maioria for <b>amarela</b> (1 vista) ou <b>vermelha</b> (0 vistas),
-                                a barra fica mais abaixo.
+                                A barra só atinge <b>100%</b> quando <b>todos</b> os assuntos dessa
+                                matéria tiverem sido vistos <b>7 vezes</b> cada. Se algum estiver
+                                abaixo disso, a barra fica proporcional à média (visto/7).
                             </div>
                         </div>
                     )}
