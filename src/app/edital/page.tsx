@@ -265,6 +265,7 @@ export default function EditalPage() {
      * - média_nivel = média desses níveis
      * - valor da barra = média_nivel * 100 (0–100)
      * - cor da barra: <=33 vermelho, 34–66 amarelo, >=67 verde
+     * - SEMPRE inclui a matéria, mesmo se não houver assuntos (barra = 0).
      */
     type ChartRow = { name: string; valor: number; cor: string; legenda: string };
 
@@ -287,6 +288,7 @@ export default function EditalPage() {
         return "Predomínio Verde (vistos 2+ vezes)";
     };
 
+    // 🔸 Gera dados para TODAS as matérias do edital selecionado.
     const chartData: ChartRow[] = (materias || []).map((m) => {
         const lista = assuntos[m.id] || [];
         if (lista.length === 0) {
@@ -379,7 +381,7 @@ export default function EditalPage() {
                         </button>
                     </div>
 
-                    {/* Gráfico de Evolução */}
+                    {/* Gráfico de Evolução (SEMPRE inclui todas as matérias) */}
                     {showGrafico && (
                         <div className="mb-8 w-full h-80 border border-border rounded-lg bg-card p-4">
                             <div className="flex items-center justify-between mb-2">
@@ -388,29 +390,47 @@ export default function EditalPage() {
                                     Escala: 0% (vermelho) → 100% (verde)
                                 </span>
                             </div>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart
-                                    data={chartData}
-                                    margin={{ top: 10, right: 20, left: 0, bottom: 20 }}
-                                >
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="name" />
-                                    <YAxis domain={[0, 100]} />
-                                    <Tooltip
-                                        formatter={(value: any, name: any) => {
-                                            if (name === "Progresso") return [`${value}%`, "Progresso"];
-                                            return [value, name];
-                                        }}
-                                        labelFormatter={(label: any) => `Matéria: ${label}`}
-                                    />
-                                    <Legend />
-                                    <Bar dataKey="valor" name="Progresso">
-                                        {chartData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.cor} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+
+                            {materias.length === 0 ? (
+                                <div className="text-sm text-muted-foreground">
+                                    Nenhuma matéria encontrada neste edital.
+                                </div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart
+                                        data={chartData}
+                                        margin={{ top: 10, right: 20, left: 0, bottom: 40 }}
+                                        barCategoryGap={12}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        {/* interval={0} força exibir TODAS as matérias no eixo X */}
+                                        <XAxis
+                                            dataKey="name"
+                                            interval={0}
+                                            angle={-15}
+                                            textAnchor="end"
+                                            height={60}
+                                        />
+                                        <YAxis domain={[0, 100]} />
+                                        <Tooltip
+                                            formatter={(value: any, name: any, props: any) => {
+                                                if (name === "Progresso") {
+                                                    return [`${value}%`, "Progresso"];
+                                                }
+                                                return [value, name];
+                                            }}
+                                            labelFormatter={(label: any) => `Matéria: ${label}`}
+                                        />
+                                        <Legend />
+                                        <Bar dataKey="valor" name="Progresso">
+                                            {chartData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.cor} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
+
                             <div className="mt-2 text-xs text-muted-foreground">
                                 Dica: a cor e a altura refletem a média por matéria — se todos os
                                 assuntos estiverem <b>verdes</b> (2+ vistas), a barra fica no topo; se
@@ -420,7 +440,7 @@ export default function EditalPage() {
                         </div>
                     )}
 
-                    {/* Listagem por matéria */}
+                    {/* Listagem por matéria (filtro afeta apenas a lista, não o gráfico) */}
                     <div className="space-y-6">
                         {materias.map((m) => {
                             const listaAssuntos = showOnlyNeverSeen
