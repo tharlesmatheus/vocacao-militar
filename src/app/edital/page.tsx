@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import BadgeSeen from "@/components/BadgeSeen";
 
@@ -86,19 +86,57 @@ function ImportanceBadge({
     );
 }
 
-/** Badge de "vezes visto" (clicável) */
+/** Badge de "vezes visto" (clicável com long-press p/ zerar) */
 function SeenBadge({
     count,
-    onClick,
+    onShortPress,
+    onLongPress,
+    longPressMs = 700,
 }: {
     count: number;
-    onClick?: () => void;
+    onShortPress?: () => void;   // incrementa (+1)
+    onLongPress?: () => void;    // zera (0)
+    longPressMs?: number;        // tempo para considerar "segurar"
 }) {
+    const timerRef = useRef<number | null>(null);
+    const handledByLongPress = useRef(false);
+
+    const startPress = () => {
+        handledByLongPress.current = false;
+        timerRef.current = window.setTimeout(() => {
+            handledByLongPress.current = true;
+            onLongPress?.();
+        }, longPressMs);
+    };
+
+    const clearPress = () => {
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
+        }
+    };
+
+    const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+        // se o long-press já tratou, suprime o click
+        if (handledByLongPress.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            handledByLongPress.current = false; // reseta para próxima interação
+            return;
+        }
+        onShortPress?.();
+    };
+
     return (
         <button
             type="button"
-            title="Clique para aumentar o contador de revisões"
-            onClick={onClick}
+            title="Clique para +1 • Segure ~0,7s para zerar"
+            onMouseDown={startPress}
+            onMouseUp={clearPress}
+            onMouseLeave={clearPress}
+            onTouchStart={startPress}
+            onTouchEnd={clearPress}
+            onClick={handleClick}
             className="inline-flex items-center gap-1 text-sm hover:opacity-80"
         >
             <span>👁️</span>
@@ -302,10 +340,11 @@ export default function EditalPage() {
                                                     });
                                                 }}
                                             />
-                                            {/* 👇 Agora o contador é clicável para aumentar */}
+
+                                            {/* 👇 Agora o contador é clicável para aumentar e, segurando, zera */}
                                             <SeenBadge
                                                 count={a.visto_count ?? 0}
-                                                onClick={async () => {
+                                                onShortPress={async () => {
                                                     const next = (a.visto_count ?? 0) + 1;
                                                     await supabase
                                                         .from("assuntos")
@@ -321,6 +360,23 @@ export default function EditalPage() {
                                                         return copy;
                                                     });
                                                 }}
+                                                onLongPress={async () => {
+                                                    const next = 0;
+                                                    await supabase
+                                                        .from("assuntos")
+                                                        .update({ visto_count: next })
+                                                        .eq("id", a.id);
+                                                    setAssuntos((prev) => {
+                                                        const copy = { ...prev };
+                                                        copy[m.id] = (copy[m.id] || []).map((x) =>
+                                                            x.id === a.id
+                                                                ? { ...x, visto_count: next }
+                                                                : x
+                                                        );
+                                                        return copy;
+                                                    });
+                                                }}
+                                                longPressMs={700}
                                             />
                                         </div>
                                     </div>
