@@ -268,7 +268,7 @@ export default function EditalPage() {
      */
     type ChartRow = { name: string; valor: number; cor: string; legenda: string };
 
-    const nivelFromVisto = (v: number | undefined | null) => {
+    const nivelFromVisto = (v: number | undefined | null): number => {
         const n = v ?? 0;
         if (n <= 0) return 0; // vermelho
         if (n === 1) return 0.5; // amarelo
@@ -298,7 +298,7 @@ export default function EditalPage() {
             };
         }
         const niveis = lista.map((a) => nivelFromVisto(a.visto_count));
-        const media = niveis.reduce((s, n) => s + n, 0) / niveis.length; // 0..1
+        const media = niveis.reduce((s: number, n) => s + n, 0) / niveis.length; // 0..1
         const valor = Math.round(media * 100); // 0..100
         return {
             name: m.nome,
@@ -397,10 +397,8 @@ export default function EditalPage() {
                                     <XAxis dataKey="name" />
                                     <YAxis domain={[0, 100]} />
                                     <Tooltip
-                                        formatter={(value: any, name: any, props: any) => {
-                                            if (name === "Progresso") {
-                                                return [`${value}%`, "Progresso"];
-                                            }
+                                        formatter={(value: any, name: any) => {
+                                            if (name === "Progresso") return [`${value}%`, "Progresso"];
                                             return [value, name];
                                         }}
                                         labelFormatter={(label: any) => `Matéria: ${label}`}
