@@ -86,6 +86,27 @@ function ImportanceBadge({
     );
 }
 
+/** Badge de "vezes visto" (clicável) */
+function SeenBadge({
+    count,
+    onClick,
+}: {
+    count: number;
+    onClick?: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            title="Clique para aumentar o contador de revisões"
+            onClick={onClick}
+            className="inline-flex items-center gap-1 text-sm hover:opacity-80"
+        >
+            <span>👁️</span>
+            <BadgeSeen count={count} />
+        </button>
+    );
+}
+
 export default function EditalPage() {
     const [editais, setEditais] = useState<Edital[]>([]);
     const [selEdital, setSelEdital] = useState("");
@@ -281,10 +302,26 @@ export default function EditalPage() {
                                                     });
                                                 }}
                                             />
-                                            <div className="flex items-center gap-2 whitespace-nowrap">
-                                                <span title="vezes visto">👁️</span>
-                                                <BadgeSeen count={a.visto_count} />
-                                            </div>
+                                            {/* 👇 Agora o contador é clicável para aumentar */}
+                                            <SeenBadge
+                                                count={a.visto_count ?? 0}
+                                                onClick={async () => {
+                                                    const next = (a.visto_count ?? 0) + 1;
+                                                    await supabase
+                                                        .from("assuntos")
+                                                        .update({ visto_count: next })
+                                                        .eq("id", a.id);
+                                                    setAssuntos((prev) => {
+                                                        const copy = { ...prev };
+                                                        copy[m.id] = (copy[m.id] || []).map((x) =>
+                                                            x.id === a.id
+                                                                ? { ...x, visto_count: next }
+                                                                : x
+                                                        );
+                                                        return copy;
+                                                    });
+                                                }}
+                                            />
                                         </div>
                                     </div>
                                 ))}
