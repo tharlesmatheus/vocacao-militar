@@ -12,7 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isAuthRoute = pathname.startsWith("/auth");
   const isAdminRoute = pathname.startsWith("/admin");
 
-  // Registra o service worker (se existir /sw.js em public)
+  // Registra o service worker 
   React.useEffect(() => {
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       const swUrl = "/sw.js";
