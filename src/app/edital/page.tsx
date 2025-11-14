@@ -305,6 +305,27 @@ export default function EditalPage() {
         };
     });
 
+    /** Tooltip customizado: mostra nome da matéria e legenda */
+    function CustomTooltip({
+        active,
+        payload,
+    }: {
+        active?: boolean;
+        payload?: any[];
+    }) {
+        if (!active || !payload || payload.length === 0) return null;
+
+        const d = payload[0].payload as ChartRow;
+
+        return (
+            <div className="rounded border border-border bg-card px-3 py-2 text-xs shadow-md">
+                <div className="font-semibold mb-1">{d.name}</div>
+                <div>Progresso: <b>{d.valor}%</b></div>
+                <div className="text-muted-foreground mt-1">{d.legenda}</div>
+            </div>
+        );
+    }
+
     return (
         <div className="mx-auto max-w-6xl p-4 text-foreground">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -359,7 +380,9 @@ export default function EditalPage() {
                     <div className="flex flex-wrap items-center gap-2 mb-4">
                         <button
                             onClick={() => setShowOnlyNeverSeen((v) => !v)}
-                            className={`rounded px-3 py-2 border border-border ${showOnlyNeverSeen ? "bg-amber-100 text-amber-700" : "bg-transparent"
+                            className={`rounded px-3 py-2 border border-border ${showOnlyNeverSeen
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-transparent"
                                 }`}
                             title="Exibir apenas assuntos com 0 vistas"
                         >
@@ -368,7 +391,9 @@ export default function EditalPage() {
 
                         <button
                             onClick={() => setShowGrafico((v) => !v)}
-                            className={`rounded px-3 py-2 border border-border ${showGrafico ? "bg-green-100 text-green-700" : "bg-transparent"
+                            className={`rounded px-3 py-2 border border-border ${showGrafico
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-transparent"
                                 }`}
                             title="Ver um resumo por matéria"
                         >
@@ -394,25 +419,14 @@ export default function EditalPage() {
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart
                                         data={chartData}
-                                        margin={{ top: 10, right: 20, left: 0, bottom: 40 }}
+                                        margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
                                         barCategoryGap={12}
                                     >
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis
-                                            dataKey="name"
-                                            interval={0}
-                                            angle={-15}
-                                            textAnchor="end"
-                                            height={60}
-                                        />
+                                        {/* Esconde os nomes das matérias no eixo X */}
+                                        <XAxis dataKey="name" hide />
                                         <YAxis domain={[0, 100]} />
-                                        <Tooltip
-                                            formatter={(value: any, name: any) => {
-                                                if (name === "Progresso") return [`${value}%`, "Progresso"];
-                                                return [value, name];
-                                            }}
-                                            labelFormatter={(label: any) => `Matéria: ${label}`}
-                                        />
+                                        <Tooltip content={<CustomTooltip />} />
                                         <Legend />
                                         <Bar dataKey="valor" name="Progresso">
                                             {chartData.map((entry, index) => (
@@ -435,7 +449,9 @@ export default function EditalPage() {
                     <div className="space-y-6">
                         {materias.map((m) => {
                             const listaAssuntos = showOnlyNeverSeen
-                                ? (assuntos[m.id] || []).filter((a) => (a.visto_count ?? 0) === 0)
+                                ? (assuntos[m.id] || []).filter(
+                                    (a) => (a.visto_count ?? 0) === 0
+                                )
                                 : assuntos[m.id] || [];
 
                             return (
@@ -471,17 +487,23 @@ export default function EditalPage() {
                                                     <ImportanceBadge
                                                         level={a.importance_level ?? 0}
                                                         onClick={async () => {
-                                                            const next = ((a.importance_level ?? 0) + 1) % 4;
+                                                            const next =
+                                                                ((a.importance_level ?? 0) + 1) % 4;
                                                             await supabase
                                                                 .from("assuntos")
                                                                 .update({ importance_level: next })
                                                                 .eq("id", a.id);
                                                             setAssuntos((prev) => {
                                                                 const copy = { ...prev };
-                                                                copy[m.id] = (copy[m.id] || []).map((x) =>
-                                                                    x.id === a.id
-                                                                        ? { ...x, importance_level: next }
-                                                                        : x
+                                                                copy[m.id] = (copy[m.id] || []).map(
+                                                                    (x) =>
+                                                                        x.id === a.id
+                                                                            ? {
+                                                                                ...x,
+                                                                                importance_level:
+                                                                                    next,
+                                                                            }
+                                                                            : x
                                                                 );
                                                                 return copy;
                                                             });
@@ -499,8 +521,14 @@ export default function EditalPage() {
                                                                 .eq("id", a.id);
                                                             setAssuntos((prev) => {
                                                                 const copy = { ...prev };
-                                                                copy[m.id] = (copy[m.id] || []).map((x) =>
-                                                                    x.id === a.id ? { ...x, visto_count: next } : x
+                                                                copy[m.id] = (copy[m.id] || []).map(
+                                                                    (x) =>
+                                                                        x.id === a.id
+                                                                            ? {
+                                                                                ...x,
+                                                                                visto_count: next,
+                                                                            }
+                                                                            : x
                                                                 );
                                                                 return copy;
                                                             });
@@ -513,8 +541,14 @@ export default function EditalPage() {
                                                                 .eq("id", a.id);
                                                             setAssuntos((prev) => {
                                                                 const copy = { ...prev };
-                                                                copy[m.id] = (copy[m.id] || []).map((x) =>
-                                                                    x.id === a.id ? { ...x, visto_count: next } : x
+                                                                copy[m.id] = (copy[m.id] || []).map(
+                                                                    (x) =>
+                                                                        x.id === a.id
+                                                                            ? {
+                                                                                ...x,
+                                                                                visto_count: next,
+                                                                            }
+                                                                            : x
                                                                 );
                                                                 return copy;
                                                             });
@@ -588,7 +622,11 @@ export default function EditalPage() {
                     <EditarAssuntoForm
                         assunto={editingAssunto.assunto}
                         onCancel={() =>
-                            setEditingAssunto({ open: false, materiaId: null, assunto: null })
+                            setEditingAssunto({
+                                open: false,
+                                materiaId: null,
+                                assunto: null,
+                            })
                         }
                         onSaved={async (updated) => {
                             const mId = editingAssunto.materiaId!;
@@ -826,13 +864,17 @@ function EditarEstrutura({
                                 className={`flex-1 ${inputBase}`}
                                 placeholder={`Assunto ${idx + 1}`}
                                 value={row.nome}
-                                onChange={(e) => atualizarLinha(idx, { nome: e.target.value })}
+                                onChange={(e) =>
+                                    atualizarLinha(idx, { nome: e.target.value })
+                                }
                             />
                             <select
                                 className={selectBase}
                                 value={row.importance_level}
                                 onChange={(e) =>
-                                    atualizarLinha(idx, { importance_level: Number(e.target.value) })
+                                    atualizarLinha(idx, {
+                                        importance_level: Number(e.target.value),
+                                    })
                                 }
                                 title="Grau de importância"
                             >
