@@ -1,60 +1,104 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import crypto from "crypto";
+import { supabaseAdmin } from "@/lib/supabaseAdmin"; // use service_role
 
-const KIWIFY_TOKEN = "lapn096tst4";
+const KIWIFY_TOKEN = process.env.KIWIFY_TOKEN!;
 
 export async function POST(req: NextRequest) {
-    const json = await req.json();
-    const body = json.body || json; // PEGA O OBJETO CERTO!
-    console.log("Webhook recebido!", body);
+    // 1) Pega signature da querystring
+    const { searchParams } = new URL(req.url);
+    const signature = searchParams.get("signature") || "";
 
-    // (Se quiser, ative a validação do token!)
-    // const tokenRecebido = req.headers.get("x-kiwify-token") || req.headers.get("X-Kiwify-Token") || body.token;
-    // if (tokenRecebido !== KIWIFY_TOKEN) {
-    //     return NextResponse.json({ message: "Token inválido!" }, { status: 403 });
-    // }
+    // 2) Lê body cru (IMPORTANTE p/ HMAC)
+    const rawBody = await req.text();
 
-    const event = body.webhook_event_type;
-    const email = body.Customer?.email;
+    // 3) Valida assinatura HMAC SHA1 (como na doc)
+    const expected = crypto
+        .createHmac("sha1", KIWIFY_TOKEN)
+        .update(rawBody)
+        .digest("hex");
 
-    if (!event || !email) {
-        return NextResponse.json({ message: "Evento ou email ausente no payload" }, { status: 400 });
+    if (!signature || signature !== expected) {
+        return NextResponse.json({ message: "Assinatura inválida" }, { status: 400 });
     }
 
-    let status: string | null = null;
-    if (
-        event === "order_approved" ||
-        event === "subscription_renewed"
-    ) {
+    // 4) Parse do JSON
+    let payload: any;
+    try {
+        payload = JSON.parse(rawBody);
+    } catch {
+        return NextResponse.json({ message: "JSON inválido" }, { status: 400 });
+    }
+
+    // Alguns envios podem vir com { body: {...} }
+    const body = payload.body || payload;
+
+    const event = body.webhook_event_type;
+    const email = body?.Customer?.email;
+    const orderStatus = body?.order_status;
+    const orderId = body?.order_id;
+    const subscriptionId = body?.subscription_id || body?.Subscription?.subscription_id;
+
+    if (!event || !email) {
+        return NextResponse.json({ message: "Evento ou email ausente" }, { status: 400 });
+    }
+
+    // 5) (Recomendado) Idempotência básica: grava evento por order_id+event
+    // Se você não quiser criar tabela de eventos agora, pule esta parte.
+    // Ex.: tabela "kiwify_events" com unique(order_id, webhook_event_type)
+    if (orderId) {
+        const { error: evErr } = await supabaseAdmin
+            .from("kiwify_events")
+            .insert([{ order_id: orderId, event }]);
+
+        if (evErr) {
+            // Se violou unique, já processou antes -> responde 200
+            // (ideal checar o código do erro do Postgres, mas dá pra aceitar assim)
+            return NextResponse.json({ message: "Evento duplicado (ignorado)" }, { status: 200 });
+        }
+    }
+
+    // 6) Decide status
+    let status: "ativo" | "inativo" | null = null;
+
+    if (event === "order_approved") {
+        // garante que realmente foi pago
+        status = orderStatus === "paid" ? "ativo" : "inativo";
+    } else if (event === "subscription_renewed") {
         status = "ativo";
     } else if (
         event === "subscription_canceled" ||
-        event === "subscription_late" ||
         event === "order_refunded" ||
         event === "chargeback"
     ) {
         status = "inativo";
+    } else if (event === "subscription_late") {
+        // decisão de negócio: bloquear agora ou dar tolerância
+        status = "inativo";
     } else {
-        return NextResponse.json({ message: "Evento ignorado" });
+        return NextResponse.json({ message: "Evento ignorado" }, { status: 200 });
     }
 
-    // Faz upsert: cria se não existe, atualiza se já existe (pelo email)
-    const { error } = await supabase
+    // 7) Upsert por email (melhor que update puro)
+    const { error } = await supabaseAdmin
         .from("planos")
         .upsert(
-            [{ email, status }],
-            { onConflict: 'email' } // <- aqui está o ajuste!
+            [{
+                email,
+                status,
+                subscription_id: subscriptionId ?? null,
+                updated_at: new Date().toISOString(),
+            }],
+            { onConflict: "email" }
         );
 
     if (error) {
-        console.log("Erro ao atualizar Supabase:", error); // Vai mostrar erro detalhado nos logs!
-        return NextResponse.json({ message: "Erro ao atualizar status no Supabase", error }, { status: 500 });
+        return NextResponse.json({ message: "Erro Supabase", error }, { status: 500 });
     }
 
-    console.log(`Status do plano de ${email} atualizado/criado para ${status}`);
-    return NextResponse.json({ message: "Status atualizado/criado com sucesso" });
+    return NextResponse.json({ message: "OK" }, { status: 200 });
 }
 
-export function GET() {
+export async function GET() {
     return NextResponse.json({ message: "Método não permitido" }, { status: 405 });
 }
