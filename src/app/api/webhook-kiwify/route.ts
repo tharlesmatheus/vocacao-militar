@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ message: "Evento ignorado" }, { status: 200 });
     }
 
-    // 7) Upsert por email (melhor que update puro)
+    // 7) Upsert por email (melhor )
     const { error } = await supabaseAdmin
         .from("planos")
         .upsert(
