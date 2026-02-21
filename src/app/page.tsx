@@ -7,7 +7,7 @@ import { QuestionsList } from "../components/QuestionsList";
 
 export default function Home() {
   const router = useRouter();
-  const [filters, setFilters] = useState({}); // Estado dos filtros
+  const [filters, setFilters] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,21 +22,32 @@ export default function Home() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
+      <main className="min-h-[100dvh] flex items-center justify-center px-4">
         <span className="text-lg text-foreground">Carregando...</span>
       </main>
     );
   }
 
   return (
-    <main className="container py-6 flex flex-col gap-6 md:gap-10">
-      {/* Filtros de Busca */}
-      <section className="card mb-2">
-        <QuestionFilters onFiltrar={setFilters} />
-      </section>
+    <main
+      className="
+        min-h-[100dvh]
+        w-full max-w-full overflow-x-hidden
+        px-4 sm:px-6 lg:px-8
+        py-6
+        md:pl-[260px]
+      "
+    >
+      {/* wrapper para limitar largura e padronizar */}
+      <div className="mx-auto w-full max-w-6xl flex flex-col gap-6 md:gap-10">
+        {/* Filtros de Busca */}
+        <section className="card">
+          <QuestionFilters onFiltrar={setFilters} />
+        </section>
 
-      {/* Lista de Questões */}
-      <QuestionsList filters={filters} />
+        {/* Lista de Questões */}
+        <QuestionsList filters={filters} />
+      </div>
     </main>
   );
 }
