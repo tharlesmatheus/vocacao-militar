@@ -68,7 +68,7 @@ export function Sidebar() {
 
     return (
         <>
-            {/* ================= BOTÃO MOBILE ================= */}
+            {/* MOBILE BUTTON */}
             <button
                 className="fixed top-5 left-4 z-50 md:hidden bg-sidebar rounded-lg p-2 shadow border border-sidebar-border"
                 onClick={() => setOpen(true)}
@@ -76,7 +76,7 @@ export function Sidebar() {
                 <MenuIcon className="w-6 h-6 text-sidebar-foreground" />
             </button>
 
-            {/* ================= SIDEBAR ================= */}
+            {/* SIDEBAR */}
             <aside
                 className={`
           bg-sidebar border-r border-sidebar-border
@@ -84,13 +84,10 @@ export function Sidebar() {
           flex flex-col
           transition-all duration-300
           ${collapsed ? "w-[88px]" : "w-[260px]"}
-          ${open
-                        ? "translate-x-0"
-                        : "-translate-x-full md:translate-x-0"
-                    }
+          ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
         `}
             >
-                {/* FECHAR MOBILE */}
+                {/* CLOSE MOBILE */}
                 <button
                     className="absolute top-5 right-3 md:hidden p-2"
                     onClick={() => setOpen(false)}
@@ -98,21 +95,21 @@ export function Sidebar() {
                     <CloseIcon className="w-6 h-6 text-sidebar-foreground" />
                 </button>
 
-                {/* ================= HEADER PERFIL ================= */}
+                {/* PROFILE */}
                 <div
-                    className={`px-5 pt-10 pb-6 flex items-center ${collapsed ? "justify-center" : "gap-4"
+                    className={`px-5 pt-8 pb-4 flex items-center ${collapsed ? "justify-center" : "gap-3"
                         }`}
                 >
-                    <div className="w-12 h-12 rounded-full bg-sidebar-primary flex items-center justify-center font-bold text-sidebar-primary-foreground text-lg">
+                    <div className="w-11 h-11 rounded-full bg-sidebar-primary flex items-center justify-center font-bold text-sidebar-primary-foreground">
                         TM
                     </div>
 
                     {!collapsed && (
-                        <div className="space-y-1">
-                            <p className="text-xs uppercase text-muted-foreground tracking-wider">
+                        <div className="leading-tight">
+                            <p className="text-[10px] uppercase text-muted-foreground tracking-wider">
                                 Gratuito
                             </p>
-                            <p className="font-semibold text-sidebar-foreground">
+                            <p className="text-sm font-semibold text-sidebar-foreground">
                                 Tharles Matheus
                             </p>
                         </div>
@@ -121,17 +118,17 @@ export function Sidebar() {
 
                 <div className="mx-5 border-b border-sidebar-border" />
 
-                {/* ================= MENU SCROLL ================= */}
-                <nav className="flex-1 overflow-y-auto px-3 py-6">
+                {/* MENU (SEM SCROLL) */}
+                <nav className="flex-1 px-3 py-4">
                     {MENU.map((group) => (
-                        <div key={group.category} className="mb-8">
+                        <div key={group.category} className="mb-5">
                             {!collapsed && (
-                                <p className="px-3 mb-3 text-xs tracking-widest text-muted-foreground uppercase">
+                                <p className="px-3 mb-2 text-[10px] tracking-widest text-muted-foreground uppercase">
                                     {group.category}
                                 </p>
                             )}
 
-                            <div className="flex flex-col gap-1">
+                            <div className="flex flex-col gap-0.5">
                                 {group.items.map((item) => {
                                     const active = isActive(item.href);
                                     const Icon = item.icon;
@@ -142,10 +139,10 @@ export function Sidebar() {
                                             href={item.href}
                                             onClick={() => setOpen(false)}
                                             className={`
-                        group flex items-center rounded-xl transition
+                        flex items-center rounded-lg transition
                         ${collapsed
-                                                    ? "justify-center py-3"
-                                                    : "gap-3 px-4 py-3"
+                                                    ? "justify-center py-2"
+                                                    : "gap-3 px-4 py-2"
                                                 }
                         ${active
                                                     ? "bg-muted text-sidebar-foreground font-semibold"
@@ -153,10 +150,10 @@ export function Sidebar() {
                                                 }
                       `}
                                         >
-                                            <Icon size={20} />
+                                            <Icon size={18} />
 
                                             {!collapsed && (
-                                                <span className="text-[15px]">
+                                                <span className="text-[13px]">
                                                     {item.name}
                                                 </span>
                                             )}
@@ -168,25 +165,27 @@ export function Sidebar() {
                     ))}
                 </nav>
 
-                {/* ================= FOOTER FIXO ================= */}
-                <div className="px-4 pb-6">
-                    <div className="border-t border-sidebar-border mb-4" />
+                {/* FOOTER FIXO */}
+                <div className="px-4 pb-5">
+                    <div className="border-t border-sidebar-border mb-3" />
 
-                    <button className="flex items-center gap-3 w-full px-3 py-3 rounded-xl text-muted-foreground hover:bg-muted hover:text-sidebar-foreground transition">
-                        <HelpCircle size={20} />
-                        {!collapsed && <span>Ajuda</span>}
+                    <button className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-sidebar-foreground transition">
+                        <HelpCircle size={18} />
+                        {!collapsed && <span className="text-[13px]">Ajuda</span>}
                     </button>
 
                     <button
                         onClick={logout}
-                        className="flex items-center gap-3 w-full px-3 py-3 rounded-xl text-red-500 hover:bg-red-500/10 transition"
+                        className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-red-500 hover:bg-red-500/10 transition"
                     >
-                        <LogOut size={20} />
-                        {!collapsed && <span>Sair da Conta</span>}
+                        <LogOut size={18} />
+                        {!collapsed && (
+                            <span className="text-[13px]">Sair da Conta</span>
+                        )}
                     </button>
                 </div>
 
-                {/* ================= COLAPSAR ================= */}
+                {/* COLLAPSE */}
                 <button
                     onClick={() => setCollapsed((v) => !v)}
                     className="
@@ -209,7 +208,7 @@ export function Sidebar() {
                 </button>
             </aside>
 
-            {/* ================= BACKDROP MOBILE ================= */}
+            {/* BACKDROP */}
             {open && (
                 <div
                     className="fixed inset-0 z-30 bg-black/30 md:hidden"
