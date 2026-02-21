@@ -56,10 +56,8 @@ export function Sidebar() {
     const [open, setOpen] = useState(false);
     const [collapsed, setCollapsed] = useState(false);
 
-    const isActive = (href: string) => {
-        if (href === "/") return pathname === "/";
-        return pathname.startsWith(href);
-    };
+    const isActive = (href: string) =>
+        href === "/" ? pathname === "/" : pathname.startsWith(href);
 
     async function logout() {
         await supabase.auth.signOut();
@@ -70,7 +68,7 @@ export function Sidebar() {
         <>
             {/* MOBILE BUTTON */}
             <button
-                className="fixed top-5 left-4 z-50 md:hidden bg-sidebar rounded-lg p-2 shadow border border-sidebar-border"
+                className="fixed top-5 left-4 z-50 md:hidden bg-sidebar rounded-lg p-2 border border-sidebar-border shadow"
                 onClick={() => setOpen(true)}
             >
                 <MenuIcon className="w-6 h-6 text-sidebar-foreground" />
@@ -81,7 +79,7 @@ export function Sidebar() {
                 className={`
           fixed top-0 left-0 h-screen z-40
           bg-sidebar border-r border-sidebar-border
-          flex flex-col justify-between
+          flex flex-col
           transition-all duration-300
           ${collapsed ? "w-[88px]" : "w-[260px]"}
           ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
@@ -95,45 +93,41 @@ export function Sidebar() {
                     <CloseIcon className="w-6 h-6 text-sidebar-foreground" />
                 </button>
 
-                {/* ===== TOP AREA ===== */}
-                <div>
-                    {/* PROFILE */}
-                    <div
-                        className={`px-5 pt-7 pb-4 flex items-center ${collapsed ? "justify-center" : "gap-3"
-                            }`}
-                    >
-                        <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center font-bold text-sidebar-primary-foreground">
-                            TM
-                        </div>
-
-                        {!collapsed && (
-                            <div className="leading-tight">
-                                <p className="text-[10px] uppercase text-muted-foreground">
-                                    Gratuito
-                                </p>
-                                <p className="text-[14px] font-semibold text-sidebar-foreground">
-                                    Tharles Matheus
-                                </p>
-                            </div>
-                        )}
+                {/* ================= TOP ================= */}
+                <div className="px-5 pt-7 pb-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center font-bold text-sidebar-primary-foreground">
+                        TM
                     </div>
 
-                    <div className="mx-5 border-b border-sidebar-border" />
+                    {!collapsed && (
+                        <div className="leading-tight">
+                            <p className="text-[10px] uppercase text-muted-foreground">
+                                Gratuito
+                            </p>
+                            <p className="text-[14px] font-semibold text-sidebar-foreground">
+                                Tharles Matheus
+                            </p>
+                        </div>
+                    )}
+                </div>
 
-                    {/* MENU */}
-                    <nav className="px-3 py-4">
+                <div className="mx-5 border-b border-sidebar-border" />
+
+                {/* ================= MIDDLE FLEX AREA ================= */}
+                <div className="flex flex-col flex-1 min-h-0">
+                    <nav className="px-3 py-4 space-y-5">
                         {MENU.map((group) => (
-                            <div key={group.category} className="mb-5">
+                            <div key={group.category}>
                                 {!collapsed && (
-                                    <p className="px-3 mb-2 text-[10px] tracking-widest text-muted-foreground uppercase">
+                                    <p className="px-3 mb-2 text-[10px] uppercase tracking-widest text-muted-foreground">
                                         {group.category}
                                     </p>
                                 )}
 
-                                <div className="flex flex-col gap-0.5">
+                                <div className="space-y-1">
                                     {group.items.map((item) => {
-                                        const active = isActive(item.href);
                                         const Icon = item.icon;
+                                        const active = isActive(item.href);
 
                                         return (
                                             <Link
@@ -153,7 +147,6 @@ export function Sidebar() {
                         `}
                                             >
                                                 <Icon size={18} />
-
                                                 {!collapsed && (
                                                     <span className="text-[14px]">
                                                         {item.name}
@@ -168,18 +161,18 @@ export function Sidebar() {
                     </nav>
                 </div>
 
-                {/* ===== FOOTER FIXO ===== */}
-                <div className="px-4 pb-4">
+                {/* ================= FOOTER ================= */}
+                <div className="px-5 pb-5">
                     <div className="border-t border-sidebar-border mb-3" />
 
-                    <button className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-sidebar-foreground transition">
+                    <button className="flex items-center gap-3 w-full py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-sidebar-foreground transition">
                         <HelpCircle size={18} />
                         {!collapsed && <span className="text-[14px]">Ajuda</span>}
                     </button>
 
                     <button
                         onClick={logout}
-                        className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-red-500 hover:bg-red-500/10 transition"
+                        className="flex items-center gap-3 w-full py-2 rounded-lg text-red-500 hover:bg-red-500/10 transition"
                     >
                         <LogOut size={18} />
                         {!collapsed && (
@@ -188,7 +181,7 @@ export function Sidebar() {
                     </button>
                 </div>
 
-                {/* COLLAPSE BUTTON */}
+                {/* COLLAPSE */}
                 <button
                     onClick={() => setCollapsed((v) => !v)}
                     className="
