@@ -97,7 +97,7 @@ export function Sidebar() {
 
                 {/* PROFILE */}
                 <div
-                    className={`px-5 pt-8 pb-4 flex items-center ${collapsed ? "justify-center" : "gap-3"
+                    className={`px-5 pt-9 pb-5 flex items-center ${collapsed ? "justify-center" : "gap-3"
                         }`}
                 >
                     <div className="w-11 h-11 rounded-full bg-sidebar-primary flex items-center justify-center font-bold text-sidebar-primary-foreground">
@@ -106,10 +106,10 @@ export function Sidebar() {
 
                     {!collapsed && (
                         <div className="leading-tight">
-                            <p className="text-[10px] uppercase text-muted-foreground tracking-wider">
+                            <p className="text-[11px] uppercase text-muted-foreground tracking-wider">
                                 Gratuito
                             </p>
-                            <p className="text-sm font-semibold text-sidebar-foreground">
+                            <p className="text-[15px] font-semibold text-sidebar-foreground">
                                 Tharles Matheus
                             </p>
                         </div>
@@ -118,17 +118,17 @@ export function Sidebar() {
 
                 <div className="mx-5 border-b border-sidebar-border" />
 
-                {/* MENU (SEM SCROLL) */}
-                <nav className="flex-1 px-3 py-4">
+                {/* MENU */}
+                <nav className="flex-1 px-3 py-5">
                     {MENU.map((group) => (
-                        <div key={group.category} className="mb-5">
+                        <div key={group.category} className="mb-7">
                             {!collapsed && (
-                                <p className="px-3 mb-2 text-[10px] tracking-widest text-muted-foreground uppercase">
+                                <p className="px-3 mb-3 text-[11px] tracking-widest text-muted-foreground uppercase">
                                     {group.category}
                                 </p>
                             )}
 
-                            <div className="flex flex-col gap-0.5">
+                            <div className="flex flex-col gap-1">
                                 {group.items.map((item) => {
                                     const active = isActive(item.href);
                                     const Icon = item.icon;
@@ -141,8 +141,8 @@ export function Sidebar() {
                                             className={`
                         flex items-center rounded-lg transition
                         ${collapsed
-                                                    ? "justify-center py-2"
-                                                    : "gap-3 px-4 py-2"
+                                                    ? "justify-center py-2.5"
+                                                    : "gap-3 px-4 py-2.5"
                                                 }
                         ${active
                                                     ? "bg-muted text-sidebar-foreground font-semibold"
@@ -153,7 +153,7 @@ export function Sidebar() {
                                             <Icon size={18} />
 
                                             {!collapsed && (
-                                                <span className="text-[13px]">
+                                                <span className="text-[14px]">
                                                     {item.name}
                                                 </span>
                                             )}
@@ -165,22 +165,22 @@ export function Sidebar() {
                     ))}
                 </nav>
 
-                {/* FOOTER FIXO */}
-                <div className="px-4 pb-5">
-                    <div className="border-t border-sidebar-border mb-3" />
+                {/* FOOTER */}
+                <div className="px-4 pb-6">
+                    <div className="border-t border-sidebar-border mb-4" />
 
-                    <button className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-sidebar-foreground transition">
+                    <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-sidebar-foreground transition">
                         <HelpCircle size={18} />
-                        {!collapsed && <span className="text-[13px]">Ajuda</span>}
+                        {!collapsed && <span className="text-[14px]">Ajuda</span>}
                     </button>
 
                     <button
                         onClick={logout}
-                        className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-red-500 hover:bg-red-500/10 transition"
+                        className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-red-500 hover:bg-red-500/10 transition"
                     >
                         <LogOut size={18} />
                         {!collapsed && (
-                            <span className="text-[13px]">Sair da Conta</span>
+                            <span className="text-[14px]">Sair da Conta</span>
                         )}
                     </button>
                 </div>
