@@ -2,11 +2,17 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Remove @custom-variant dark (&:is(.dark *)) porque não é necessário para Tailwind */
+/* ================= BASE / ANTI OVERFLOW ================= */
 
 html,
 body {
   min-height: 100vh;
+
+  /* trava global contra scroll horizontal */
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+
   background-color: var(--background);
   color: var(--foreground);
   font-family: 'Nunito', Arial, Helvetica, sans-serif;
@@ -22,7 +28,6 @@ select {
   background-color: var(--muted);
   color: var(--foreground);
   border-color: var(--border);
-  /* Usando inherit faz as fontes ficarem iguais ao resto */
   font-family: inherit;
   font-size: inherit;
 }
@@ -41,29 +46,40 @@ select:-webkit-autofill {
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
+
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
+
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+
   --color-destructive: var(--destructive);
+
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -74,32 +90,44 @@ select:-webkit-autofill {
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* === TEMA CLARO === */
+/* ================= TEMA CLARO ================= */
+
 :root {
   --radius: 0.625rem;
+
   --background: #f5f6fa;
   --foreground: #232939;
+
   --card: #fff;
   --card-foreground: #232939;
+
   --popover: #fff;
   --popover-foreground: #232939;
+
   --primary: #6a88d7;
   --primary-foreground: #fff;
+
   --secondary: #e3e8f3;
   --secondary-foreground: #232939;
+
   --muted: #f5f7fa;
   --muted-foreground: #65749b;
+
   --accent: #f3f5fa;
   --accent-foreground: #232939;
+
   --destructive: #e2735e;
+
   --border: #e3e8f3;
   --input: #e3e8f3;
   --ring: #b1bad3;
+
   --chart-1: #6a88d7;
   --chart-2: #90caf9;
   --chart-3: #ffd700;
   --chart-4: #76c7c0;
   --chart-5: #e57373;
+
   --sidebar: #fff;
   --sidebar-foreground: #232939;
   --sidebar-primary: #6a88d7;
@@ -110,31 +138,42 @@ select:-webkit-autofill {
   --sidebar-ring: #b1bad3;
 }
 
-/* === TEMA ESCURO === */
+/* ================= TEMA ESCURO ================= */
+
 .dark {
   --background: #181a1b;
   --foreground: #f1f2f6;
+
   --card: #232323;
   --card-foreground: #fff;
+
   --popover: #232323;
   --popover-foreground: #fff;
+
   --primary: #6a88d7;
   --primary-foreground: #fff;
+
   --secondary: #232939;
   --secondary-foreground: #fff;
+
   --muted: #232323;
   --muted-foreground: #b1bad3;
+
   --accent: #181a1b;
   --accent-foreground: #f1f2f6;
+
   --destructive: #ffb4a8;
+
   --border: #343a4f;
   --input: #343a4f;
   --ring: #343a4f;
+
   --chart-1: #82b1ff;
   --chart-2: #ffd700;
   --chart-3: #90caf9;
   --chart-4: #76c7c0;
   --chart-5: #ffb4a8;
+
   --sidebar: #181a1b;
   --sidebar-foreground: #f1f2f6;
   --sidebar-primary: #6a88d7;
