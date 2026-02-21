@@ -21,8 +21,6 @@ import {
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-/* ================= MENU ================= */
-
 const MENU = [
     {
         category: "PRINCIPAL",
@@ -77,7 +75,8 @@ export function Sidebar() {
             {/* SIDEBAR */}
             <aside
                 className={`
-          fixed top-0 left-0 h-screen z-40
+          fixed top-0 left-0 z-40
+          h-[100dvh]
           bg-sidebar border-r border-sidebar-border
           flex flex-col
           transition-all duration-300
@@ -93,7 +92,7 @@ export function Sidebar() {
                     <CloseIcon className="w-6 h-6 text-sidebar-foreground" />
                 </button>
 
-                {/* ================= TOP ================= */}
+                {/* HEADER */}
                 <div className="px-5 pt-7 pb-4 flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center font-bold text-sidebar-primary-foreground">
                         TM
@@ -113,56 +112,50 @@ export function Sidebar() {
 
                 <div className="mx-5 border-b border-sidebar-border" />
 
-                {/* ================= MIDDLE FLEX AREA ================= */}
-                <div className="flex flex-col flex-1 min-h-0">
-                    <nav className="px-3 py-4 space-y-5">
-                        {MENU.map((group) => (
-                            <div key={group.category}>
-                                {!collapsed && (
-                                    <p className="px-3 mb-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-                                        {group.category}
-                                    </p>
-                                )}
+                {/* MENU */}
+                <nav className="px-3 py-4 space-y-5">
+                    {MENU.map((group) => (
+                        <div key={group.category}>
+                            {!collapsed && (
+                                <p className="px-3 mb-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+                                    {group.category}
+                                </p>
+                            )}
 
-                                <div className="space-y-1">
-                                    {group.items.map((item) => {
-                                        const Icon = item.icon;
-                                        const active = isActive(item.href);
+                            <div className="space-y-1">
+                                {group.items.map((item) => {
+                                    const Icon = item.icon;
+                                    const active = isActive(item.href);
 
-                                        return (
-                                            <Link
-                                                key={item.name}
-                                                href={item.href}
-                                                onClick={() => setOpen(false)}
-                                                className={`
-                          flex items-center rounded-lg transition
-                          ${collapsed
-                                                        ? "justify-center py-2"
-                                                        : "gap-3 px-4 py-2"
-                                                    }
-                          ${active
-                                                        ? "bg-muted text-sidebar-foreground font-semibold"
-                                                        : "text-muted-foreground hover:bg-muted hover:text-sidebar-foreground"
-                                                    }
-                        `}
-                                            >
-                                                <Icon size={18} />
-                                                {!collapsed && (
-                                                    <span className="text-[14px]">
-                                                        {item.name}
-                                                    </span>
-                                                )}
-                                            </Link>
-                                        );
-                                    })}
-                                </div>
+                                    return (
+                                        <Link
+                                            key={item.name}
+                                            href={item.href}
+                                            onClick={() => setOpen(false)}
+                                            className={`flex items-center rounded-lg transition ${collapsed
+                                                    ? "justify-center py-2"
+                                                    : "gap-3 px-4 py-2"
+                                                } ${active
+                                                    ? "bg-muted text-sidebar-foreground font-semibold"
+                                                    : "text-muted-foreground hover:bg-muted hover:text-sidebar-foreground"
+                                                }`}
+                                        >
+                                            <Icon size={18} />
+                                            {!collapsed && (
+                                                <span className="text-[14px]">
+                                                    {item.name}
+                                                </span>
+                                            )}
+                                        </Link>
+                                    );
+                                })}
                             </div>
-                        ))}
-                    </nav>
-                </div>
+                        </div>
+                    ))}
+                </nav>
 
-                {/* ================= FOOTER ================= */}
-                <div className="px-5 pb-5">
+                {/* FOOTER — SOBE NO MOBILE */}
+                <div className="mt-auto px-5 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
                     <div className="border-t border-sidebar-border mb-3" />
 
                     <button className="flex items-center gap-3 w-full py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-sidebar-foreground transition">
@@ -180,31 +173,8 @@ export function Sidebar() {
                         )}
                     </button>
                 </div>
-
-                {/* COLLAPSE */}
-                <button
-                    onClick={() => setCollapsed((v) => !v)}
-                    className="
-            hidden md:flex
-            absolute top-6 -right-3
-            w-7 h-7
-            items-center justify-center
-            rounded-full
-            bg-sidebar
-            border border-sidebar-border
-            shadow
-            hover:bg-muted
-          "
-                >
-                    {collapsed ? (
-                        <ChevronRight size={16} />
-                    ) : (
-                        <ChevronLeft size={16} />
-                    )}
-                </button>
             </aside>
 
-            {/* BACKDROP */}
             {open && (
                 <div
                     className="fixed inset-0 z-30 bg-black/30 md:hidden"
