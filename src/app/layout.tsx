@@ -7,26 +7,33 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { usePathname } from "next/navigation";
 import React from "react";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
   const isAuthRoute = pathname.startsWith("/auth");
   const isAdminRoute = pathname.startsWith("/admin");
   const showChrome = !isAuthRoute && !isAdminRoute;
 
-  // Registra o service worker
+  // Service Worker
   React.useEffect(() => {
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       const swUrl = "/sw.js";
+
       fetch(swUrl, { method: "HEAD" })
         .then((res) => {
-          if (res.ok) navigator.serviceWorker.register(swUrl).catch(() => { });
+          if (res.ok) {
+            navigator.serviceWorker.register(swUrl).catch(() => { });
+          }
         })
         .catch(() => { });
     }
   }, []);
 
   return (
-    <html lang="pt-BR" className="h-full">
+    <html lang="pt-BR">
       <head>
         <link rel="manifest" href="/manifest.json" />
 
@@ -65,34 +72,38 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
 
-      <body className="min-h-[100dvh] bg-background text-foreground font-sans antialiased overflow-x-hidden">
+      {/* ✅ BODY NÃO CONTROLA SCROLL */}
+      <body className="bg-background text-foreground font-sans antialiased overflow-x-hidden">
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >
-          {/* Sidebar é fixed, então o conteúdo precisa de padding-left no desktop */}
+          {/* Sidebar fixa */}
           {showChrome && <Sidebar />}
 
+          {/* Wrapper principal */}
           <div
             className={[
-              "min-h-[100dvh] w-full max-w-full overflow-x-hidden",
+              "w-full max-w-full",
               showChrome ? "md:pl-[260px]" : "",
             ].join(" ")}
           >
             {showChrome && <Header />}
 
+            {/* Área principal */}
             <main
               className={
                 showChrome
-                  ? "w-full max-w-full overflow-x-hidden px-3 sm:px-4 md:px-8 py-5 md:py-8"
-                  : "flex min-h-[100dvh] items-center justify-center bg-muted w-full px-4"
+                  ? "w-full px-3 sm:px-4 md:px-8 py-5 md:py-8"
+                  : "min-h-screen flex items-center justify-center bg-muted w-full px-4"
               }
             >
-              {/* Padroniza a largura do conteúdo */}
               {showChrome ? (
-                <div className="mx-auto w-full max-w-7xl">{children}</div>
+                <div className="mx-auto w-full max-w-7xl">
+                  {children}
+                </div>
               ) : (
                 children
               )}
