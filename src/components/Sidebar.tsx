@@ -15,8 +15,7 @@ import {
     LogOut,
     Menu as MenuIcon,
     X as CloseIcon,
-    ChevronLeft,
-    ChevronRight,
+    Brain, // ✅ Questões
 } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
@@ -32,6 +31,8 @@ const MENU = [
     {
         category: "ESTUDO",
         items: [
+            // ✅ Questões primeiro na categoria ESTUDO
+            { name: "Questões", href: "/questoes", icon: Brain },
             { name: "Edital", href: "/edital", icon: BookOpen },
             { name: "Resumos", href: "/resumos", icon: FileText },
             { name: "Revisão", href: "/revisao", icon: History },
@@ -68,6 +69,7 @@ export function Sidebar() {
             <button
                 className="fixed top-5 left-4 z-50 md:hidden bg-sidebar rounded-lg p-2 border border-sidebar-border shadow"
                 onClick={() => setOpen(true)}
+                aria-label="Abrir menu"
             >
                 <MenuIcon className="w-6 h-6 text-sidebar-foreground" />
             </button>
@@ -88,6 +90,7 @@ export function Sidebar() {
                 <button
                     className="absolute top-5 right-3 md:hidden p-2"
                     onClick={() => setOpen(false)}
+                    aria-label="Fechar menu"
                 >
                     <CloseIcon className="w-6 h-6 text-sidebar-foreground" />
                 </button>
@@ -132,9 +135,7 @@ export function Sidebar() {
                                             key={item.name}
                                             href={item.href}
                                             onClick={() => setOpen(false)}
-                                            className={`flex items-center rounded-lg transition ${collapsed
-                                                    ? "justify-center py-2"
-                                                    : "gap-3 px-4 py-2"
+                                            className={`flex items-center rounded-lg transition ${collapsed ? "justify-center py-2" : "gap-3 px-4 py-2"
                                                 } ${active
                                                     ? "bg-muted text-sidebar-foreground font-semibold"
                                                     : "text-muted-foreground hover:bg-muted hover:text-sidebar-foreground"
@@ -142,9 +143,7 @@ export function Sidebar() {
                                         >
                                             <Icon size={18} />
                                             {!collapsed && (
-                                                <span className="text-[14px]">
-                                                    {item.name}
-                                                </span>
+                                                <span className="text-[14px]">{item.name}</span>
                                             )}
                                         </Link>
                                     );
@@ -168,9 +167,7 @@ export function Sidebar() {
                         className="flex items-center gap-3 w-full py-2 rounded-lg text-red-500 hover:bg-red-500/10 transition"
                     >
                         <LogOut size={18} />
-                        {!collapsed && (
-                            <span className="text-[14px]">Sair da Conta</span>
-                        )}
+                        {!collapsed && <span className="text-[14px]">Sair da Conta</span>}
                     </button>
                 </div>
             </aside>
