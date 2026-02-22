@@ -4,6 +4,12 @@
 
 /* ================= BASE / ANTI OVERFLOW (SEM TRAVAR SCROLL) ================= */
 
+/* ✅ Essencial para scroll consistente */
+html,
+body {
+  height: 100%;
+}
+
 html {
   width: 100%;
   max-width: 100%;
@@ -22,12 +28,16 @@ body {
   font-family: 'Nunito', Arial, Helvetica, sans-serif;
   font-feature-settings: "liga", "kern";
   letter-spacing: 0.01em;
-  overscroll-behavior-y: contain;
 
   overflow-x: hidden;
   /* trava horizontal */
-  overflow-y: auto;
-  /* garante rolagem vertical */
+
+  /* ✅ NÃO force overflow-y aqui.
+     Deixa o navegador controlar o scroll nativo (rodinha do mouse). */
+  /* overflow-y: auto; */
+
+  /* ✅ Evite conter overscroll globalmente (pode atrapalhar wheel/trackpad) */
+  /* overscroll-behavior-y: contain; */
 }
 
 /* Inputs e selects SEMPRE respeitam tema */
