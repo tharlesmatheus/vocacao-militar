@@ -10,12 +10,13 @@ import {
     History,
     CalendarDays,
     User,
-    CreditCard,
     HelpCircle,
     LogOut,
     Menu as MenuIcon,
     X as CloseIcon,
-    Brain, // ✅ Questões
+    Brain,
+    ChevronLeft,
+    ChevronRight,
 } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
@@ -31,7 +32,6 @@ const MENU = [
     {
         category: "ESTUDO",
         items: [
-            // ✅ Questões primeiro na categoria ESTUDO
             { name: "Questões", href: "/questoes", icon: Brain },
             { name: "Edital", href: "/edital", icon: BookOpen },
             { name: "Resumos", href: "/resumos", icon: FileText },
@@ -41,9 +41,7 @@ const MENU = [
     },
     {
         category: "CONFIGURAÇÕES",
-        items: [
-            { name: "Meu Perfil", href: "/perfil", icon: User },
-        ],
+        items: [{ name: "Meu Perfil", href: "/perfil", icon: User }],
     },
 ];
 
@@ -51,8 +49,8 @@ export function Sidebar() {
     const pathname = usePathname();
     const router = useRouter();
 
-    const [open, setOpen] = useState(false);
-    const [collapsed, setCollapsed] = useState(false);
+    const [open, setOpen] = useState(false); // mobile drawer
+    const [collapsed, setCollapsed] = useState(false); // desktop collapse
 
     const isActive = (href: string) =>
         href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -85,6 +83,30 @@ export function Sidebar() {
           ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
         `}
             >
+                {/* DESKTOP COLLAPSE BUTTON (tipo imagem) */}
+                <button
+                    type="button"
+                    onClick={() => setCollapsed((v) => !v)}
+                    aria-label={collapsed ? "Expandir menu" : "Encolher menu"}
+                    className={`
+            hidden md:flex
+            absolute top-20 -right-4 z-50
+            h-8 w-8 items-center justify-center
+            rounded-full
+            border border-sidebar-border
+            bg-sidebar
+            shadow
+            hover:bg-muted
+            transition
+          `}
+                >
+                    {collapsed ? (
+                        <ChevronRight className="h-4 w-4 text-sidebar-foreground" />
+                    ) : (
+                        <ChevronLeft className="h-4 w-4 text-sidebar-foreground" />
+                    )}
+                </button>
+
                 {/* CLOSE MOBILE */}
                 <button
                     className="absolute top-5 right-3 md:hidden p-2"
@@ -95,16 +117,14 @@ export function Sidebar() {
                 </button>
 
                 {/* HEADER */}
-                <div className="px-5 pt-7 pb-4 flex items-center gap-3">
+                <div className={`pt-7 pb-4 flex items-center gap-3 ${collapsed ? "px-4" : "px-5"}`}>
                     <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center font-bold text-sidebar-primary-foreground">
                         TM
                     </div>
 
                     {!collapsed && (
                         <div className="leading-tight">
-                            <p className="text-[10px] uppercase text-muted-foreground">
-                                Gratuito
-                            </p>
+                            <p className="text-[10px] uppercase text-muted-foreground">Gratuito</p>
                             <p className="text-[14px] font-semibold text-sidebar-foreground">
                                 Tharles Matheus
                             </p>
@@ -112,10 +132,10 @@ export function Sidebar() {
                     )}
                 </div>
 
-                <div className="mx-5 border-b border-sidebar-border" />
+                <div className={`border-b border-sidebar-border ${collapsed ? "mx-4" : "mx-5"}`} />
 
                 {/* MENU */}
-                <nav className="px-3 py-4 space-y-5">
+                <nav className={`${collapsed ? "px-2" : "px-3"} py-4 space-y-5`}>
                     {MENU.map((group) => (
                         <div key={group.category}>
                             {!collapsed && (
@@ -134,6 +154,7 @@ export function Sidebar() {
                                             key={item.name}
                                             href={item.href}
                                             onClick={() => setOpen(false)}
+                                            title={collapsed ? item.name : undefined}
                                             className={`flex items-center rounded-lg transition ${collapsed ? "justify-center py-2" : "gap-3 px-4 py-2"
                                                 } ${active
                                                     ? "bg-muted text-sidebar-foreground font-semibold"
@@ -141,9 +162,7 @@ export function Sidebar() {
                                                 }`}
                                         >
                                             <Icon size={18} />
-                                            {!collapsed && (
-                                                <span className="text-[14px]">{item.name}</span>
-                                            )}
+                                            {!collapsed && <span className="text-[14px]">{item.name}</span>}
                                         </Link>
                                     );
                                 })}
@@ -152,18 +171,24 @@ export function Sidebar() {
                     ))}
                 </nav>
 
-                {/* FOOTER — SOBE NO MOBILE */}
-                <div className="mt-auto px-5 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
+                {/* FOOTER */}
+                <div className={`mt-auto pt-3 pb-[calc(12px+env(safe-area-inset-bottom))] ${collapsed ? "px-4" : "px-5"}`}>
                     <div className="border-t border-sidebar-border mb-3" />
 
-                    <button className="flex items-center gap-3 w-full py-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-sidebar-foreground transition">
+                    <button
+                        className={`flex items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-sidebar-foreground transition w-full ${collapsed ? "justify-center py-2" : "gap-3 px-4 py-2"
+                            }`}
+                        title={collapsed ? "Ajuda" : undefined}
+                    >
                         <HelpCircle size={18} />
                         {!collapsed && <span className="text-[14px]">Ajuda</span>}
                     </button>
 
                     <button
                         onClick={logout}
-                        className="flex items-center gap-3 w-full py-2 rounded-lg text-red-500 hover:bg-red-500/10 transition"
+                        className={`flex items-center rounded-lg text-red-500 hover:bg-red-500/10 transition w-full ${collapsed ? "justify-center py-2" : "gap-3 px-4 py-2"
+                            }`}
+                        title={collapsed ? "Sair da Conta" : undefined}
                     >
                         <LogOut size={18} />
                         {!collapsed && <span className="text-[14px]">Sair da Conta</span>}
@@ -171,6 +196,7 @@ export function Sidebar() {
                 </div>
             </aside>
 
+            {/* MOBILE OVERLAY */}
             {open && (
                 <div
                     className="fixed inset-0 z-30 bg-black/30 md:hidden"
