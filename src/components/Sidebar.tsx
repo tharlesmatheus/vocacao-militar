@@ -43,7 +43,6 @@ const MENU = [
         category: "CONFIGURAÇÕES",
         items: [
             { name: "Meu Perfil", href: "/perfil", icon: User },
-            { name: "Meu Plano", href: "/plano", icon: CreditCard },
         ],
     },
 ];
