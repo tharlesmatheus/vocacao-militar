@@ -45,12 +45,16 @@ const MENU = [
     },
 ];
 
-export function Sidebar() {
+type SidebarProps = {
+    collapsed: boolean;
+    onCollapsedChange: (value: boolean) => void;
+};
+
+export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
     const pathname = usePathname();
     const router = useRouter();
 
     const [open, setOpen] = useState(false); // mobile drawer
-    const [collapsed, setCollapsed] = useState(false); // desktop collapse
 
     const isActive = (href: string) =>
         href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -86,7 +90,7 @@ export function Sidebar() {
                 {/* DESKTOP COLLAPSE BUTTON (tipo imagem) */}
                 <button
                     type="button"
-                    onClick={() => setCollapsed((v) => !v)}
+                    onClick={() => onCollapsedChange(!collapsed)}
                     aria-label={collapsed ? "Expandir menu" : "Encolher menu"}
                     className={`
             hidden md:flex
@@ -117,14 +121,19 @@ export function Sidebar() {
                 </button>
 
                 {/* HEADER */}
-                <div className={`pt-7 pb-4 flex items-center gap-3 ${collapsed ? "px-4" : "px-5"}`}>
+                <div
+                    className={`pt-7 pb-4 flex items-center gap-3 ${collapsed ? "px-4" : "px-5"
+                        }`}
+                >
                     <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center font-bold text-sidebar-primary-foreground">
                         TM
                     </div>
 
                     {!collapsed && (
                         <div className="leading-tight">
-                            <p className="text-[10px] uppercase text-muted-foreground">Gratuito</p>
+                            <p className="text-[10px] uppercase text-muted-foreground">
+                                Gratuito
+                            </p>
                             <p className="text-[14px] font-semibold text-sidebar-foreground">
                                 Tharles Matheus
                             </p>
@@ -132,7 +141,10 @@ export function Sidebar() {
                     )}
                 </div>
 
-                <div className={`border-b border-sidebar-border ${collapsed ? "mx-4" : "mx-5"}`} />
+                <div
+                    className={`border-b border-sidebar-border ${collapsed ? "mx-4" : "mx-5"
+                        }`}
+                />
 
                 {/* MENU */}
                 <nav className={`${collapsed ? "px-2" : "px-3"} py-4 space-y-5`}>
@@ -162,7 +174,9 @@ export function Sidebar() {
                                                 }`}
                                         >
                                             <Icon size={18} />
-                                            {!collapsed && <span className="text-[14px]">{item.name}</span>}
+                                            {!collapsed && (
+                                                <span className="text-[14px]">{item.name}</span>
+                                            )}
                                         </Link>
                                     );
                                 })}
@@ -172,13 +186,17 @@ export function Sidebar() {
                 </nav>
 
                 {/* FOOTER */}
-                <div className={`mt-auto pt-3 pb-[calc(12px+env(safe-area-inset-bottom))] ${collapsed ? "px-4" : "px-5"}`}>
+                <div
+                    className={`mt-auto pt-3 pb-[calc(12px+env(safe-area-inset-bottom))] ${collapsed ? "px-4" : "px-5"
+                        }`}
+                >
                     <div className="border-t border-sidebar-border mb-3" />
 
                     <button
                         className={`flex items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-sidebar-foreground transition w-full ${collapsed ? "justify-center py-2" : "gap-3 px-4 py-2"
                             }`}
                         title={collapsed ? "Ajuda" : undefined}
+                        type="button"
                     >
                         <HelpCircle size={18} />
                         {!collapsed && <span className="text-[14px]">Ajuda</span>}
@@ -189,6 +207,7 @@ export function Sidebar() {
                         className={`flex items-center rounded-lg text-red-500 hover:bg-red-500/10 transition w-full ${collapsed ? "justify-center py-2" : "gap-3 px-4 py-2"
                             }`}
                         title={collapsed ? "Sair da Conta" : undefined}
+                        type="button"
                     >
                         <LogOut size={18} />
                         {!collapsed && <span className="text-[14px]">Sair da Conta</span>}
