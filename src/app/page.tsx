@@ -9,7 +9,10 @@
  * - 4 botões (cards) em 2 colunas no mobile, estilo “cartões coloridos”
  *   - Questões, Resumos, Revisão, Cronograma
  * - Abaixo: “Suas Estatísticas” no padrão da imagem (2 colunas), mais compacto/alinhado
- * - Abaixo: Mini gráfico “Estudo” com filtro DIA/SEMANA/MÊS (botões em 1 linha)
+ * - Abaixo: Tempo de estudo (gráfico redondo/pizza + lista) EMBUTIDO aqui (substitui o mini gráfico atual)
+ *   - Fonte: study_sessions (com ended_at != null) + sessão aberta em tempo real (ended_at null)
+ *   - Filtro: Dia / Semana / Mês / Ano / Tudo
+ *   - Cores estáveis por matéria (hash do nome)
  */
 
 import Link from "next/link";
@@ -28,18 +31,13 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
+import { ResponsiveContainer, PieChart, Pie, Tooltip, Cell } from "recharts";
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
 
+/* =========================
+ * Helpers básicos
+ * ========================= */
 function sanitizeDisplayName(name: string): string {
   const cleaned = (name ?? "").replace(/\s+/g, " ").trim();
   return cleaned.length > 60 ? `${cleaned.slice(0, 60)}…` : cleaned;
@@ -65,7 +63,6 @@ function hmLocal(d: Date) {
 }
 
 function fmtDateLong(d: Date) {
-  // "Quarta-feira, 25 de fevereiro"
   return d.toLocaleDateString("pt-BR", {
     weekday: "long",
     day: "2-digit",
@@ -78,9 +75,129 @@ function fmtCompact(n: number) {
   return Number.isFinite(v) ? v : 0;
 }
 
-type MiniRange = "dia" | "semana" | "mes";
-type StudyPoint = { label: string; minutos: number };
+/* =========================
+ * Tempo de estudo (Pizza)
+ * ========================= */
+type Materia = { id: string; nome: string };
+type Assunto = { id: string; nome: string; materia_id?: string | null };
+type Slice = { name: string; seconds: number };
 
+type OpenSession = {
+  id: string;
+  started_at: string;
+  materia_id: string | null;
+  assunto_id: string | null;
+  mode: "cronometro" | "manual";
+};
+
+type RangeKey = "dia" | "semana" | "mes" | "ano" | "tudo";
+
+const COLOR_PALETTE = [
+  "#6366F1", // indigo
+  "#22C55E", // green
+  "#F97316", // orange
+  "#06B6D4", // cyan
+  "#A855F7", // purple
+  "#EF4444", // red
+  "#F59E0B", // amber
+  "#3B82F6", // blue
+  "#10B981", // emerald
+  "#EC4899", // pink
+  "#14B8A6", // teal
+  "#8B5CF6", // violet
+  "#84CC16", // lime
+  "#0EA5E9", // sky
+  "#E11D48", // rose
+] as const;
+
+function hashStringToInt(input: string): number {
+  let h = 0;
+  for (let i = 0; i < input.length; i++) {
+    h = (h * 31 + input.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+
+function colorForName(name: string): string {
+  const idx = hashStringToInt(name || "SEM_NOME") % COLOR_PALETTE.length;
+  return COLOR_PALETTE[idx];
+}
+
+function fmtHMSFull(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+
+  const hh = h ? `${h}h ` : "";
+  const mm = h || m ? `${m}m ` : "";
+  const ss = `${r}s`;
+
+  return `${hh}${mm}${ss}`.trim();
+}
+
+function getRangeStart(range: RangeKey): Date | null {
+  const now = new Date();
+  const d = new Date(now);
+
+  if (range === "tudo") return null;
+
+  if (range === "dia") {
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  if (range === "semana") {
+    const day = d.getDay();
+    const diff = (day + 6) % 7; // semana começa na segunda
+    d.setDate(d.getDate() - diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  if (range === "mes") {
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  // ano
+  d.setMonth(0, 1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function buildSlices(
+  sessions: Array<{ materia_id: string | null; duration_seconds: number | null }>,
+  matName: Record<string, string>,
+  openSession?: OpenSession | null,
+  openElapsedSec?: number
+): Slice[] {
+  const byMat: Record<string, number> = {};
+
+  for (const s of sessions) {
+    const matId = s.materia_id ?? "SEM_MATERIA";
+    const dur = Number(s.duration_seconds ?? 0);
+    byMat[matId] = (byMat[matId] ?? 0) + Math.max(0, dur);
+  }
+
+  if (openSession && typeof openElapsedSec === "number" && openElapsedSec > 0) {
+    const matId = openSession.materia_id ?? "SEM_MATERIA";
+    byMat[matId] = (byMat[matId] ?? 0) + Math.max(0, Math.floor(openElapsedSec));
+  }
+
+  return Object.entries(byMat)
+    .map(([id, seconds]) => ({
+      name: id === "SEM_MATERIA" ? "Sem matéria" : matName[id] || "Matéria",
+      seconds,
+    }))
+    .filter((x) => x.seconds > 0)
+    .sort((a, b) => b.seconds - a.seconds);
+}
+
+/* =========================
+ * Page
+ * ========================= */
 export default function DashboardHome() {
   const router = useRouter();
 
@@ -88,12 +205,13 @@ export default function DashboardHome() {
   const [erro, setErro] = useState<string | null>(null);
 
   const [userName, setUserName] = useState("");
+  const [userId, setUserId] = useState<string>("");
 
-  // stats
+  // stats (resumo)
   const [questoesTotal, setQuestoesTotal] = useState(0);
   const [taxaAcerto, setTaxaAcerto] = useState(0);
 
-  // tempo e streak
+  // tempo médio (pomodoro) e streak (pomodoro)
   const [tempoTotalSeg30d, setTempoTotalSeg30d] = useState(0);
   const [streakDias, setStreakDias] = useState(0);
 
@@ -101,10 +219,27 @@ export default function DashboardHome() {
   const [now, setNow] = useState<Date>(() => new Date());
   const clockRef = useRef<number | null>(null);
 
-  // mini chart
-  const [miniRange, setMiniRange] = useState<MiniRange>("semana");
-  const [miniLoading, setMiniLoading] = useState(false);
-  const [miniSeries, setMiniSeries] = useState<StudyPoint[]>([]);
+  // ===== Tempo de estudo (pizza) =====
+  const [tdeLoading, setTdeLoading] = useState(false);
+  const [tdeErro, setTdeErro] = useState<string | null>(null);
+
+  const [materias, setMaterias] = useState<Materia[]>([]);
+  const [assuntos, setAssuntos] = useState<Assunto[]>([]);
+  const [matName, setMatName] = useState<Record<string, string>>({});
+  const [assName, setAssName] = useState<Record<string, string>>({});
+
+  const [materiaId, setMateriaId] = useState<string>("");
+  const [assuntoId, setAssuntoId] = useState<string>("");
+
+  const [range, setRange] = useState<RangeKey>("tudo");
+
+  const [openSession, setOpenSession] = useState<OpenSession | null>(null);
+  const [openElapsedSec, setOpenElapsedSec] = useState<number>(0);
+  const timerRef = useRef<number | null>(null);
+
+  const [sessions, setSessions] = useState<
+    Array<{ materia_id: string | null; duration_seconds: number | null }>
+  >([]);
 
   const ACTIONS = useMemo(
     () => [
@@ -140,7 +275,7 @@ export default function DashboardHome() {
     []
   );
 
-  // ====== auth + dados (cards) ======
+  // ====== LOAD AUTH + DADOS ======
   useEffect(() => {
     let mounted = true;
     const controller = new AbortController();
@@ -166,14 +301,15 @@ export default function DashboardHome() {
           "";
 
         setUserName(sanitizeDisplayName(rawFullName));
+        setUserId(data.user.id);
 
-        const userId = data.user.id;
+        const uid = data.user.id;
 
         // 1) estatisticas (resumo)
         const estReq = supabase
           .from("estatisticas")
           .select("questoes_respondidas,taxa_acerto")
-          .eq("user_id", userId)
+          .eq("user_id", uid)
           .maybeSingle();
 
         // 2) tempo estudado 30 dias (pomodoro_sessions)
@@ -182,7 +318,7 @@ export default function DashboardHome() {
         const pomodoro30Req = supabase
           .from("pomodoro_sessions")
           .select("duration_seconds,started_at,phase")
-          .eq("user_id", userId)
+          .eq("user_id", uid)
           .eq("phase", "study")
           .not("duration_seconds", "is", null)
           .gte("started_at", from30.toISOString());
@@ -193,7 +329,7 @@ export default function DashboardHome() {
         const pomodoro365Req = supabase
           .from("pomodoro_sessions")
           .select("duration_seconds,started_at,phase")
-          .eq("user_id", userId)
+          .eq("user_id", uid)
           .eq("phase", "study")
           .not("duration_seconds", "is", null)
           .gte("started_at", from365.toISOString());
@@ -253,7 +389,7 @@ export default function DashboardHome() {
   // ====== relógio atualiza (hora no pill) ======
   useEffect(() => {
     if (clockRef.current) window.clearInterval(clockRef.current);
-    clockRef.current = window.setInterval(() => setNow(new Date()), 30_000); // 30s
+    clockRef.current = window.setInterval(() => setNow(new Date()), 30_000);
     return () => {
       if (clockRef.current) window.clearInterval(clockRef.current);
       clockRef.current = null;
@@ -299,161 +435,230 @@ export default function DashboardHome() {
     [questoesTotal, taxaAcerto, tempoMedioSeg, streakDias]
   );
 
-  const dateTimePillText = useMemo(() => {
-    // "Quarta-feira, 25 de fevereiro • 19:42"
-    return `${fmtDateLong(now)} • ${hmLocal(now)}`;
-  }, [now]);
+  const dateTimePillText = useMemo(() => `${fmtDateLong(now)} • ${hmLocal(now)}`, [now]);
 
-  // ====== mini chart loader ======
+  /* =========================
+   * Tempo de estudo: carregar listas + sessão aberta
+   * ========================= */
   useEffect(() => {
     let mounted = true;
+    if (!userId) return;
 
     (async () => {
-      setMiniLoading(true);
+      setTdeLoading(true);
+      setTdeErro(null);
 
       try {
-        const { data: auth } = await supabase.auth.getUser();
-        const user = auth?.user;
-        if (!user?.id) return;
+        const [mats, asss] = await Promise.all([
+          supabase.from("materias").select("id,nome").eq("user_id", userId),
+          supabase.from("assuntos").select("id,nome,materia_id").eq("user_id", userId),
+        ]);
 
-        if (miniRange === "dia") {
-          // últimas 24h por hora
-          const end = new Date();
-          const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
-
-          const { data, error } = await supabase
-            .from("pomodoro_sessions")
-            .select("started_at,duration_seconds,phase")
-            .eq("user_id", user.id)
-            .eq("phase", "study")
-            .not("duration_seconds", "is", null)
-            .gte("started_at", start.toISOString())
-            .lte("started_at", end.toISOString())
-            .order("started_at", { ascending: true });
-
-          if (error) throw error;
-          if (!mounted) return;
-
-          const byHour: Record<string, number> = {};
-          for (let i = 0; i < 24; i++) {
-            const d = new Date(end.getTime() - (23 - i) * 60 * 60 * 1000);
-            const key = `${String(d.getHours()).padStart(2, "0")}:00`;
-            byHour[key] = 0;
-          }
-
-          for (const r of data ?? []) {
-            const dt = new Date(r.started_at);
-            if (Number.isNaN(dt.getTime())) continue;
-            const key = `${String(dt.getHours()).padStart(2, "0")}:00`;
-            const dur = Number(r.duration_seconds ?? 0);
-            if (!Number.isFinite(dur)) continue;
-            byHour[key] = (byHour[key] ?? 0) + Math.round(Math.max(0, dur) / 60);
-          }
-
-          const series: StudyPoint[] = Object.entries(byHour).map(([label, minutos]) => ({
-            label,
-            minutos,
-          }));
-
-          setMiniSeries(series);
-          return;
-        }
-
-        if (miniRange === "semana") {
-          // últimos 7 dias
-          const today0 = startOfLocalDay();
-          const from = new Date(today0.getTime() - (7 - 1) * ONE_DAY);
-
-          const { data, error } = await supabase
-            .from("pomodoro_sessions")
-            .select("started_at,duration_seconds,phase")
-            .eq("user_id", user.id)
-            .eq("phase", "study")
-            .not("duration_seconds", "is", null)
-            .gte("started_at", from.toISOString())
-            .order("started_at", { ascending: true });
-
-          if (error) throw error;
-          if (!mounted) return;
-
-          const byDay: Record<string, number> = {};
-          for (let i = 0; i < 7; i++) {
-            const d = new Date(from.getTime() + i * ONE_DAY);
-            const key = ymdLocal(d);
-            byDay[key] = 0;
-          }
-
-          for (const r of data ?? []) {
-            const dt = new Date(r.started_at);
-            if (Number.isNaN(dt.getTime())) continue;
-            const key = ymdLocal(new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()));
-            const dur = Number(r.duration_seconds ?? 0);
-            if (!Number.isFinite(dur)) continue;
-            byDay[key] = (byDay[key] ?? 0) + Math.round(Math.max(0, dur) / 60);
-          }
-
-          const series: StudyPoint[] = Object.entries(byDay).map(([key, minutos]) => {
-            const [yyyy, mm, dd] = key.split("-");
-            return { label: `${dd}/${mm}`, minutos };
-          });
-
-          setMiniSeries(series);
-          return;
-        }
-
-        // mês: últimos 30 dias
-        const today0 = startOfLocalDay();
-        const from = new Date(today0.getTime() - (30 - 1) * ONE_DAY);
-
-        const { data, error } = await supabase
-          .from("pomodoro_sessions")
-          .select("started_at,duration_seconds,phase")
-          .eq("user_id", user.id)
-          .eq("phase", "study")
-          .not("duration_seconds", "is", null)
-          .gte("started_at", from.toISOString())
-          .order("started_at", { ascending: true });
-
-        if (error) throw error;
         if (!mounted) return;
 
-        const byDay: Record<string, number> = {};
-        for (let i = 0; i < 30; i++) {
-          const d = new Date(from.getTime() + i * ONE_DAY);
-          const key = ymdLocal(d);
-          byDay[key] = 0;
-        }
+        const mList = (mats.data ?? []) as Materia[];
+        const aList = (asss.data ?? []) as Assunto[];
 
-        for (const r of data ?? []) {
-          const dt = new Date(r.started_at);
-          if (Number.isNaN(dt.getTime())) continue;
-          const key = ymdLocal(new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()));
-          const dur = Number(r.duration_seconds ?? 0);
-          if (!Number.isFinite(dur)) continue;
-          byDay[key] = (byDay[key] ?? 0) + Math.round(Math.max(0, dur) / 60);
-        }
+        setMaterias(mList);
+        setAssuntos(aList);
 
-        const series: StudyPoint[] = Object.entries(byDay).map(([key, minutos]) => {
-          const [yyyy, mm, dd] = key.split("-");
-          return { label: `${dd}/${mm}`, minutos };
-        });
+        const mMap: Record<string, string> = {};
+        mList.forEach((m) => (mMap[m.id] = m.nome));
+        setMatName(mMap);
 
-        setMiniSeries(series);
+        const aMap: Record<string, string> = {};
+        aList.forEach((a) => (aMap[a.id] = a.nome));
+        setAssName(aMap);
+
+        const { data: open } = await supabase
+          .from("study_sessions")
+          .select("id, started_at, materia_id, assunto_id, mode")
+          .eq("user_id", userId)
+          .is("ended_at", null)
+          .order("started_at", { ascending: false })
+          .limit(1);
+
+        if (!mounted) return;
+
+        if (open && open.length) setOpenSession(open[0] as OpenSession);
+        else setOpenSession(null);
       } catch (e: any) {
-        // não travar o dashboard por erro de gráfico
         if (!mounted) return;
-        setMiniSeries([]);
-        setErro((prev) => prev ?? e?.message ?? "Falha ao carregar gráfico.");
+        setTdeErro(e?.message || "Falha ao carregar tempo de estudo.");
       } finally {
         if (!mounted) return;
-        setMiniLoading(false);
+        setTdeLoading(false);
       }
     })();
 
     return () => {
       mounted = false;
     };
-  }, [miniRange]);
+  }, [userId]);
+
+  /* =========================
+   * Tempo de estudo: carregar sessões finalizadas (respeita filtro + range)
+   * ========================= */
+  useEffect(() => {
+    let mounted = true;
+    if (!userId) return;
+
+    (async () => {
+      try {
+        setTdeErro(null);
+
+        let q = supabase
+          .from("study_sessions")
+          .select("materia_id,assunto_id,duration_seconds,started_at,ended_at")
+          .eq("user_id", userId)
+          .not("duration_seconds", "is", null)
+          .not("ended_at", "is", null)
+          .order("started_at", { ascending: false });
+
+        const from = getRangeStart(range);
+        if (from) q = q.gte("started_at", from.toISOString());
+
+        if (materiaId) q = q.eq("materia_id", materiaId);
+        if (assuntoId) q = q.eq("assunto_id", assuntoId);
+
+        const { data, error } = await q;
+        if (error) throw error;
+        if (!mounted) return;
+
+        setSessions((data ?? []) as any);
+      } catch (e: any) {
+        if (!mounted) return;
+        setTdeErro(e?.message || "Falha ao carregar sessões.");
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [userId, range, materiaId, assuntoId]);
+
+  /* =========================
+   * Cronômetro em tempo real (sessão aberta)
+   * ========================= */
+  useEffect(() => {
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (!openSession?.started_at) {
+      setOpenElapsedSec(0);
+      return;
+    }
+
+    const started = new Date(openSession.started_at).getTime();
+    if (Number.isNaN(started)) {
+      setOpenElapsedSec(0);
+      return;
+    }
+
+    const tick = () => {
+      const nowTs = Date.now();
+      setOpenElapsedSec(Math.max(0, Math.floor((nowTs - started) / 1000)));
+    };
+
+    tick();
+    timerRef.current = window.setInterval(tick, 1000);
+
+    return () => {
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [openSession?.started_at]);
+
+  const assuntosFiltrados = useMemo(
+    () => (materiaId ? assuntos.filter((a) => a.materia_id === materiaId) : assuntos),
+    [assuntos, materiaId]
+  );
+
+  const slices = useMemo(
+    () => buildSlices(sessions, matName, openSession, openElapsedSec),
+    [sessions, matName, openSession, openElapsedSec]
+  );
+
+  const totalSeconds = useMemo(() => slices.reduce((acc, s) => acc + s.seconds, 0), [slices]);
+
+  const colorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const s of slices) map[s.name] = colorForName(s.name);
+    return map;
+  }, [slices]);
+
+  async function getAccessToken(): Promise<string> {
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    if (!token) throw new Error("Sessão inválida (sem access_token).");
+    return token;
+  }
+
+  async function handleStart() {
+    setTdeErro(null);
+
+    try {
+      if (!materiaId) {
+        setTdeErro("Selecione uma Matéria para iniciar.");
+        return;
+      }
+
+      const access_token = await getAccessToken();
+
+      const res = await fetch("/api/study-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "start",
+          access_token,
+          materia_id: materiaId,
+          assunto_id: assuntoId || null,
+        }),
+      });
+
+      const out = await res.json();
+      if (!res.ok) throw new Error(out?.error || "Falha ao iniciar.");
+
+      setOpenSession(out.session as OpenSession);
+    } catch (e: any) {
+      setTdeErro(e?.message || "Falha ao iniciar.");
+    }
+  }
+
+  async function handleStop() {
+    setTdeErro(null);
+
+    try {
+      if (!openSession?.id) return;
+
+      const access_token = await getAccessToken();
+
+      const res = await fetch("/api/study-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "stop",
+          access_token,
+          session_id: openSession.id,
+        }),
+      });
+
+      const out = await res.json();
+      if (!res.ok) throw new Error(out?.error || "Falha ao parar.");
+
+      setOpenSession(null);
+      setOpenElapsedSec(0);
+      // o effect de sessions já recarrega quando range/materiaId/assuntoId mudam,
+      // mas aqui forçamos refletir rápido:
+      setSessions((prev) => [...prev]);
+    } catch (e: any) {
+      setTdeErro(e?.message || "Falha ao parar.");
+    }
+  }
 
   if (loading) {
     return (
@@ -507,7 +712,7 @@ export default function DashboardHome() {
           })}
         </div>
 
-        {/* ESTATÍSTICAS (mais alinhado/compacto) */}
+        {/* ESTATÍSTICAS (compacto/alinhado) */}
         <section className="rounded-2xl bg-card border border-border p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -535,7 +740,9 @@ export default function DashboardHome() {
                   className="rounded-2xl border border-border bg-background px-3.5 py-3 shadow-sm"
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`h-11 w-11 rounded-2xl ${c.iconBg} flex items-center justify-center shrink-0`}>
+                    <div
+                      className={`h-11 w-11 rounded-2xl ${c.iconBg} flex items-center justify-center shrink-0`}
+                    >
                       <Icon className="h-5 w-5 text-white" />
                     </div>
 
@@ -546,9 +753,7 @@ export default function DashboardHome() {
                       <div className="mt-1 text-[22px] font-extrabold text-foreground leading-none">
                         {c.value}
                       </div>
-                      <div className="mt-1 text-[11px] text-muted-foreground leading-none">
-                        {c.sub}
-                      </div>
+                      <div className="mt-1 text-[11px] text-muted-foreground leading-none">{c.sub}</div>
                     </div>
                   </div>
                 </div>
@@ -561,95 +766,195 @@ export default function DashboardHome() {
           </div>
         </section>
 
-        {/* MINI GRÁFICO DE ESTUDO (compacto) */}
+        {/* TEMPO DE ESTUDO (pizza + lista) */}
         <section className="rounded-2xl bg-card border border-border p-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="min-w-0">
-              <div className="text-base font-extrabold text-foreground">Estudo</div>
-              <div className="text-xs text-muted-foreground">
-                {miniRange === "dia" ? "Últimas 24h" : miniRange === "semana" ? "Últimos 7 dias" : "Últimos 30 dias"}
-              </div>
+              <div className="text-base font-extrabold text-foreground">Tempo de estudo</div>
+              <div className="text-xs text-muted-foreground">Por matéria</div>
             </div>
 
-            {/* botões em 1 linha */}
-            <div className="inline-flex rounded-xl border border-border bg-muted p-1 shrink-0">
-              {[
-                ["dia", "Dia"],
-                ["semana", "Semana"],
-                ["mes", "Mês"],
-              ].map(([k, label]) => {
-                const active = miniRange === (k as MiniRange);
-                return (
-                  <button
-                    key={k}
-                    onClick={() => setMiniRange(k as MiniRange)}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${active
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    disabled={miniLoading}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
+            <div className="flex gap-2 flex-wrap">
+              {(
+                [
+                  ["dia", "Dia"],
+                  ["semana", "Semana"],
+                  ["mes", "Mês"],
+                  ["ano", "Ano"],
+                  ["tudo", "Tudo"],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => setRange(k)}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold ${range === k ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border"
+                    }`}
+                  disabled={tdeLoading}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="h-44">
-            {!miniSeries.length && !miniLoading ? (
-              <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-                Sem dados no período.
+          {/* BLOCO: iniciar/controle (compacto) */}
+          <div className="mt-4 rounded-2xl border border-border bg-background p-4 space-y-3">
+            <div className="text-sm font-semibold">Registro</div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Matéria</span>
+                <select
+                  className="bg-muted border border-border rounded-lg px-3 py-2 text-sm"
+                  value={materiaId}
+                  onChange={(e) => {
+                    setMateriaId(e.target.value);
+                    setAssuntoId("");
+                  }}
+                  disabled={tdeLoading || !!openSession}
+                >
+                  <option value="">Selecione</option>
+                  {materias.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Conteúdo / Assunto</span>
+                <select
+                  className="bg-muted border border-border rounded-lg px-3 py-2 text-sm"
+                  value={assuntoId}
+                  onChange={(e) => setAssuntoId(e.target.value)}
+                  disabled={tdeLoading || !assuntosFiltrados.length || !!openSession}
+                >
+                  <option value="">Selecione</option>
+                  {assuntosFiltrados.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {openSession ? (
+              <div className="rounded-xl border border-border bg-muted p-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-[220px]">
+                  <div className="text-sm font-semibold">Sessão em andamento</div>
+                  <div className="text-xs text-muted-foreground">
+                    {openSession.materia_id ? matName[openSession.materia_id] : "Sem matéria"}
+                    {openSession.assunto_id ? ` • ${assName[openSession.assunto_id] ?? "Assunto"}` : ""}
+                  </div>
+                </div>
+
+                <div className="text-lg font-extrabold tracking-tight">{fmtHMSFull(openElapsedSec)}</div>
+
+                <button
+                  className="px-5 py-2 rounded-xl bg-destructive text-destructive-foreground font-semibold"
+                  onClick={handleStop}
+                  disabled={tdeLoading}
+                >
+                  Parar e salvar
+                </button>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={miniSeries} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="miniFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis
-                    dataKey="label"
-                    stroke="var(--muted-foreground)"
-                    tick={{ fontSize: 11 }}
-                    interval={miniRange === "mes" ? 5 : 0}
-                  />
-                  <YAxis
-                    stroke="var(--muted-foreground)"
-                    tick={{ fontSize: 11 }}
-                    allowDecimals={false}
-                    width={30}
-                  />
-                  <Tooltip
-                    formatter={(v: any) => [`${Number(v ?? 0)} min`, "Estudo"]}
-                    contentStyle={{
-                      background: "var(--muted)",
-                      border: "1px solid var(--border)",
-                      color: "var(--foreground)",
-                      borderRadius: 12,
-                      fontSize: 12,
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="minutos"
-                    stroke="var(--primary)"
-                    strokeWidth={2}
-                    fill="url(#miniFill)"
-                    name="Minutos"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              <button
+                className="px-6 py-3 rounded-2xl bg-primary text-primary-foreground font-semibold disabled:opacity-60"
+                onClick={handleStart}
+                disabled={tdeLoading || !materiaId}
+              >
+                Iniciar atividade
+              </button>
             )}
+
+            {tdeErro && <div className="text-destructive text-sm">{tdeErro}</div>}
+            {tdeLoading && <div className="text-muted-foreground text-sm">Carregando…</div>}
           </div>
 
-          {miniLoading ? (
-            <div className="mt-2 text-xs text-muted-foreground">Carregando gráfico…</div>
-          ) : null}
+          {/* Pizza + lista */}
+          <div className="mt-4">
+            {!slices.length ? (
+              <div className="text-sm text-muted-foreground">Sem dados para o período selecionado.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={slices}
+                        dataKey="seconds"
+                        nameKey="name"
+                        outerRadius={90}
+                        innerRadius={45}
+                        paddingAngle={2}
+                        stroke="var(--card)"
+                        strokeWidth={2}
+                      >
+                        {slices.map((s) => (
+                          <Cell key={s.name} fill={colorMap[s.name] ?? "#94A3B8"} />
+                        ))}
+                      </Pie>
+
+                      <Tooltip
+                        formatter={(v: any, _n: any, p: any) => {
+                          const sec = Number(v ?? 0);
+                          const pct = totalSeconds ? Math.round((sec / totalSeconds) * 100) : 0;
+                          return [`${fmtHMSFull(sec)} (${pct}%)`, p?.payload?.name ?? "Item"];
+                        }}
+                        contentStyle={{
+                          background: "var(--muted)",
+                          border: "1px solid var(--border)",
+                          color: "var(--foreground)",
+                          borderRadius: 12,
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="text-center text-3xl font-extrabold tracking-tight">
+                    {fmtHMSFull(totalSeconds)}
+                  </div>
+
+                  <div className="space-y-2">
+                    {slices.map((s) => {
+                      const pct = totalSeconds ? Math.round((s.seconds / totalSeconds) * 100) : 0;
+                      const color = colorMap[s.name] ?? "#94A3B8";
+
+                      return (
+                        <div
+                          key={s.name}
+                          className="flex items-center justify-between rounded-xl border border-border bg-muted px-3 py-2"
+                        >
+                          <div className="min-w-0 flex items-center gap-2">
+                            <span
+                              className="inline-block h-3 w-3 rounded-full shrink-0"
+                              style={{ backgroundColor: color }}
+                              aria-hidden="true"
+                            />
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{s.name}</div>
+                              <div className="text-xs text-muted-foreground">{pct}%</div>
+                            </div>
+                          </div>
+
+                          <div className="font-semibold">{fmtHMSFull(s.seconds)}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    * Inclui a sessão em andamento (se houver), somando em tempo real.
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </section>
       </div>
     </main>
