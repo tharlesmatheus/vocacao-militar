@@ -2,33 +2,26 @@
 
 /* =====================================================================================
  * NOTAS DO REVISOR:
- * - Implementado filtro/seleção de metadados (Instituição, Cargo, Disciplina, Assunto,
- *   Modalidade, Banca) para não precisar digitar isso no texto colado.
- * - Metadados podem ser:
- *   (a) digitados manualmente nos selects (modo livre) OU
- *   (b) escolhidos de uma lista sugerida (carregada a partir de valores já existentes
- *       na tabela "questoes" do Supabase, via DISTINCT em memória).
+ * - Correção do endpoint do Gemini:
+ *   - A forma mais compatível/documentada é enviar a chave via querystring: ?key=SEU_TOKEN
+ *   - Alguns ambientes podem dar 404/erros se você tentar acessar no browser (GET) ou
+ *     se passar a key apenas em header. Aqui padronizamos para ?key=.
  *
- * - Aceleração do processamento:
- *   - Processamento concorrente com limite de concorrência (pool), para subir mais rápido
- *     sem “saturar” a API do Gemini.
- *   - Uso de Promise.allSettled para coletar sucessos e falhas sem abortar o lote inteiro.
- *   - Inserção no Supabase em chunks (lotes menores) para reduzir chance de estourar limites
- *     e melhorar confiabilidade.
+ * - Mantido o token exatamente como você forneceu (conforme pedido).
  *
- * - Comportamento esperado preservado:
- *   - Continua separando múltiplas questões por marcadores.
- *   - Continua chamando a IA para extrair JSON.
- *   - Continua salvando no Supabase.
- *   - Continua gerando explicação quando não houver (agora com fallback dedicado, apenas se faltar).
+ * - Mantidas melhorias:
+ *   - Filtros/seleção de metadados (Instituição, Cargo, Disciplina, Assunto, Modalidade, Banca)
+ *   - Concorrência limitada (pool) para acelerar sem saturar
+ *   - Inserção em chunks no Supabase
+ *   - Fallback de explicação somente quando faltar (mais rápido no geral)
  *
- * - Segurança:
- *   - IMPORTANTE: Você pediu para “não remover o token”. Porém, chave de API em código client-side
- *     é um risco grave (qualquer usuário pode ver/roubar).
- *   - Para NÃO vazar sua chave aqui na resposta, eu NÃO posso reimprimir o valor real.
- *     Mantive a constante, mas substituí o valor por um placeholder.
- *   - Alternativa recomendada (comentada no código): mover chamadas do Gemini para uma rota
- *     server-side (Next.js route handler) e ler a chave de variável de ambiente.
+ * - Diagnóstico melhorado:
+ *   - Se a IA responder erro, exibimos status + body (com limite) para facilitar debug
+ *     (sem logar chave).
+ *
+ * - Atenção (segurança):
+ *   - Chave no client é risco de vazamento. Mantive porque você pediu, mas o ideal é
+ *     mover para rota server-side.
  * ===================================================================================== */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -36,18 +29,26 @@ import { supabase } from "@/lib/supabaseClient";
 
 /**
  * ⚠️ ATENÇÃO (SEGURANÇA):
- * - Não coloque chaves privadas no client (navegador).
- * - Qualquer pessoa pode inspecionar o JS e copiar a chave.
- *
- * Você pediu para não remover o token, então mantive a constante.
- * Porém, por segurança, NÃO posso reimprimir sua chave real aqui.
- *
- * ✅ Recomendação (sem mudar dependências):
- * - Criar um endpoint server-side /api/gemini e usar process.env.GEMINI_API_KEY.
+ * - Esta chave está no client (navegador). Qualquer usuário pode inspecionar e copiar.
+ * - Ideal: mover chamadas do Gemini para endpoint server-side e ler de env var.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const GEMINI_API_KEY = "AIzaSyC-3CWT9uBxdEw8qdmZ9Vma0F6-iV0To88";
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+
+/**
+ * Modelo do Gemini a ser usado.
+ * - Mantido conforme você estava usando.
+ * - Se sua chave não tiver acesso ao modelo, a API pode retornar erro.
+ */
+const GEMINI_MODEL = "gemini-2.0-flash";
+
+/**
+ * Endpoint do Gemini:
+ * - Forma recomendada: ?key=... (query param)
+ * - Evita problemas de compatibilidade quando a key vai só em header.
+ */
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(
+    GEMINI_API_KEY
+)}`;
 
 /**
  * Prefixo do prompt principal:
@@ -325,6 +326,45 @@ async function insertInChunks(rows: any[], chunkSize = 200): Promise<void> {
 }
 
 /**
+ * Faz uma requisição ao Gemini e retorna o JSON parseado (ou texto).
+ * Observações:
+ * - Centraliza a chamada para reduzir duplicação e melhorar debug.
+ *
+ * @param prompt Texto completo enviado ao modelo
+ * @param expectJson Se true, tenta parsear JSON; senão retorna string
+ * @returns Objeto parseado (JSON) ou string (texto)
+ */
+async function callGemini(prompt: string): Promise<string> {
+    const res = await fetch(GEMINI_URL, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            // Mantemos compatibilidade: key já vai no ?key=..., então não dependemos do header.
+            // "X-goog-api-key": GEMINI_API_KEY,
+        },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+        }),
+    });
+
+    if (!res.ok) {
+        // Lê o corpo do erro para facilitar diagnóstico (sem expor token)
+        const bodyText = await res.text().catch(() => "");
+        const safeBody = (bodyText || "").slice(0, 2000); // limite para não “explodir” UI
+        throw new Error(`IA ${res.status}: ${safeBody || "Sem detalhes"}`);
+    }
+
+    const data = await res.json();
+
+    const rawText =
+        (data?.candidates?.[0]?.content?.parts?.[0]?.text ??
+            data?.candidates?.[0]?.content?.text ??
+            "") + "";
+
+    return rawText;
+}
+
+/**
  * Componente principal: Cadastro de múltiplas questões via Gemini + Supabase.
  */
 export default function NovaQuestaoGeminiLote() {
@@ -341,16 +381,6 @@ export default function NovaQuestaoGeminiLote() {
 
     // Metadados selecionados pelo usuário (para não precisar escrever no texto)
     const [meta, setMeta] = useState<SelectedMeta>({
-        instituicao: "",
-        cargo: "",
-        disciplina: "",
-        assunto: "",
-        modalidade: "",
-        banca: "",
-    });
-
-    // Sugestões de valores (carregadas do banco, com base em dados existentes)
-    const [sugestoes, setSugestoes] = useState<SelectedMeta>({
         instituicao: "",
         cargo: "",
         disciplina: "",
@@ -383,9 +413,6 @@ export default function NovaQuestaoGeminiLote() {
 
         (async () => {
             try {
-                // Carregamos só colunas necessárias e um limite para não puxar demais.
-                // Se sua base for grande e isso pesar, a recomendação é criar tabelas de domínio
-                // (instituicoes, bancas, etc.) — mas isso seria mudança de estrutura.
                 const { data, error } = await supabase
                     .from("questoes")
                     .select("instituicao,cargo,disciplina,assunto,modalidade,banca")
@@ -424,8 +451,6 @@ export default function NovaQuestaoGeminiLote() {
 
                 setOpcoes(nextOpcoes);
             } catch {
-                // Falha ao carregar opções não deve bloquear a tela.
-                // Usuário ainda pode digitar os metadados manualmente.
                 if (!mountedRef.current) return;
                 setOpcoes({
                     instituicao: [],
@@ -471,33 +496,11 @@ export default function NovaQuestaoGeminiLote() {
      * @returns Objeto pronto para insert
      */
     async function processarUmaQuestao(questaoTxt: string, index: number): Promise<any> {
-        // Monta prompt com dica de metadados fixos (se usuário selecionou)
         const metaHint = buildPromptMetaHint(meta);
         const prompt = `${metaHint}\n${PROMPT_PREFIX}${questaoTxt}`;
 
-        const res = await fetch(GEMINI_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-goog-api-key": GEMINI_API_KEY,
-            },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-            }),
-        });
-
-        if (!res.ok) {
-            // Erro com contexto para debug sem expor dados sensíveis
-            throw new Error(`Erro na IA (questão ${index + 1})`);
-        }
-
-        const data = await res.json();
-
-        const rawText =
-            (data?.candidates?.[0]?.content?.parts?.[0]?.text ??
-                data?.candidates?.[0]?.content?.text ??
-                "") + "";
-
+        // Chamada principal (JSON)
+        const rawText = await callGemini(prompt);
         const jsonStr = extrairJsonSeguro(rawText);
         const obj = JSON.parse(jsonStr);
 
@@ -517,28 +520,17 @@ export default function NovaQuestaoGeminiLote() {
                 correta: objFinal.correta,
             };
 
-            const res2 = await fetch(GEMINI_URL, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-goog-api-key": GEMINI_API_KEY,
-                },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: `${PROMPT_EXPLICACAO_FALLBACK}\n${JSON.stringify(payload)}` }] }],
-                }),
-            });
+            try {
+                const rawExp = await callGemini(
+                    `${PROMPT_EXPLICACAO_FALLBACK}\n${JSON.stringify(payload)}`
+                );
 
-            if (res2.ok) {
-                const data2 = await res2.json();
-                const expText =
-                    (data2?.candidates?.[0]?.content?.parts?.[0]?.text ??
-                        data2?.candidates?.[0]?.content?.text ??
-                        "") + "";
-                const cleaned = expText.replace(/```/g, "").trim();
+                const cleaned = String(rawExp || "").replace(/```/g, "").trim();
                 if (cleaned.length >= 10) objFinal.explicacao = cleaned;
+            } catch {
+                // Se falhar, não quebra o processo — mantém explicacao vazia/curta.
+                // Mantém “subir tudo” mais rápido sem descartar a questão.
             }
-            // Se falhar, não quebra o processo — mantém explicacao vazia/curta.
-            // Isso preserva o “subir tudo mais rápido e bem feito” sem perder a questão.
         }
 
         return objFinal;
@@ -568,7 +560,7 @@ export default function NovaQuestaoGeminiLote() {
 
             // Limite de concorrência:
             // - Ajuste conforme sua cota/latência.
-            // - 4 costuma ser um bom equilíbrio entre velocidade e risco de rate limit.
+            // - Se começar a dar rate limit, reduza para 2 ou 3.
             const CONCURRENCY_LIMIT = 4;
 
             const settled = await mapWithConcurrency(
@@ -601,17 +593,13 @@ export default function NovaQuestaoGeminiLote() {
                     setMsg(`Foram cadastradas ${questoesProntas.length} questão(ões) com sucesso!`);
                 } catch (e: any) {
                     setErro("Erro ao salvar no banco: " + (e?.message || "Erro inesperado"));
-                    // Mesmo com erro de insert, exibimos o relatório do processamento
                 }
             } else {
                 setMsg("");
             }
 
-            // Monta painel final: OKs + ERROs
             setResultados([
                 ...questoesProntas.map((q) => ({ status: "OK", ...q })),
-
-                // Mantém as falhas com status ERRO
                 ...falhas,
             ]);
         } catch (e: any) {
@@ -664,8 +652,11 @@ export default function NovaQuestaoGeminiLote() {
                             // Volta select para placeholder (mantém input como fonte de verdade)
                             e.currentTarget.value = "";
                         }}
+                        disabled={loading}
                     >
-                        <option value="">{options.length ? "Selecione (opcional)" : "Sem opções (digite ao lado)"}</option>
+                        <option value="">
+                            {options.length ? "Selecione (opcional)" : "Sem opções (digite ao lado)"}
+                        </option>
                         {options.map((opt) => (
                             <option key={opt} value={opt}>
                                 {opt}
@@ -678,6 +669,7 @@ export default function NovaQuestaoGeminiLote() {
                         placeholder={placeholder}
                         value={meta[field]}
                         onChange={(e) => setMetaField(field, e.target.value)}
+                        disabled={loading}
                     />
                 </div>
             </div>
@@ -699,7 +691,7 @@ export default function NovaQuestaoGeminiLote() {
 
                     <button
                         type="button"
-                        className="text-xs px-3 py-1 rounded border hover:bg-gray-50"
+                        className="text-xs px-3 py-1 rounded border hover:bg-gray-50 disabled:opacity-60"
                         onClick={() =>
                             setMeta({
                                 instituicao: "",
@@ -723,15 +715,20 @@ export default function NovaQuestaoGeminiLote() {
                 </p>
 
                 <div className="grid grid-cols-1 gap-4 mt-4">
-                    <MetaField label="Instituição" field="instituicao" placeholder="Digite a instituição (opcional)" />
+                    <MetaField
+                        label="Instituição"
+                        field="instituicao"
+                        placeholder="Digite a instituição (opcional)"
+                    />
                     <MetaField label="Cargo" field="cargo" placeholder="Digite o cargo (opcional)" />
-                    <MetaField label="Disciplina" field="disciplina" placeholder="Digite a disciplina (opcional)" />
+                    <MetaField
+                        label="Disciplina"
+                        field="disciplina"
+                        placeholder="Digite a disciplina (opcional)"
+                    />
                     <MetaField label="Assunto" field="assunto" placeholder="Digite o assunto (opcional)" />
 
-                    {/* Modalidade: aqui vale a regra de override.
-              - Se usuário escolher, força.
-              - Se não, detecta automaticamente.
-           */}
+                    {/* Modalidade: override se selecionada; caso contrário detecta automaticamente */}
                     <div className="flex flex-col gap-2">
                         <label className="text-sm font-semibold text-[#232939]">Modalidade</label>
                         <select
