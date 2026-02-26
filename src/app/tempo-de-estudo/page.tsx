@@ -2,30 +2,22 @@
 
 // =====================================================================================
 // ARQUIVO: src/app/tempo-de-estudo/page.tsx
-// ONDE COLOCAR:
-//   - Crie a pasta: src/app/tempo-de-estudo/
-//   - Dentro dela, crie este arquivo: page.tsx
-//
 // OBJETIVO (UI):
 // - Mostrar “Tempo de estudo” (pizza + lista) ao abrir, por matéria
 // - Permitir iniciar contagem (cronômetro) escolhendo Matéria + Assunto
 // - Permitir parar contagem e salvar no banco (via route.ts)
 // - Cada usuário vê apenas seus dados (RLS na tabela study_sessions)
 //
-// DEPENDÊNCIAS:
-// - Recharts já aparece no seu projeto (você usa em /estatisticas).
-// - Usa supabase client do seu padrão.
+// MELHORIA (PEDIDA):
+// - Cores do gráfico e identificação por matéria:
+//   - Paleta bonita e consistente (tons modernos e contrastantes)
+//   - Cor estável por nome de matéria (mesma matéria = mesma cor sempre)
+//   - Legenda com “bolinha” colorida igual ao gráfico
 // =====================================================================================
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import {
-    ResponsiveContainer,
-    PieChart,
-    Pie,
-    Tooltip,
-    Cell,
-} from "recharts";
+import { ResponsiveContainer, PieChart, Pie, Tooltip, Cell } from "recharts";
 
 /* =========================
  * Tipos
@@ -46,7 +38,56 @@ type OpenSession = {
 type RangeKey = "dia" | "semana" | "mes" | "ano" | "tudo";
 
 /* =========================
- * Helpers
+ * Paleta e helpers de cor
+ * ========================= */
+
+/**
+ * Paleta “bonita” e bem contrastante (sem depender de libs).
+ * - Escolhida para boa distinção visual no gráfico (inclusive em telas pequenas).
+ * - Mantém cores estáveis ao longo do tempo.
+ */
+const COLOR_PALETTE = [
+    "#6366F1", // indigo
+    "#22C55E", // green
+    "#F97316", // orange
+    "#06B6D4", // cyan
+    "#A855F7", // purple
+    "#EF4444", // red
+    "#F59E0B", // amber
+    "#3B82F6", // blue
+    "#10B981", // emerald
+    "#EC4899", // pink
+    "#14B8A6", // teal
+    "#8B5CF6", // violet
+    "#84CC16", // lime
+    "#0EA5E9", // sky
+    "#E11D48", // rose
+] as const;
+
+/**
+ * Hash simples e determinístico para associar uma cor estável ao texto.
+ * - Evita que a mesma matéria mude de cor ao atualizar/paginar.
+ * - Não precisa de dependências.
+ */
+function hashStringToInt(input: string): number {
+    let h = 0;
+    for (let i = 0; i < input.length; i++) {
+        h = (h * 31 + input.charCodeAt(i)) >>> 0; // >>>0 garante inteiro não-negativo (uint32)
+    }
+    return h;
+}
+
+/**
+ * Retorna uma cor consistente para um nome.
+ * - Usa a paleta e o hash para distribuir as cores.
+ */
+function colorForName(name: string): string {
+    const idx = hashStringToInt(name || "SEM_NOME") % COLOR_PALETTE.length;
+    return COLOR_PALETTE[idx];
+}
+
+/* =========================
+ * Helpers gerais
  * ========================= */
 
 /**
@@ -59,7 +100,7 @@ function fmtHMSFull(totalSeconds: number): string {
     const r = s % 60;
 
     const hh = h ? `${h}h ` : "";
-    const mm = (h || m) ? `${m}m ` : "";
+    const mm = h || m ? `${m}m ` : "";
     const ss = `${r}s`;
 
     return `${hh}${mm}${ss}`.trim();
@@ -331,10 +372,17 @@ export default function TempoDeEstudoPage() {
         [sessions, matName, openSession, openElapsedSec]
     );
 
-    const totalSeconds = useMemo(
-        () => slices.reduce((acc, s) => acc + s.seconds, 0),
-        [slices]
-    );
+    const totalSeconds = useMemo(() => slices.reduce((acc, s) => acc + s.seconds, 0), [slices]);
+
+    /**
+     * Mapa de cores por matéria (baseado no nome).
+     * - Garante que cada item tenha cor consistente.
+     */
+    const colorMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        for (const s of slices) map[s.name] = colorForName(s.name);
+        return map;
+    }, [slices]);
 
     /**
      * Obtém access_token para chamar a API server-side.
@@ -512,15 +560,11 @@ export default function TempoDeEstudoPage() {
                             <div className="text-sm font-semibold">Sessão em andamento</div>
                             <div className="text-xs text-muted-foreground">
                                 {openSession.materia_id ? matName[openSession.materia_id] : "Sem matéria"}
-                                {openSession.assunto_id
-                                    ? ` • ${assName[openSession.assunto_id] ?? "Assunto"}`
-                                    : ""}
+                                {openSession.assunto_id ? ` • ${assName[openSession.assunto_id] ?? "Assunto"}` : ""}
                             </div>
                         </div>
 
-                        <div className="text-lg font-extrabold tracking-tight">
-                            {fmtHMSFull(openElapsedSec)}
-                        </div>
+                        <div className="text-lg font-extrabold tracking-tight">{fmtHMSFull(openElapsedSec)}</div>
 
                         <button
                             className="px-5 py-2 rounded-xl bg-destructive text-destructive-foreground font-semibold"
@@ -566,11 +610,12 @@ export default function TempoDeEstudoPage() {
                                         outerRadius={90}
                                         innerRadius={45}
                                         paddingAngle={2}
+                                        // Pequena borda para separar melhor as fatias (fica mais bonito e legível)
+                                        stroke="var(--card)"
+                                        strokeWidth={2}
                                     >
-                                        {slices.map((_, i) => (
-                                            // Não fixamos cores (segue a regra de não impor paleta);
-                                            // Recharts usa cores default, e o Cell sem fill deixa o tema decidir.
-                                            <Cell key={i} />
+                                        {slices.map((s) => (
+                                            <Cell key={s.name} fill={colorMap[s.name] ?? "#94A3B8"} />
                                         ))}
                                     </Pie>
 
@@ -596,18 +641,31 @@ export default function TempoDeEstudoPage() {
                                 {fmtHMSFull(totalSeconds)}
                             </div>
 
+                            {/* Lista/legenda com cor por matéria */}
                             <div className="space-y-2">
                                 {slices.map((s) => {
                                     const pct = totalSeconds ? Math.round((s.seconds / totalSeconds) * 100) : 0;
+                                    const color = colorMap[s.name] ?? "#94A3B8";
+
                                     return (
                                         <div
                                             key={s.name}
                                             className="flex items-center justify-between rounded-xl border border-border bg-muted px-3 py-2"
                                         >
-                                            <div className="min-w-0">
-                                                <div className="font-medium truncate">{s.name}</div>
-                                                <div className="text-xs text-muted-foreground">{pct}%</div>
+                                            <div className="min-w-0 flex items-center gap-2">
+                                                {/* “bolinha”/badge de cor */}
+                                                <span
+                                                    className="inline-block h-3 w-3 rounded-full shrink-0"
+                                                    style={{ backgroundColor: color }}
+                                                    aria-hidden="true"
+                                                />
+
+                                                <div className="min-w-0">
+                                                    <div className="font-medium truncate">{s.name}</div>
+                                                    <div className="text-xs text-muted-foreground">{pct}%</div>
+                                                </div>
                                             </div>
+
                                             <div className="font-semibold">{fmtHMSFull(s.seconds)}</div>
                                         </div>
                                     );

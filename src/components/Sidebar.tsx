@@ -1,5 +1,12 @@
 "use client";
 
+/* =====================================================================================
+ * NOTAS DO REVISOR:
+ * - Adicionado novo item de menu: "Tempo de estudo" apontando para /tempo-de-estudo
+ * - Mantida a estrutura do componente e o comportamento existente (desktop/mobile, colapso, logout).
+ * - Adicionado ícone Clock (lucide-react) para representar tempo/cronômetro.
+ * ===================================================================================== */
+
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -17,6 +24,7 @@ import {
     Brain,
     ChevronLeft,
     ChevronRight,
+    Clock, // ✅ Ícone para "Tempo de estudo"
 } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
@@ -37,6 +45,10 @@ const MENU = [
             { name: "Resumos", href: "/resumos", icon: FileText },
             { name: "Revisão", href: "/revisao", icon: History },
             { name: "Cronograma", href: "/cronograma", icon: CalendarDays },
+
+            // ✅ NOVO: Tempo de estudo
+            // Observação: esta rota deve existir em: src/app/tempo-de-estudo/page.tsx
+            { name: "Tempo de estudo", href: "/tempo-de-estudo", icon: Clock },
         ],
     },
     {
@@ -56,9 +68,18 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
 
     const [open, setOpen] = useState(false); // mobile drawer
 
-    const isActive = (href: string) =>
-        href === "/" ? pathname === "/" : pathname.startsWith(href);
+    /**
+     * Verifica se um item do menu está ativo pela URL atual.
+     * - Para "/" exige igualdade exata
+     * - Para outros caminhos usa startsWith
+     */
+    const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
+    /**
+     * Faz logout via Supabase e redireciona para /auth.
+     * Observação:
+     * - Mantido simples (sem logs sensíveis).
+     */
     async function logout() {
         await supabase.auth.signOut();
         router.push("/auth");
@@ -87,7 +108,7 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
           ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
         `}
             >
-                {/* DESKTOP COLLAPSE BUTTON (tipo imagem) */}
+                {/* DESKTOP COLLAPSE BUTTON */}
                 <button
                     type="button"
                     onClick={() => onCollapsedChange(!collapsed)}
@@ -121,30 +142,20 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
                 </button>
 
                 {/* HEADER */}
-                <div
-                    className={`pt-7 pb-4 flex items-center gap-3 ${collapsed ? "px-4" : "px-5"
-                        }`}
-                >
+                <div className={`pt-7 pb-4 flex items-center gap-3 ${collapsed ? "px-4" : "px-5"}`}>
                     <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center font-bold text-sidebar-primary-foreground">
                         TM
                     </div>
 
                     {!collapsed && (
                         <div className="leading-tight">
-                            <p className="text-[10px] uppercase text-muted-foreground">
-                                Gratuito
-                            </p>
-                            <p className="text-[14px] font-semibold text-sidebar-foreground">
-                                Tharles Matheus
-                            </p>
+                            <p className="text-[10px] uppercase text-muted-foreground">Gratuito</p>
+                            <p className="text-[14px] font-semibold text-sidebar-foreground">Tharles Matheus</p>
                         </div>
                     )}
                 </div>
 
-                <div
-                    className={`border-b border-sidebar-border ${collapsed ? "mx-4" : "mx-5"
-                        }`}
-                />
+                <div className={`border-b border-sidebar-border ${collapsed ? "mx-4" : "mx-5"}`} />
 
                 {/* MENU */}
                 <nav className={`${collapsed ? "px-2" : "px-3"} py-4 space-y-5`}>
@@ -174,9 +185,7 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
                                                 }`}
                                         >
                                             <Icon size={18} />
-                                            {!collapsed && (
-                                                <span className="text-[14px]">{item.name}</span>
-                                            )}
+                                            {!collapsed && <span className="text-[14px]">{item.name}</span>}
                                         </Link>
                                     );
                                 })}
@@ -217,10 +226,7 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
 
             {/* MOBILE OVERLAY */}
             {open && (
-                <div
-                    className="fixed inset-0 z-30 bg-black/30 md:hidden"
-                    onClick={() => setOpen(false)}
-                />
+                <div className="fixed inset-0 z-30 bg-black/30 md:hidden" onClick={() => setOpen(false)} />
             )}
         </>
     );
