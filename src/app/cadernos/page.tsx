@@ -2,8 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { QuestionCard } from "@/components/QuestionCard"; // ajuste path
-import { Pagination } from "@/components/Pagination";     // ajuste path
+import { QuestionCard } from "@/components/QuestionCard"; // ajuste path se necessário
+import { Pagination } from "@/components/Pagination"; // ajuste path se necessário
 
 /* ===================== Icons ===================== */
 function BookIcon({ className = "" }: { className?: string }) {
@@ -63,18 +63,33 @@ function ArrowLeftIcon({ className = "" }: { className?: string }) {
 }
 function GridIcon({ active }: { active: boolean }) {
     return (
-        <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${active ? "bg-white border-border" : "bg-muted border-border"}`}>
+        <div
+            className={`w-10 h-10 rounded-xl border flex items-center justify-center ${active ? "bg-white border-border" : "bg-muted border-border"
+                }`}
+        >
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
-                <path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z" stroke="currentColor" strokeWidth="2" />
+                <path
+                    d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                />
             </svg>
         </div>
     );
 }
 function ListIcon({ active }: { active: boolean }) {
     return (
-        <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${active ? "bg-white border-border" : "bg-muted border-border"}`}>
+        <div
+            className={`w-10 h-10 rounded-xl border flex items-center justify-center ${active ? "bg-white border-border" : "bg-muted border-border"
+                }`}
+        >
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
-                <path d="M8 6h13M8 12h13M8 18h13M3 6h1M3 12h1M3 18h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path
+                    d="M8 6h13M8 12h13M8 18h13M3 6h1M3 12h1M3 18h1"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                />
             </svg>
         </div>
     );
@@ -84,10 +99,22 @@ function ListIcon({ active }: { active: boolean }) {
 type CadernoTipo = "ERROS" | "ACERTOS";
 type ViewMode = "grid" | "list";
 
-type ResumoTipo = { tipo: CadernoTipo; disciplinas: number; questoes: number; anotadas: number; };
+type ResumoTipo = { tipo: CadernoTipo; disciplinas: number; questoes: number; anotadas: number };
+type DisciplinaResumo = { tipo: CadernoTipo; disciplina: string; questoes: number; anotadas: number };
+type AssuntoResumo = { tipo: CadernoTipo; disciplina: string; assunto: string; questoes: number; anotadas: number };
 
-type DisciplinaResumo = { tipo: CadernoTipo; disciplina: string; questoes: number; anotadas: number; };
-type AssuntoResumo = { tipo: CadernoTipo; disciplina: string; assunto: string; questoes: number; anotadas: number; };
+type CadernoItem = {
+    questao_id: string;
+    tipo: CadernoTipo;
+    anotacao: string | null;
+    created_at?: string;
+};
+
+type QuestaoMin = {
+    id: string;
+    disciplina: string | null;
+    assunto: string | null;
+};
 
 type Questao = {
     id: string;
@@ -106,38 +133,33 @@ type Questao = {
     created_at?: string;
 };
 
-type ItemLeve = {
-    tipo: CadernoTipo;
-    anotacao: string | null;
-    questao: { disciplina: string | null; assunto: string | null }[]; // join vem como array
-};
-
-type ItemQuestao = {
-    questao: Questao[]; // join vem como array
-};
-
 /* ===================== Helpers ===================== */
 function pct(anotadas: number, questoes: number) {
     if (!questoes) return 0;
     return Math.round((anotadas / questoes) * 100);
 }
 
+function chunk<T>(arr: T[], size: number) {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+}
+
 /* ===================== Page ===================== */
 export default function CadernosPageGeral() {
     const [loading, setLoading] = useState(true);
-    const [erro, setErro] = useState<string>("");
+    const [erro, setErro] = useState("");
     const [userId, setUserId] = useState<string | null>(null);
 
-    // Navegação dentro da única página (passos)
+    // Navegação dentro da única página
     const [step, setStep] = useState<"home" | "disciplinas" | "assuntos" | "questoes">("home");
     const [tipoSelecionado, setTipoSelecionado] = useState<CadernoTipo | null>(null);
     const [disciplinaSelecionada, setDisciplinaSelecionada] = useState<string | null>(null);
     const [assuntoSelecionado, setAssuntoSelecionado] = useState<string | null>(null);
 
-    // toggle grid/list
     const [mode, setMode] = useState<ViewMode>("grid");
 
-    // resumo topo
+    // Resumo topo
     const [resumos, setResumos] = useState<Record<CadernoTipo, ResumoTipo>>({
         ERROS: { tipo: "ERROS", disciplinas: 0, questoes: 0, anotadas: 0 },
         ACERTOS: { tipo: "ACERTOS", disciplinas: 0, questoes: 0, anotadas: 0 },
@@ -145,19 +167,33 @@ export default function CadernosPageGeral() {
     const [topErros, setTopErros] = useState<DisciplinaResumo[]>([]);
     const [topAcertos, setTopAcertos] = useState<DisciplinaResumo[]>([]);
 
-    // lista disciplinas/assuntos (calculadas do “item leve”)
+    // Cache: itens do caderno por tipo (IDs e anotação)
+    const [cacheItens, setCacheItens] = useState<Record<CadernoTipo, CadernoItem[]>>({
+        ERROS: [],
+        ACERTOS: [],
+    });
+
+    // Cache: metadados mínimos das questões (id, disciplina, assunto)
+    const [questoesMinMap, setQuestoesMinMap] = useState<Map<string, QuestaoMin>>(new Map());
+
+    // Listas do passo
     const [disciplinas, setDisciplinas] = useState<DisciplinaResumo[]>([]);
     const [assuntos, setAssuntos] = useState<AssuntoResumo[]>([]);
 
-    // questões (buscadas só no final)
+    // Questões completas (apenas no final e paginado)
+    const [idsCache, setIdsCache] = useState<string[]>([]);
     const [questoes, setQuestoes] = useState<Questao[]>([]);
     const [qLoading, setQLoading] = useState(false);
 
-    // paginação das questões
+    // paginação
     const [page, setPage] = useState(1);
     const [perPage, setPerPage] = useState(3);
 
-    // ===================== 1) Auth + Load leve (1 consulta) =====================
+    const errosPct = useMemo(() => pct(resumos.ERROS.anotadas, resumos.ERROS.questoes), [resumos.ERROS]);
+    const acertosPct = useMemo(() => pct(resumos.ACERTOS.anotadas, resumos.ACERTOS.questoes), [resumos.ACERTOS]);
+    const tituloTipo = tipoSelecionado === "ERROS" ? "Erros" : "Acertos";
+
+    /* ===================== Load Inicial (OTIMIZADO + SEM JOIN) ===================== */
     useEffect(() => {
         let mounted = true;
 
@@ -179,75 +215,91 @@ export default function CadernosPageGeral() {
             setUserId(uid);
 
             try {
-                // ✅ LEVE: só tipo + anotacao + disciplina/assunto
-                const { data, error } = await supabase
+                // 1) Pega itens do caderno (leve)
+                const { data: itensData, error: itensErr } = await supabase
                     .from("caderno_itens")
-                    .select("tipo, anotacao, questao:questoes(disciplina, assunto)")
+                    .select("questao_id, tipo, anotacao, created_at")
                     .eq("user_id", uid);
 
-                if (error) throw error;
+                if (itensErr) throw itensErr;
 
-                const rows = (data ?? []) as unknown as ItemLeve[];
+                const itens = (itensData ?? []) as CadernoItem[];
 
-                // agrega tudo em memória (rápido)
-                const byTipo: Record<CadernoTipo, { questoes: number; anotadas: number; disciplinasSet: Set<string> }> = {
-                    ERROS: { questoes: 0, anotadas: 0, disciplinasSet: new Set() },
-                    ACERTOS: { questoes: 0, anotadas: 0, disciplinasSet: new Set() },
-                };
+                const itensErros = itens.filter((i) => i.tipo === "ERROS");
+                const itensAcertos = itens.filter((i) => i.tipo === "ACERTOS");
 
-                const byTipoDisciplina: Record<CadernoTipo, Record<string, { questoes: number; anotadas: number }>> = {
-                    ERROS: {},
-                    ACERTOS: {},
-                };
+                setCacheItens({ ERROS: itensErros, ACERTOS: itensAcertos });
 
-                // também guardamos assunto por disciplina por tipo
-                const byTipoDisciplinaAssunto: Record<CadernoTipo, Record<string, Record<string, { questoes: number; anotadas: number }>>> = {
-                    ERROS: {},
-                    ACERTOS: {},
-                };
+                // 2) Busca metadados mínimos das questões referenciadas
+                const allIds = Array.from(new Set(itens.map((i) => i.questao_id))).filter(Boolean);
 
-                for (const r of rows) {
-                    const tipo = (r.tipo as CadernoTipo) || "ERROS";
-                    const q = r.questao?.[0];
-                    const disciplina = (q?.disciplina as string) || "Sem disciplina";
-                    const assunto = (q?.assunto as string) || "Sem assunto";
-                    const anotada = !!(r.anotacao && String(r.anotacao).trim().length > 0);
+                const minMap = new Map<string, QuestaoMin>();
+                if (allIds.length) {
+                    // para não estourar limites de URL, fazemos em chunks
+                    for (const part of chunk(allIds, 500)) {
+                        const { data: qsMin, error: qsMinErr } = await supabase
+                            .from("questoes")
+                            .select("id, disciplina, assunto")
+                            .in("id", part);
 
-                    byTipo[tipo].questoes += 1;
-                    if (anotada) byTipo[tipo].anotadas += 1;
-                    byTipo[tipo].disciplinasSet.add(disciplina);
+                        if (qsMinErr) throw qsMinErr;
 
-                    if (!byTipoDisciplina[tipo][disciplina]) byTipoDisciplina[tipo][disciplina] = { questoes: 0, anotadas: 0 };
-                    byTipoDisciplina[tipo][disciplina].questoes += 1;
-                    if (anotada) byTipoDisciplina[tipo][disciplina].anotadas += 1;
-
-                    if (!byTipoDisciplinaAssunto[tipo][disciplina]) byTipoDisciplinaAssunto[tipo][disciplina] = {};
-                    if (!byTipoDisciplinaAssunto[tipo][disciplina][assunto]) byTipoDisciplinaAssunto[tipo][disciplina][assunto] = { questoes: 0, anotadas: 0 };
-                    byTipoDisciplinaAssunto[tipo][disciplina][assunto].questoes += 1;
-                    if (anotada) byTipoDisciplinaAssunto[tipo][disciplina][assunto].anotadas += 1;
+                        (qsMin ?? []).forEach((q: any) => {
+                            minMap.set(q.id, q as QuestaoMin);
+                        });
+                    }
                 }
 
-                const nextResumos: Record<CadernoTipo, ResumoTipo> = {
-                    ERROS: { tipo: "ERROS", questoes: byTipo.ERROS.questoes, anotadas: byTipo.ERROS.anotadas, disciplinas: byTipo.ERROS.disciplinasSet.size },
-                    ACERTOS: { tipo: "ACERTOS", questoes: byTipo.ACERTOS.questoes, anotadas: byTipo.ACERTOS.anotadas, disciplinas: byTipo.ACERTOS.disciplinasSet.size },
-                };
+                setQuestoesMinMap(minMap);
 
-                const buildTop = (tipo: CadernoTipo) =>
-                    Object.entries(byTipoDisciplina[tipo])
+                // 3) Calcula resumos e tops (em memória)
+                const calcResumo = (tipo: CadernoTipo) => {
+                    const items = tipo === "ERROS" ? itensErros : itensAcertos;
+
+                    let questoes = 0;
+                    let anotadas = 0;
+                    const disciplinasSet = new Set<string>();
+                    const byDisc: Record<string, { questoes: number; anotadas: number }> = {};
+
+                    for (const it of items) {
+                        const q = minMap.get(it.questao_id);
+                        const disciplina = (q?.disciplina || "").trim() || "Sem disciplina";
+                        const anotada = !!(it.anotacao && it.anotacao.trim().length > 0);
+
+                        questoes += 1;
+                        if (anotada) anotadas += 1;
+
+                        disciplinasSet.add(disciplina);
+                        if (!byDisc[disciplina]) byDisc[disciplina] = { questoes: 0, anotadas: 0 };
+                        byDisc[disciplina].questoes += 1;
+                        if (anotada) byDisc[disciplina].anotadas += 1;
+                    }
+
+                    const resumo: ResumoTipo = {
+                        tipo,
+                        questoes,
+                        anotadas,
+                        disciplinas: disciplinasSet.size,
+                    };
+
+                    const top: DisciplinaResumo[] = Object.entries(byDisc)
                         .map(([disciplina, v]) => ({ tipo, disciplina, questoes: v.questoes, anotadas: v.anotadas }))
                         .sort((a, b) => b.questoes - a.questoes)
                         .slice(0, 4);
 
-                setResumos(nextResumos);
-                setTopErros(buildTop("ERROS"));
-                setTopAcertos(buildTop("ACERTOS"));
+                    return { resumo, top };
+                };
 
-                // guardamos disciplinas/assuntos no estado (para navegar sem refetch pesado)
-                // disciplinas por tipo são calculadas ao selecionar tipo
-                // assuntos por disciplina/tipo serão calculados ao selecionar disciplina
-                // vamos salvar a estrutura bruta num state oculto:
-                setCacheAssuntos(byTipoDisciplinaAssunto);
-                setCacheDisciplinas(byTipoDisciplina);
+                const rE = calcResumo("ERROS");
+                const rA = calcResumo("ACERTOS");
+
+                setResumos({
+                    ERROS: rE.resumo,
+                    ACERTOS: rA.resumo,
+                });
+
+                setTopErros(rE.top);
+                setTopAcertos(rA.top);
             } catch (e: any) {
                 setErro(e?.message || "Erro ao carregar cadernos.");
             } finally {
@@ -255,106 +307,82 @@ export default function CadernosPageGeral() {
             }
         })();
 
-        return () => { mounted = false; };
+        return () => {
+            mounted = false;
+        };
     }, []);
 
-    // caches agregados
-    const [cacheDisciplinas, setCacheDisciplinas] = useState<Record<CadernoTipo, Record<string, { questoes: number; anotadas: number }>>>({
-        ERROS: {},
-        ACERTOS: {},
-    });
-    const [cacheAssuntos, setCacheAssuntos] = useState<Record<CadernoTipo, Record<string, Record<string, { questoes: number; anotadas: number }>>>>({
-        ERROS: {},
-        ACERTOS: {},
-    });
-
-    const errosPct = useMemo(() => pct(resumos.ERROS.anotadas, resumos.ERROS.questoes), [resumos.ERROS]);
-    const acertosPct = useMemo(() => pct(resumos.ACERTOS.anotadas, resumos.ACERTOS.questoes), [resumos.ACERTOS]);
-
-    // ===================== 2) Seleciona tipo -> monta disciplinas (sem query pesada) =====================
+    /* ===================== Steps ===================== */
     function entrarDisciplinas(tipo: CadernoTipo) {
         setTipoSelecionado(tipo);
         setDisciplinaSelecionada(null);
         setAssuntoSelecionado(null);
+        setQuestoes([]);
+        setIdsCache([]);
+        setAssuntos([]);
         setStep("disciplinas");
         setMode("grid");
 
-        const list: DisciplinaResumo[] = Object.entries(cacheDisciplinas[tipo])
+        const items = cacheItens[tipo];
+
+        const byDisc: Record<string, { questoes: number; anotadas: number }> = {};
+        for (const it of items) {
+            const q = questoesMinMap.get(it.questao_id);
+            const disciplina = (q?.disciplina || "").trim() || "Sem disciplina";
+            const anotada = !!(it.anotacao && it.anotacao.trim().length > 0);
+
+            if (!byDisc[disciplina]) byDisc[disciplina] = { questoes: 0, anotadas: 0 };
+            byDisc[disciplina].questoes += 1;
+            if (anotada) byDisc[disciplina].anotadas += 1;
+        }
+
+        const list: DisciplinaResumo[] = Object.entries(byDisc)
             .map(([disciplina, v]) => ({ tipo, disciplina, questoes: v.questoes, anotadas: v.anotadas }))
             .sort((a, b) => b.questoes - a.questoes);
 
         setDisciplinas(list);
     }
 
-    // ===================== 3) Seleciona disciplina -> monta assuntos (sem query pesada) =====================
     function entrarAssuntos(disciplina: string) {
         if (!tipoSelecionado) return;
         setDisciplinaSelecionada(disciplina);
         setAssuntoSelecionado(null);
+        setQuestoes([]);
+        setIdsCache([]);
         setStep("assuntos");
         setMode("grid");
 
-        const byAssunto = cacheAssuntos[tipoSelecionado]?.[disciplina] ?? {};
+        const items = cacheItens[tipoSelecionado];
+
+        const byAssunto: Record<string, { questoes: number; anotadas: number }> = {};
+        for (const it of items) {
+            const q = questoesMinMap.get(it.questao_id);
+            const disc = (q?.disciplina || "").trim() || "Sem disciplina";
+            if (disc !== disciplina) continue;
+
+            const assunto = (q?.assunto || "").trim() || "Sem assunto";
+            const anotada = !!(it.anotacao && it.anotacao.trim().length > 0);
+
+            if (!byAssunto[assunto]) byAssunto[assunto] = { questoes: 0, anotadas: 0 };
+            byAssunto[assunto].questoes += 1;
+            if (anotada) byAssunto[assunto].anotadas += 1;
+        }
+
         const list: AssuntoResumo[] = Object.entries(byAssunto)
-            .map(([assunto, v]) => ({ tipo: tipoSelecionado, disciplina, assunto, questoes: v.questoes, anotadas: v.anotadas }))
+            .map(([assunto, v]) => ({
+                tipo: tipoSelecionado,
+                disciplina,
+                assunto,
+                questoes: v.questoes,
+                anotadas: v.anotadas,
+            }))
             .sort((a, b) => b.questoes - a.questoes);
 
         setAssuntos(list);
     }
 
-    // ===================== 4) Seleciona assunto -> busca questões completas PAGINADAS (rápido) =====================
-    async function entrarQuestoes(assunto: string) {
-        if (!tipoSelecionado || !disciplinaSelecionada || !userId) return;
-
-        setAssuntoSelecionado(assunto);
-        setStep("questoes");
-        setPage(1);
-        setQLoading(true);
-        setErro("");
-
-        try {
-            // ✅ Query ainda “pesada”, porém só no final e paginada depois com range
-            // Para pegar as IDs primeiro (leve)
-            const { data: idsData, error: idsErr } = await supabase
-                .from("caderno_itens")
-                .select("questao_id, questao:questoes(disciplina, assunto)")
-                .eq("user_id", userId)
-                .eq("tipo", tipoSelecionado);
-
-            if (idsErr) throw idsErr;
-
-            const idsRows = (idsData ?? []) as any[];
-
-            const ids = idsRows
-                .filter((r) => {
-                    const q = r.questao?.[0];
-                    return q?.disciplina === disciplinaSelecionada && q?.assunto === assunto;
-                })
-                .map((r) => r.questao_id as string);
-
-            if (!ids.length) {
-                setQuestoes([]);
-                return;
-            }
-
-            // Agora busca as questões completas dessas IDs (pode ser bastante; ainda assim bem melhor que puxar tudo sempre)
-            // Melhor: buscar só as do range da página — vamos fazer isso:
-            await carregarPaginaQuestoes(ids, 1, perPage);
-            setIdsCache(ids);
-        } catch (e: any) {
-            setErro(e?.message || "Erro ao carregar questões.");
-            setQuestoes([]);
-        } finally {
-            setQLoading(false);
-        }
-    }
-
-    // cache das ids do assunto selecionado
-    const [idsCache, setIdsCache] = useState<string[]>([]);
-
     async function carregarPaginaQuestoes(ids: string[], pageNum: number, per: number) {
         const start = (pageNum - 1) * per;
-        const end = start + per - 1;
         const slice = ids.slice(start, start + per);
 
         if (!slice.length) {
@@ -362,9 +390,12 @@ export default function CadernosPageGeral() {
             return;
         }
 
+        // ✅ pega completo só o necessário da página
         const { data, error } = await supabase
             .from("questoes")
-            .select("*")
+            .select(
+                "id, instituicao, cargo, disciplina, assunto, modalidade, banca, enunciado, alternativas, correta, explicacao, comentarios, erros, created_at"
+            )
             .in("id", slice);
 
         if (error) throw error;
@@ -375,7 +406,45 @@ export default function CadernosPageGeral() {
         setQuestoes(ordered);
     }
 
-    // quando muda pagina/perPage no step questoes
+    async function entrarQuestoes(assunto: string) {
+        if (!tipoSelecionado || !disciplinaSelecionada) return;
+
+        setAssuntoSelecionado(assunto);
+        setStep("questoes");
+        setPage(1);
+        setErro("");
+        setQLoading(true);
+
+        try {
+            const items = cacheItens[tipoSelecionado];
+
+            // filtra IDs do assunto selecionado usando o map mínimo (sem query)
+            const ids = items
+                .filter((it) => {
+                    const q = questoesMinMap.get(it.questao_id);
+                    const disc = (q?.disciplina || "").trim() || "Sem disciplina";
+                    const ass = (q?.assunto || "").trim() || "Sem assunto";
+                    return disc === disciplinaSelecionada && ass === assunto;
+                })
+                .map((it) => it.questao_id);
+
+            setIdsCache(ids);
+
+            if (!ids.length) {
+                setQuestoes([]);
+                return;
+            }
+
+            await carregarPaginaQuestoes(ids, 1, perPage);
+        } catch (e: any) {
+            setErro(e?.message || "Erro ao carregar questões.");
+            setQuestoes([]);
+        } finally {
+            setQLoading(false);
+        }
+    }
+
+    // paginação no step questoes
     useEffect(() => {
         if (step !== "questoes") return;
         if (!idsCache.length) return;
@@ -395,11 +464,10 @@ export default function CadernosPageGeral() {
         return () => {
             cancelled = true;
         };
-    }, [page, perPage]); // eslint-disable-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, perPage]);
 
-    // ===================== UI =====================
-    const tituloTipo = tipoSelecionado === "ERROS" ? "Erros" : "Acertos";
-
+    /* ===================== UI ===================== */
     return (
         <div className="max-w-6xl mx-auto px-4 py-10">
             {/* Header */}
@@ -409,9 +477,7 @@ export default function CadernosPageGeral() {
                 </div>
                 <div>
                     <h1 className="text-2xl font-extrabold text-foreground">Meus Cadernos</h1>
-                    <p className="text-sm text-muted-foreground">
-                        Organize e revise suas questões de forma eficiente
-                    </p>
+                    <p className="text-sm text-muted-foreground">Organize e revise suas questões de forma eficiente</p>
                 </div>
             </div>
 
@@ -423,7 +489,7 @@ export default function CadernosPageGeral() {
 
             {erro && <div className="mb-6 text-sm text-red-600">{erro}</div>}
 
-            {/* HOME: cards Erros/Acertos */}
+            {/* HOME */}
             {userId && step === "home" && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* ERROS */}
@@ -554,13 +620,17 @@ export default function CadernosPageGeral() {
                 </div>
             )}
 
-            {/* Header de navegação nos passos */}
+            {/* HEADER DOS STEPS */}
             {userId && step !== "home" && (
                 <div className="flex items-start justify-between gap-4 mb-6">
                     <div className="flex items-start gap-3">
-                        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-white ${tipoSelecionado === "ERROS" ? "bg-red-500" : "bg-emerald-500"}`}>
+                        <div
+                            className={`w-11 h-11 rounded-2xl flex items-center justify-center text-white ${tipoSelecionado === "ERROS" ? "bg-red-500" : "bg-emerald-500"
+                                }`}
+                        >
                             <span className="text-xl font-extrabold">{tipoSelecionado === "ERROS" ? "×" : "✓"}</span>
                         </div>
+
                         <div>
                             <div className="flex items-center gap-2 flex-wrap">
                                 <div className="text-xl font-extrabold text-foreground">{tituloTipo}</div>
@@ -575,6 +645,7 @@ export default function CadernosPageGeral() {
                                     </span>
                                 )}
                             </div>
+
                             <div className="text-sm text-muted-foreground">
                                 {step === "disciplinas" && `${disciplinas.length} disciplinas`}
                                 {step === "assuntos" && `${assuntos.length} assuntos`}
@@ -586,7 +657,12 @@ export default function CadernosPageGeral() {
                     <div className="flex items-center gap-2">
                         {step === "disciplinas" && (
                             <button
-                                onClick={() => { setStep("home"); setTipoSelecionado(null); }}
+                                onClick={() => {
+                                    setStep("home");
+                                    setTipoSelecionado(null);
+                                    setDisciplinaSelecionada(null);
+                                    setAssuntoSelecionado(null);
+                                }}
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-card hover:bg-muted transition text-sm font-semibold"
                             >
                                 <ArrowLeftIcon className="w-5 h-5" /> Voltar
@@ -595,7 +671,12 @@ export default function CadernosPageGeral() {
 
                         {step === "assuntos" && (
                             <button
-                                onClick={() => { setStep("disciplinas"); setDisciplinaSelecionada(null); setAssuntos([]); }}
+                                onClick={() => {
+                                    setStep("disciplinas");
+                                    setDisciplinaSelecionada(null);
+                                    setAssuntoSelecionado(null);
+                                    setAssuntos([]);
+                                }}
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-card hover:bg-muted transition text-sm font-semibold"
                             >
                                 <ArrowLeftIcon className="w-5 h-5" /> Disciplinas
@@ -604,7 +685,12 @@ export default function CadernosPageGeral() {
 
                         {step === "questoes" && (
                             <button
-                                onClick={() => { setStep("assuntos"); setAssuntoSelecionado(null); setQuestoes([]); setIdsCache([]); }}
+                                onClick={() => {
+                                    setStep("assuntos");
+                                    setAssuntoSelecionado(null);
+                                    setQuestoes([]);
+                                    setIdsCache([]);
+                                }}
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-card hover:bg-muted transition text-sm font-semibold"
                             >
                                 <ArrowLeftIcon className="w-5 h-5" /> Assuntos
@@ -625,7 +711,7 @@ export default function CadernosPageGeral() {
                 </div>
             )}
 
-            {/* Disciplinas */}
+            {/* DISCIPLINAS */}
             {userId && step === "disciplinas" && (
                 <>
                     {mode === "grid" ? (
@@ -638,10 +724,16 @@ export default function CadernosPageGeral() {
                                         onClick={() => entrarAssuntos(d.disciplina)}
                                         className="text-left bg-card border border-border rounded-2xl p-6 shadow-sm hover:shadow-md transition block"
                                     >
-                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS" ? "bg-red-500/10 text-red-600" : "bg-emerald-500/10 text-emerald-600"}`}>
+                                        <div
+                                            className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS"
+                                                    ? "bg-red-500/10 text-red-600"
+                                                    : "bg-emerald-500/10 text-emerald-600"
+                                                }`}
+                                        >
                                             <BookIcon className="w-6 h-6" />
                                         </div>
                                         <div className="text-base font-bold text-foreground">{d.disciplina}</div>
+
                                         <div className="grid grid-cols-2 gap-3 mt-5">
                                             <div>
                                                 <div className="text-lg font-extrabold text-primary">{d.questoes}</div>
@@ -652,13 +744,17 @@ export default function CadernosPageGeral() {
                                                 <div className="text-xs text-muted-foreground">Anotadas</div>
                                             </div>
                                         </div>
+
                                         <div className="mt-5">
                                             <div className="flex justify-between text-xs text-muted-foreground mb-2">
                                                 <span>Progresso</span>
                                                 <span className="text-primary font-semibold">{progress}%</span>
                                             </div>
                                             <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                                <div className={`h-full rounded-full ${tipoSelecionado === "ERROS" ? "bg-red-500" : "bg-emerald-500"}`} style={{ width: `${progress}%` }} />
+                                                <div
+                                                    className={`h-full rounded-full ${tipoSelecionado === "ERROS" ? "bg-red-500" : "bg-emerald-500"}`}
+                                                    style={{ width: `${progress}%` }}
+                                                />
                                             </div>
                                         </div>
                                     </button>
@@ -695,7 +791,7 @@ export default function CadernosPageGeral() {
                 </>
             )}
 
-            {/* Assuntos */}
+            {/* ASSUNTOS */}
             {userId && step === "assuntos" && (
                 <>
                     {mode === "grid" ? (
@@ -708,10 +804,16 @@ export default function CadernosPageGeral() {
                                         onClick={() => entrarQuestoes(a.assunto)}
                                         className="text-left bg-card border border-border rounded-2xl p-6 shadow-sm hover:shadow-md transition block"
                                     >
-                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS" ? "bg-red-500/10 text-red-600" : "bg-emerald-500/10 text-emerald-600"}`}>
+                                        <div
+                                            className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS"
+                                                    ? "bg-red-500/10 text-red-600"
+                                                    : "bg-emerald-500/10 text-emerald-600"
+                                                }`}
+                                        >
                                             <BookIcon className="w-6 h-6" />
                                         </div>
                                         <div className="text-base font-bold text-foreground">{a.assunto}</div>
+
                                         <div className="grid grid-cols-2 gap-3 mt-5">
                                             <div>
                                                 <div className="text-lg font-extrabold text-primary">{a.questoes}</div>
@@ -722,13 +824,17 @@ export default function CadernosPageGeral() {
                                                 <div className="text-xs text-muted-foreground">Anotadas</div>
                                             </div>
                                         </div>
+
                                         <div className="mt-5">
                                             <div className="flex justify-between text-xs text-muted-foreground mb-2">
                                                 <span>Progresso</span>
                                                 <span className="text-primary font-semibold">{progress}%</span>
                                             </div>
                                             <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                                <div className={`h-full rounded-full ${tipoSelecionado === "ERROS" ? "bg-red-500" : "bg-emerald-500"}`} style={{ width: `${progress}%` }} />
+                                                <div
+                                                    className={`h-full rounded-full ${tipoSelecionado === "ERROS" ? "bg-red-500" : "bg-emerald-500"}`}
+                                                    style={{ width: `${progress}%` }}
+                                                />
                                             </div>
                                         </div>
                                     </button>
@@ -765,7 +871,7 @@ export default function CadernosPageGeral() {
                 </>
             )}
 
-            {/* Questões */}
+            {/* QUESTÕES */}
             {userId && step === "questoes" && (
                 <div className="bg-card rounded-2xl p-6 sm:p-8 shadow-sm border border-border">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border pb-3 mb-6">
