@@ -1,12 +1,23 @@
 "use client";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 /* ===================== UI ===================== */
 function TesouraIcon({ className = "" }: { className?: string }) {
     return (
-        <svg viewBox="0 0 20 20" fill="none" width={22} height={22} className={className + " pointer-events-none"}>
-            <path d="M7.5 8.5L3 3M12.5 8.5L17 3M3 17l7-7 7 7" stroke="#9ca3af" strokeWidth={2} strokeLinecap="round" />
+        <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            width={22}
+            height={22}
+            className={className + " pointer-events-none"}
+        >
+            <path
+                d="M7.5 8.5L3 3M12.5 8.5L17 3M3 17l7-7 7 7"
+                stroke="#9ca3af"
+                strokeWidth={2}
+                strokeLinecap="round"
+            />
             <circle cx={4.5} cy={15.5} r={1.2} fill="#bbb" />
             <circle cx={15.5} cy={15.5} r={1.2} fill="#bbb" />
         </svg>
@@ -15,8 +26,12 @@ function TesouraIcon({ className = "" }: { className?: string }) {
 
 type Option = { letter?: string; text: string };
 
+type CadernoTipo = "ERROS" | "ACERTOS";
+export type CadernoStatus = { ERROS: boolean; ACERTOS: boolean };
+
 interface QuestionCardProps {
     id: string;
+
     // ideal: passe os IDs reais aqui
     materiaId?: string | null;
     assuntoId?: string | null;
@@ -34,6 +49,14 @@ interface QuestionCardProps {
     erros?: any[];
     onNotificarErro?: (erroText: string) => void;
     onNovoComentario?: (comentario: string) => void;
+
+    /* ===================== NOVO: CADERNOS ===================== */
+    // Se o pai (QuestionsList) passar, o card só exibe e chama callbacks.
+    // Se não passar, o card faz tudo sozinho via Supabase.
+    cadernoStatus?: CadernoStatus;
+    cadernoLoading?: { ERROS?: boolean; ACERTOS?: boolean };
+    onToggleCadernoErros?: () => void;
+    onToggleCadernoAcertos?: () => void;
 }
 
 /* ===================== HELPERS ===================== */
@@ -130,7 +153,9 @@ async function atualizarEstatisticasQuestao(
 
     const { data, error } = await supabase
         .from("estatisticas")
-        .select("id, questoes_respondidas, taxa_acerto, progresso_semanal, acc_por_materia, acc_por_assunto")
+        .select(
+            "id, questoes_respondidas, taxa_acerto, progresso_semanal, acc_por_materia, acc_por_assunto"
+        )
         .eq("user_id", user.id as string)
         .maybeSingle();
 
@@ -139,7 +164,13 @@ async function atualizarEstatisticasQuestao(
     const bump = (obj: Record<string, any>, key?: string | null, ok?: boolean) => {
         if (!key) return obj; // sem chave, não mexe
         const cur = obj[key] ?? { total: 0, corretas: 0 };
-        return { ...obj, [key]: { total: (cur.total ?? 0) + 1, corretas: (cur.corretas ?? 0) + (ok ? 1 : 0) } };
+        return {
+            ...obj,
+            [key]: {
+                total: (cur.total ?? 0) + 1,
+                corretas: (cur.corretas ?? 0) + (ok ? 1 : 0),
+            },
+        };
     };
 
     if (error || !data) {
@@ -149,15 +180,21 @@ async function atualizarEstatisticasQuestao(
             taxa_acerto: acertou ? 100 : 0,
             tempo_estudado: "00:00:00",
             progresso_semanal: [{ dia: hoje, questoes: 1 }],
-            acc_por_materia: materiaId ? { [materiaId]: { total: 1, corretas: acertou ? 1 : 0 } } : {},
-            acc_por_assunto: assuntoId ? { [assuntoId]: { total: 1, corretas: acertou ? 1 : 0 } } : {},
+            acc_por_materia: materiaId
+                ? { [materiaId]: { total: 1, corretas: acertou ? 1 : 0 } }
+                : {},
+            acc_por_assunto: assuntoId
+                ? { [assuntoId]: { total: 1, corretas: acertou ? 1 : 0 } }
+                : {},
             atualizado_em: new Date().toISOString(),
         });
         return;
     }
 
     const novasQuestoes = (data.questoes_respondidas ?? 0) + 1;
-    const acertosAnt = Math.round(((data.taxa_acerto ?? 0) / 100) * (data.questoes_respondidas ?? 0));
+    const acertosAnt = Math.round(
+        (((data.taxa_acerto ?? 0) / 100) * (data.questoes_respondidas ?? 0)) as number
+    );
     const novosAcertos = acertosAnt + (acertou ? 1 : 0);
     const taxa_acerto = Math.round((novosAcertos / novasQuestoes) * 100);
 
@@ -202,12 +239,73 @@ async function registrarResolucao(
     });
 }
 
+/* ===================== NOVO: CADERNOS (fallback interno) ===================== */
+/**
+ * Requer tabela: caderno_itens(user_id, questao_id, tipo) com UNIQUE(user_id,questao_id,tipo)
+ * tipo em ('ERROS','ACERTOS')
+ */
+async function getUserId(): Promise<string | null> {
+    const { data } = await supabase.auth.getUser();
+    return data?.user?.id ?? null;
+}
+
+async function fetchCadernoStatusForQuestao(userId: string, questaoId: string): Promise<CadernoStatus> {
+    const { data, error } = await supabase
+        .from("caderno_itens")
+        .select("tipo")
+        .eq("user_id", userId)
+        .eq("questao_id", questaoId);
+
+    if (error) return { ERROS: false, ACERTOS: false };
+
+    const st: CadernoStatus = { ERROS: false, ACERTOS: false };
+    (data ?? []).forEach((row: any) => {
+        const t = row.tipo as CadernoTipo;
+        if (t === "ERROS" || t === "ACERTOS") st[t] = true;
+    });
+    return st;
+}
+
+async function addToCaderno(userId: string, questaoId: string, tipo: CadernoTipo) {
+    const { error } = await supabase
+        .from("caderno_itens")
+        .upsert({ user_id: userId, questao_id: questaoId, tipo }, { onConflict: "user_id,questao_id,tipo" });
+    if (error) throw error;
+}
+
+async function removeFromCaderno(userId: string, questaoId: string, tipo: CadernoTipo) {
+    const { error } = await supabase
+        .from("caderno_itens")
+        .delete()
+        .eq("user_id", userId)
+        .eq("questao_id", questaoId)
+        .eq("tipo", tipo);
+    if (error) throw error;
+}
+
 /* ===================== COMPONENTE ===================== */
 export function QuestionCard(props: QuestionCardProps) {
     const {
-        id, materiaId, assuntoId, materiaNome, assuntoNome,
-        tags, statement, options, correct, explanation,
-        comentarios = [], erros = [], onNotificarErro, onNovoComentario,
+        id,
+        materiaId,
+        assuntoId,
+        materiaNome,
+        assuntoNome,
+        tags,
+        statement,
+        options,
+        correct,
+        explanation,
+        comentarios = [],
+        erros = [],
+        onNotificarErro,
+        onNovoComentario,
+
+        // NOVO
+        cadernoStatus,
+        cadernoLoading,
+        onToggleCadernoErros,
+        onToggleCadernoAcertos,
     } = props;
 
     const [selected, setSelected] = useState<string | null>(null);
@@ -222,6 +320,23 @@ export function QuestionCard(props: QuestionCardProps) {
     const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
     const [comentariosState, setComentariosState] = useState<any[]>(comentarios || []);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // fallback interno se o pai não controlar
+    const [localCadernoStatus, setLocalCadernoStatus] = useState<CadernoStatus>({
+        ERROS: false,
+        ACERTOS: false,
+    });
+    const [localBusy, setLocalBusy] = useState<{ ERROS: boolean; ACERTOS: boolean }>({
+        ERROS: false,
+        ACERTOS: false,
+    });
+    const [cadernoMsg, setCadernoMsg] = useState<string | null>(null);
+
+    const effectiveStatus = cadernoStatus ?? localCadernoStatus;
+    const effectiveBusy = {
+        ERROS: cadernoLoading?.ERROS ?? localBusy.ERROS,
+        ACERTOS: cadernoLoading?.ACERTOS ?? localBusy.ACERTOS,
+    };
 
     // caches locais
     const caches = useMemo(
@@ -238,6 +353,58 @@ export function QuestionCard(props: QuestionCardProps) {
         setEliminadas((prev) => (prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]));
     };
 
+    // se o pai NÃO passar status, carregamos aqui
+    useEffect(() => {
+        let cancelled = false;
+
+        (async () => {
+            if (cadernoStatus) return; // pai controla
+            const uid = await getUserId();
+            if (!uid) return;
+            const st = await fetchCadernoStatusForQuestao(uid, id);
+            if (!cancelled) setLocalCadernoStatus(st);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [id, cadernoStatus]);
+
+    async function toggleLocal(tipo: CadernoTipo) {
+        // se pai controla, só chama callback
+        if (tipo === "ERROS" && onToggleCadernoErros) return onToggleCadernoErros();
+        if (tipo === "ACERTOS" && onToggleCadernoAcertos) return onToggleCadernoAcertos();
+
+        // fallback interno
+        const uid = await getUserId();
+        if (!uid) {
+            setCadernoMsg("Faça login para usar os cadernos.");
+            setTimeout(() => setCadernoMsg(null), 2200);
+            return;
+        }
+
+        setCadernoMsg(null);
+        setLocalBusy((b) => ({ ...b, [tipo]: true }));
+
+        try {
+            const atual = localCadernoStatus[tipo];
+            if (!atual) {
+                await addToCaderno(uid, id, tipo);
+                setLocalCadernoStatus((s) => ({ ...s, [tipo]: true }));
+                showFeedback(tipo === "ERROS" ? "Adicionada aos Erros ✅" : "Adicionada aos Acertos ✅");
+            } else {
+                await removeFromCaderno(uid, id, tipo);
+                setLocalCadernoStatus((s) => ({ ...s, [tipo]: false }));
+                showFeedback(tipo === "ERROS" ? "Removida dos Erros" : "Removida dos Acertos");
+            }
+        } catch (e: any) {
+            setCadernoMsg(e?.message || "Erro ao atualizar caderno.");
+            setTimeout(() => setCadernoMsg(null), 2200);
+        } finally {
+            setLocalBusy((b) => ({ ...b, [tipo]: false }));
+        }
+    }
+
     return (
         <div className="bg-card rounded-2xl p-7 mb-6 shadow border border-border max-w-6xl w-full mx-auto transition-all font-inter relative">
             {feedbackMsg && (
@@ -246,9 +413,16 @@ export function QuestionCard(props: QuestionCardProps) {
                 </div>
             )}
 
+            {cadernoMsg && (
+                <div className="mb-4 text-sm text-red-600">{cadernoMsg}</div>
+            )}
+
             <div className="flex flex-wrap gap-2 mb-5">
                 {tags.map((tag, i) => (
-                    <span key={i} className="bg-accent text-accent-foreground text-xs font-semibold rounded px-3 py-1">
+                    <span
+                        key={i}
+                        className="bg-accent text-accent-foreground text-xs font-semibold rounded px-3 py-1"
+                    >
                         {tag}
                     </span>
                 ))}
@@ -266,7 +440,8 @@ export function QuestionCard(props: QuestionCardProps) {
                     let btnClass =
                         "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px] relative group";
                     if (showResult) {
-                        if (isSelected && selected !== correct) btnClass += " bg-destructive/10 border-destructive text-destructive";
+                        if (isSelected && selected !== correct)
+                            btnClass += " bg-destructive/10 border-destructive text-destructive";
                         else if (isCorrect) btnClass += " bg-green-100/60 border-green-300 text-green-900";
                         else btnClass += " bg-card border-border";
                     } else if (isSelected) {
@@ -285,18 +460,31 @@ export function QuestionCard(props: QuestionCardProps) {
                             onClick={() => setSelected(value)}
                         >
                             <span
-                                onClick={(e) => { e.stopPropagation(); toggleEliminada(idx); }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleEliminada(idx);
+                                }}
                                 title={eliminada ? "Restaurar alternativa" : "Eliminar alternativa"}
-                                className={`mr-3 transition cursor-pointer rounded-full p-1 hover:bg-muted border border-transparent hover:border-border ${eliminada ? "opacity-40" : ""}`}
+                                className={`mr-3 transition cursor-pointer rounded-full p-1 hover:bg-muted border border-transparent hover:border-border ${eliminada ? "opacity-40" : ""
+                                    }`}
                             >
                                 <TesouraIcon />
                             </span>
-                            <span className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
-                ${showResult && isCorrect ? "bg-green-600 text-white" :
-                                    showResult && isSelected && selected !== correct ? "bg-destructive text-white" :
-                                        isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
+
+                            <span
+                                className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
+                ${showResult && isCorrect
+                                        ? "bg-green-600 text-white"
+                                        : showResult && isSelected && selected !== correct
+                                            ? "bg-destructive text-white"
+                                            : isSelected
+                                                ? "bg-primary text-primary-foreground"
+                                                : "bg-muted text-foreground"
+                                    }`}
+                            >
                                 {value}
                             </span>
+
                             <span className="text-[15px]">{opt.text}</span>
                         </button>
                     );
@@ -332,8 +520,6 @@ export function QuestionCard(props: QuestionCardProps) {
                             resolvedAid = resolved.aid;
                         }
 
-                        console.debug("[QuestionCard] resolved:", { resolvedMid, resolvedAid, materiaNome, assuntoNome, tags });
-
                         await Promise.all([
                             registrarResolucao(id, correta, resolvedMid, resolvedAid),
                             atualizarEstatisticasQuestao(correta, resolvedMid, resolvedAid),
@@ -344,6 +530,37 @@ export function QuestionCard(props: QuestionCardProps) {
                     disabled={!selected || showResult}
                 >
                     Conferir Resposta
+                </button>
+
+                {/* ===================== NOVO: BOTÕES CADERNOS ===================== */}
+                <button
+                    type="button"
+                    onClick={() => toggleLocal("ERROS")}
+                    disabled={effectiveBusy.ERROS}
+                    className={`font-bold py-2 px-4 rounded-xl text-sm transition border
+            ${effectiveStatus.ERROS
+                            ? "bg-red-600 text-white border-red-600 hover:bg-red-700"
+                            : "bg-transparent text-red-600 border-red-200 hover:bg-red-50"
+                        }`}
+                    title={effectiveStatus.ERROS ? "Remover do Caderno de Erros" : "Adicionar ao Caderno de Erros"}
+                >
+                    {effectiveBusy.ERROS ? "Salvando..." : effectiveStatus.ERROS ? "✓ Erros" : "+ Erros"}
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => toggleLocal("ACERTOS")}
+                    disabled={effectiveBusy.ACERTOS}
+                    className={`font-bold py-2 px-4 rounded-xl text-sm transition border
+            ${effectiveStatus.ACERTOS
+                            ? "bg-green-600 text-white border-green-600 hover:bg-green-700"
+                            : "bg-transparent text-green-700 border-green-200 hover:bg-green-50"
+                        }`}
+                    title={
+                        effectiveStatus.ACERTOS ? "Remover do Caderno de Acertos" : "Adicionar ao Caderno de Acertos"
+                    }
+                >
+                    {effectiveBusy.ACERTOS ? "Salvando..." : effectiveStatus.ACERTOS ? "✓ Acertos" : "+ Acertos"}
                 </button>
 
                 {/* ... (comentários/compartilhar/erro iguais) */}
