@@ -16,8 +16,8 @@ function renderWithMarks(text: string) {
 }
 
 function plainSnippet(text: string, size = 140) {
-    const noMarks = text.replace(/==(.+?)==/g, "$1");
-    const trimmed = noMarks.replace(/\s+/g, " ").trim();
+    const t = text.replace(/==(.+?)==/g, "$1");
+    const trimmed = t.replace(/\s+/g, " ").trim();
     return trimmed.length > size ? trimmed.slice(0, size) + "…" : trimmed;
 }
 
@@ -43,9 +43,7 @@ type ViewLevel = "materias" | "assuntos" | "revisoes";
 /* ================= PAGE ================= */
 
 export default function RevisaoPage() {
-    const [today, setToday] = useState(
-        new Date().toISOString().slice(0, 10)
-    );
+    const [today] = useState(new Date().toISOString().slice(0, 10));
 
     const [rows, setRows] = useState<Rev[]>([]);
     const [loading, setLoading] = useState(true);
@@ -56,66 +54,65 @@ export default function RevisaoPage() {
     const [viewLevel, setViewLevel] =
         useState<ViewLevel>("materias");
 
-    const [materiaSel, setMateriaSel] =
-        useState<string | null>(null);
-
-    const [assuntoSel, setAssuntoSel] =
-        useState<string | null>(null);
+    const [materiaSel, setMateriaSel] = useState<string | null>(null);
+    const [assuntoSel, setAssuntoSel] = useState<string | null>(null);
 
     const [viewing, setViewing] = useState<Rev | null>(null);
 
-    /* ================= LOAD MAPS ================= */
-
-    useEffect(() => {
-        (async () => {
-            const uid = (await supabase.auth.getUser()).data.user?.id;
-            if (!uid) return;
-
-            const [mats, asss] = await Promise.all([
-                supabase.from("materias").select("id,nome").eq("user_id", uid),
-                supabase.from("assuntos").select("id,nome").eq("user_id", uid),
-            ]);
-
-            const mm: any = {};
-            mats.data?.forEach((m: any) => (mm[m.id] = m.nome));
-
-            const am: any = {};
-            asss.data?.forEach((a: any) => (am[a.id] = a.nome));
-
-            setMateriaMap(mm);
-            setAssuntoMap(am);
-        })();
-    }, []);
-
-    /* ================= LOAD REVISOES ================= */
+    /* ================= LOAD BASE DATA ================= */
 
     useEffect(() => {
         (async () => {
             setLoading(true);
 
-            const uid = (await supabase.auth.getUser()).data.user?.id;
+            const { data: userData } = await supabase.auth.getUser();
+            const uid = userData.user?.id;
             if (!uid) return;
 
+            /* MAPAS */
+            const [mats, asss] = await Promise.all([
+                supabase.from("materias").select("id,nome").eq("user_id", uid),
+                supabase.from("assuntos").select("id,nome").eq("user_id", uid),
+            ]);
+
+            const mm: Record<string, string> = {};
+            mats.data?.forEach((m: any) => (mm[m.id] = m.nome));
+
+            const am: Record<string, string> = {};
+            asss.data?.forEach((a: any) => (am[a.id] = a.nome));
+
+            setMateriaMap(mm);
+            setAssuntoMap(am);
+
+            /* REVISOES — MESMA LÓGICA DOS RESUMOS ANTIGOS */
             const { data } = await supabase
                 .from("revisoes")
-                .select(
-                    "id,etapa,scheduled_for,resumos(id,titulo,conteudo,assunto_id,materia_id)"
-                )
+                .select(`
+          id,
+          etapa,
+          scheduled_for,
+          resumos (
+            id,
+            titulo,
+            conteudo,
+            assunto_id,
+            materia_id
+          )
+        `)
                 .eq("user_id", uid)
                 .is("done_at", null)
                 .lte("scheduled_for", today)
-                .order("scheduled_for");
+                .order("scheduled_for", { ascending: true });
 
             const normalized: Rev[] =
-                (data as any[])?.map((r) => ({
+                (data ?? []).map((r: any) => ({
                     id: r.id,
                     etapa: r.etapa,
                     scheduled_for: r.scheduled_for,
-                    resumo: r.resumos?.[0] ?? null,
-                })) ?? [];
+                    resumo: r.resumos ?? null,
+                })) || [];
 
             setRows(normalized);
-            setViewing(null);
             setLoading(false);
         })();
     }, [today]);
@@ -170,13 +167,9 @@ export default function RevisaoPage() {
             nomeAssunto(r) === assuntoSel
     );
 
-    /* ================= CARD PADRÃO ================= */
+    /* ================= CARD ================= */
 
-    const Card = ({
-        title,
-        count,
-        onClick,
-    }: any) => (
+    const Card = ({ title, count, onClick }: any) => (
         <button
             onClick={onClick}
             className="bg-card border border-border rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md transition"
@@ -195,14 +188,18 @@ export default function RevisaoPage() {
 
     /* ================= UI ================= */
 
+    if (loading)
+        return (
+            <div className="p-6 text-muted-foreground">
+                Carregando revisões...
+            </div>
+        );
+
     return (
         <div className="mx-auto max-w-6xl p-6">
+            <h1 className="text-2xl font-semibold mb-6">Revisões</h1>
 
-            <h1 className="text-2xl font-semibold mb-6">
-                Revisões
-            </h1>
-
-            {/* ===== MATÉRIAS ===== */}
+            {/* MATÉRIAS */}
             {viewLevel === "materias" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {materias.map(([m, items]: any) => (
@@ -219,7 +216,7 @@ export default function RevisaoPage() {
                 </div>
             )}
 
-            {/* ===== ASSUNTOS ===== */}
+            {/* ASSUNTOS */}
             {viewLevel === "assuntos" && (
                 <>
                     <button
@@ -248,7 +245,7 @@ export default function RevisaoPage() {
                 </>
             )}
 
-            {/* ===== REVISOES ===== */}
+            {/* LISTA */}
             {viewLevel === "revisoes" && !viewing && (
                 <>
                     <button
@@ -274,15 +271,11 @@ export default function RevisaoPage() {
 
                                     <div className="text-xs text-muted-foreground">
                                         Etapa {r.etapa} •{" "}
-                                        {new Date(
-                                            r.scheduled_for
-                                        ).toLocaleDateString("pt-BR")}
+                                        {new Date(r.scheduled_for).toLocaleDateString("pt-BR")}
                                     </div>
 
                                     <p className="text-sm mt-1">
-                                        {plainSnippet(
-                                            r.resumo?.conteudo || ""
-                                        )}
+                                        {plainSnippet(r.resumo?.conteudo || "")}
                                     </p>
                                 </div>
 
@@ -298,7 +291,7 @@ export default function RevisaoPage() {
                 </>
             )}
 
-            {/* ===== VISUALIZAÇÃO ===== */}
+            {/* VISUALIZAÇÃO */}
             {viewing && (
                 <div className="border rounded-xl bg-card">
                     <div className="flex justify-between border-b p-4">
