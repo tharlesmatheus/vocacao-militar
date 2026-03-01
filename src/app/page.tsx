@@ -18,6 +18,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BookOpen } from "lucide-react";
 import {
   Brain,
   FileText,
@@ -241,25 +242,97 @@ export default function DashboardHome() {
     Array<{ materia_id: string | null; duration_seconds: number | null }>
   >([]);
 
+  /* =========================
+ * CONTADORES DASHBOARD
+ * ========================= */
+
+  const [questoesHoje, setQuestoesHoje] = useState(0);
+  const [totalResumos, setTotalResumos] = useState(0);
+  const [revisoesHoje, setRevisoesHoje] = useState(0);
+  const [totalCadernos, setTotalCadernos] = useState(0);
+  const [tempoHojeSeg, setTempoHojeSeg] = useState(0);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    (async () => {
+      const inicioHoje = startOfLocalDay();
+
+      const [
+        questoes,
+        resumos,
+        revisoes,
+        sessoesHoje,
+        cadernos,
+      ] = await Promise.all([
+        supabase
+          .from("questoes_resolvidas")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .gte("created_at", inicioHoje.toISOString()),
+
+        supabase
+          .from("resumos")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId),
+
+        supabase
+          .from("revisoes")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .is("done_at", null)
+          .lte("scheduled_for", new Date().toISOString()),
+
+        supabase
+          .from("study_sessions")
+          .select("duration_seconds")
+          .eq("user_id", userId)
+          .gte("started_at", inicioHoje.toISOString())
+          .not("ended_at", "is", null),
+
+        supabase
+          .from("cadernos")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId),
+      ]);
+
+      setQuestoesHoje(questoes.count ?? 0);
+      setTotalResumos(resumos.count ?? 0);
+      setRevisoesHoje(revisoes.count ?? 0);
+      setTotalCadernos(cadernos.count ?? 0);
+
+      const tempo = (sessoesHoje.data ?? []).reduce(
+        (acc: number, s: any) => acc + (s.duration_seconds ?? 0),
+        0
+      );
+
+      setTempoHojeSeg(tempo);
+    })();
+  }, [userId]);
+
+  /* =========================
+   * AÇÕES (6 BOTÕES)
+   * ========================= */
+
   const ACTIONS = useMemo(
     () => [
       {
         name: "Resolver Questões",
-        subtitle: "Continue",
+        subtitle: `${questoesHoje} hoje`,
         href: "/questoes",
         icon: Brain,
         bg: "from-indigo-500 to-violet-600",
       },
       {
         name: "Resumos",
-        subtitle: "Por tópicos",
+        subtitle: `${totalResumos} resumos`,
         href: "/resumos",
         icon: FileText,
         bg: "from-sky-500 to-blue-600",
       },
       {
         name: "Revisão",
-        subtitle: "Programada",
+        subtitle: `${revisoesHoje} pendentes`,
         href: "/revisao",
         icon: History,
         bg: "from-orange-500 to-amber-500",
@@ -271,8 +344,28 @@ export default function DashboardHome() {
         icon: CalendarDays,
         bg: "from-emerald-500 to-teal-600",
       },
+      {
+        name: "Cadernos",
+        subtitle: `${totalCadernos} cadernos`,
+        href: "/cadernos",
+        icon: BookOpen,
+        bg: "from-rose-500 to-red-600",
+      },
+      {
+        name: "Tempo de estudo",
+        subtitle: fmtHMSFull(tempoHojeSeg),
+        href: "/tempo-de-estudo",
+        icon: Timer,
+        bg: "from-purple-500 to-fuchsia-600",
+      },
     ],
-    []
+    [
+      questoesHoje,
+      totalResumos,
+      revisoesHoje,
+      totalCadernos,
+      tempoHojeSeg,
+    ]
   );
 
   // ====== LOAD AUTH + DADOS ======
