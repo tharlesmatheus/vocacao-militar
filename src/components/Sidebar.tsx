@@ -24,6 +24,7 @@ import {
     Brain,
     ChevronLeft,
     ChevronRight,
+    NotebookText,
     Clock, // ✅ Ícone para "Tempo de estudo"
 } from "lucide-react";
 import { useState } from "react";
@@ -41,6 +42,7 @@ const MENU = [
         category: "ESTUDO",
         items: [
             { name: "Questões", href: "/questoes", icon: Brain },
+            { name: "Cadernos", href: "/cadernos", icon: NotebookText },
             { name: "Edital", href: "/edital", icon: BookOpen },
             { name: "Resumos", href: "/resumos", icon: FileText },
             { name: "Revisão", href: "/revisao", icon: History },
