@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { BookOpen } from "lucide-react";
+import { BookOpen, LayoutGrid, List } from "lucide-react";
 
 /* ================= TYPES ================= */
 
@@ -15,6 +15,7 @@ type Resumo = {
 };
 
 type ViewLevel = "disciplinas" | "assuntos" | "resumos";
+type ViewMode = "grid" | "list";
 
 /* ================= PAGE ================= */
 
@@ -25,6 +26,9 @@ export default function ResumosPage() {
 
     const [viewLevel, setViewLevel] =
         useState<ViewLevel>("disciplinas");
+
+    const [viewMode, setViewMode] =
+        useState<ViewMode>("grid");
 
     const [disciplinaSel, setDisciplinaSel] =
         useState<string | null>(null);
@@ -47,7 +51,6 @@ export default function ResumosPage() {
                     .eq("user_id", uid),
 
                 supabase.from("materias").select("id,nome"),
-
                 supabase.from("assuntos").select("id,nome"),
             ]);
 
@@ -97,7 +100,7 @@ export default function ResumosPage() {
             nameAssunto(r.assunto_id) === assuntoSel
     );
 
-    /* ================= CARD PADRÃO CADERNOS ================= */
+    /* ================= CARD ================= */
 
     const Card = ({
         title,
@@ -107,34 +110,52 @@ export default function ResumosPage() {
         title: string;
         count: number;
         onClick: () => void;
-    }) => (
-        <button
-            onClick={onClick}
-            className="
-        bg-card
-        border border-border
-        rounded-2xl
-        p-6
-        flex flex-col items-center
-        text-center
-        hover:shadow-md
-        transition
-      "
-        >
-            {/* ICON */}
-            <div className="bg-red-500 text-white p-4 rounded-xl mb-4">
-                <BookOpen size={26} />
-            </div>
+    }) => {
+        /* LIST MODE */
+        if (viewMode === "list") {
+            return (
+                <button
+                    onClick={onClick}
+                    className="w-full flex items-center justify-between border border-border bg-card rounded-xl px-4 py-3 hover:bg-muted transition"
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="bg-red-500 text-white p-2 rounded-lg">
+                            <BookOpen size={18} />
+                        </div>
 
-            {/* TITLE */}
-            <h3 className="font-semibold text-lg">{title}</h3>
+                        <div className="text-left">
+                            <div className="font-medium">{title}</div>
+                            <div className="text-xs text-muted-foreground">
+                                {count} resumos
+                            </div>
+                        </div>
+                    </div>
+                </button>
+            );
+        }
 
-            {/* COUNT */}
-            <p className="text-sm text-muted-foreground mt-2">
-                {count} resumos
-            </p>
-        </button>
-    );
+        /* GRID MODE */
+        return (
+            <button
+                onClick={onClick}
+                className="
+          bg-card border border-border rounded-2xl p-6
+          flex flex-col items-center text-center
+          hover:shadow-md transition
+        "
+            >
+                <div className="bg-red-500 text-white p-4 rounded-xl mb-4">
+                    <BookOpen size={26} />
+                </div>
+
+                <h3 className="font-semibold text-lg">{title}</h3>
+
+                <p className="text-sm text-muted-foreground mt-2">
+                    {count} resumos
+                </p>
+            </button>
+        );
+    };
 
     /* ================= UI ================= */
 
@@ -147,14 +168,46 @@ export default function ResumosPage() {
                     Meus Resumos
                 </h1>
 
-                <button className="bg-primary text-white px-5 py-2 rounded-xl">
-                    + Novo resumo
-                </button>
+                <div className="flex items-center gap-3">
+
+                    {/* TOGGLE GRID/LIST */}
+                    <div className="flex bg-muted border border-border rounded-xl p-1">
+                        <button
+                            onClick={() => setViewMode("grid")}
+                            className={`p-2 rounded-lg ${viewMode === "grid"
+                                    ? "bg-background shadow"
+                                    : "text-muted-foreground"
+                                }`}
+                        >
+                            <LayoutGrid size={18} />
+                        </button>
+
+                        <button
+                            onClick={() => setViewMode("list")}
+                            className={`p-2 rounded-lg ${viewMode === "list"
+                                    ? "bg-background shadow"
+                                    : "text-muted-foreground"
+                                }`}
+                        >
+                            <List size={18} />
+                        </button>
+                    </div>
+
+                    <button className="bg-primary text-white px-5 py-2 rounded-xl">
+                        + Novo resumo
+                    </button>
+                </div>
             </div>
 
-            {/* ================= DISCIPLINAS ================= */}
+            {/* DISCIPLINAS */}
             {viewLevel === "disciplinas" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div
+                    className={
+                        viewMode === "grid"
+                            ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+                            : "space-y-3"
+                    }
+                >
                     {disciplinas.map(([disciplina, items]: any) => (
                         <Card
                             key={disciplina}
@@ -169,7 +222,7 @@ export default function ResumosPage() {
                 </div>
             )}
 
-            {/* ================= ASSUNTOS ================= */}
+            {/* ASSUNTOS */}
             {viewLevel === "assuntos" && (
                 <>
                     <button
@@ -182,7 +235,13 @@ export default function ResumosPage() {
                         ← Voltar
                     </button>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div
+                        className={
+                            viewMode === "grid"
+                                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+                                : "space-y-3"
+                        }
+                    >
                         {assuntos.map(([assunto, items]: any) => (
                             <Card
                                 key={assunto}
@@ -198,7 +257,7 @@ export default function ResumosPage() {
                 </>
             )}
 
-            {/* ================= RESUMOS ================= */}
+            {/* RESUMOS */}
             {viewLevel === "resumos" && (
                 <>
                     <button

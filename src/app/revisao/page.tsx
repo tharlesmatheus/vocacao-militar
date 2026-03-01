@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { BookOpen } from "lucide-react";
+import { BookOpen, LayoutGrid, List } from "lucide-react";
 
 /* ================= UTILS ================= */
 
@@ -39,11 +39,12 @@ type Rev = {
 };
 
 type ViewLevel = "materias" | "assuntos" | "revisoes";
+type ViewMode = "grid" | "list";
 
 /* ================= PAGE ================= */
 
 export default function RevisaoPage() {
-    const [today] = useState(new Date().toISOString().slice(0, 10));
+    const today = new Date().toISOString().slice(0, 10);
 
     const [rows, setRows] = useState<Rev[]>([]);
     const [loading, setLoading] = useState(true);
@@ -51,15 +52,15 @@ export default function RevisaoPage() {
     const [materiaMap, setMateriaMap] = useState<Record<string, string>>({});
     const [assuntoMap, setAssuntoMap] = useState<Record<string, string>>({});
 
-    const [viewLevel, setViewLevel] =
-        useState<ViewLevel>("materias");
+    const [viewLevel, setViewLevel] = useState<ViewLevel>("materias");
+    const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
     const [materiaSel, setMateriaSel] = useState<string | null>(null);
     const [assuntoSel, setAssuntoSel] = useState<string | null>(null);
 
     const [viewing, setViewing] = useState<Rev | null>(null);
 
-    /* ================= LOAD BASE DATA ================= */
+    /* ================= LOAD DATA ================= */
 
     useEffect(() => {
         (async () => {
@@ -84,7 +85,7 @@ export default function RevisaoPage() {
             setMateriaMap(mm);
             setAssuntoMap(am);
 
-            /* REVISOES — MESMA LÓGICA DOS RESUMOS ANTIGOS */
+            /* REVISOES */
             const { data } = await supabase
                 .from("revisoes")
                 .select(`
@@ -120,14 +121,10 @@ export default function RevisaoPage() {
     /* ================= HELPERS ================= */
 
     const nomeMateria = (r: Rev) =>
-        (r.resumo?.materia_id &&
-            materiaMap[r.resumo.materia_id]) ||
-        "Matéria";
+        (r.resumo?.materia_id && materiaMap[r.resumo.materia_id]) || "Matéria";
 
     const nomeAssunto = (r: Rev) =>
-        (r.resumo?.assunto_id &&
-            assuntoMap[r.resumo.assunto_id]) ||
-        "Assunto";
+        (r.resumo?.assunto_id && assuntoMap[r.resumo.assunto_id]) || "Assunto";
 
     const concluir = async (id: string) => {
         await supabase
@@ -169,22 +166,46 @@ export default function RevisaoPage() {
 
     /* ================= CARD ================= */
 
-    const Card = ({ title, count, onClick }: any) => (
-        <button
-            onClick={onClick}
-            className="bg-card border border-border rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md transition"
-        >
-            <div className="bg-red-500 text-white p-4 rounded-xl mb-4">
-                <BookOpen size={26} />
-            </div>
+    const Card = ({ title, count, onClick }: any) => {
+        if (viewMode === "list") {
+            return (
+                <button
+                    onClick={onClick}
+                    className="w-full flex items-center justify-between border border-border bg-card rounded-xl px-4 py-3 hover:bg-muted transition"
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="bg-red-500 text-white p-2 rounded-lg">
+                            <BookOpen size={18} />
+                        </div>
 
-            <h3 className="font-semibold text-lg">{title}</h3>
+                        <div className="text-left">
+                            <div className="font-medium">{title}</div>
+                            <div className="text-xs text-muted-foreground">
+                                {count} revisões
+                            </div>
+                        </div>
+                    </div>
+                </button>
+            );
+        }
 
-            <p className="text-sm text-muted-foreground mt-2">
-                {count} revisões
-            </p>
-        </button>
-    );
+        return (
+            <button
+                onClick={onClick}
+                className="bg-card border border-border rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md transition"
+            >
+                <div className="bg-red-500 text-white p-4 rounded-xl mb-4">
+                    <BookOpen size={26} />
+                </div>
+
+                <h3 className="font-semibold text-lg">{title}</h3>
+
+                <p className="text-sm text-muted-foreground mt-2">
+                    {count} revisões
+                </p>
+            </button>
+        );
+    };
 
     /* ================= UI ================= */
 
@@ -197,11 +218,44 @@ export default function RevisaoPage() {
 
     return (
         <div className="mx-auto max-w-6xl p-6">
-            <h1 className="text-2xl font-semibold mb-6">Revisões</h1>
+
+            {/* HEADER */}
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-2xl font-semibold">Revisões</h1>
+
+                {/* TOGGLE GRID/LIST */}
+                <div className="flex bg-muted border border-border rounded-xl p-1">
+                    <button
+                        onClick={() => setViewMode("grid")}
+                        className={`p-2 rounded-lg ${viewMode === "grid"
+                                ? "bg-background shadow"
+                                : "text-muted-foreground"
+                            }`}
+                    >
+                        <LayoutGrid size={18} />
+                    </button>
+
+                    <button
+                        onClick={() => setViewMode("list")}
+                        className={`p-2 rounded-lg ${viewMode === "list"
+                                ? "bg-background shadow"
+                                : "text-muted-foreground"
+                            }`}
+                    >
+                        <List size={18} />
+                    </button>
+                </div>
+            </div>
 
             {/* MATÉRIAS */}
             {viewLevel === "materias" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div
+                    className={
+                        viewMode === "grid"
+                            ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+                            : "space-y-3"
+                    }
+                >
                     {materias.map(([m, items]: any) => (
                         <Card
                             key={m}
@@ -229,7 +283,13 @@ export default function RevisaoPage() {
                         ← Matérias
                     </button>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div
+                        className={
+                            viewMode === "grid"
+                                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+                                : "space-y-3"
+                        }
+                    >
                         {assuntos.map(([a, items]: any) => (
                             <Card
                                 key={a}
@@ -245,7 +305,7 @@ export default function RevisaoPage() {
                 </>
             )}
 
-            {/* LISTA */}
+            {/* LISTA REVISOES */}
             {viewLevel === "revisoes" && !viewing && (
                 <>
                     <button
@@ -265,9 +325,7 @@ export default function RevisaoPage() {
                                 className="rounded border border-border p-4 bg-card flex justify-between"
                             >
                                 <div>
-                                    <div className="font-medium">
-                                        {r.resumo?.titulo}
-                                    </div>
+                                    <div className="font-medium">{r.resumo?.titulo}</div>
 
                                     <div className="text-xs text-muted-foreground">
                                         Etapa {r.etapa} •{" "}
