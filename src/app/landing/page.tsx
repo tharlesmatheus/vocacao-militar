@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-const GEMINI_API_KEY = "AIzaSyC-3CWT9uBxdEw8qdmZ9Vma0F6-iV0To88";
+const GEMINI_API_KEY = "AIzaSyDNkRmNcf9zpRYn9gl8w0z3VlyMheOuXSI";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 const PROMPT_PREFIX = `
@@ -29,7 +29,7 @@ Apenas responda com o JSON. NÃO inclua explicação extra, markdown, texto ante
 Questão:
 `;
 
-// Detecção de modalidade (sempre força "Multipla Escolha" ou "Certo ou Errado")
+// Detecção de modalidade (sempre força "Multipla Escolha")
 function detectarModalidade(alternativas: any, enunciado: string): string {
     if (!alternativas) return "Multipla Escolha";
     const letras = Object.keys(alternativas).filter(l => alternativas[l]?.trim());
