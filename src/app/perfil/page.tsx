@@ -22,8 +22,6 @@ type PlanoRow = {
     proximo_pagamento?: string | null;
     access_until?: string | null;
     email?: string | null;
-    user_id?: string | null;
-    updated_at?: string | null;
     valor_pago?: number | string | null;
 };
 
@@ -168,133 +166,37 @@ export default function ContaPage() {
 
                 setIsGoogleUser(user.app_metadata?.provider === "google");
 
+                if (!user.email) {
+                    setPlanoStatus("inativo");
+                    setProximoPagamento(null);
+                    setAccessUntil(null);
+                    setValorPago(null);
+                    return;
+                }
+
                 let plano: PlanoRow | null = null;
 
-                const byUser = await supabase
+                const byEmail = await supabase
                     .from("planos")
-                    .select(
-                        "id, status, proximo_pagamento, access_until, email, user_id, updated_at, valor_pago"
-                    )
-                    .eq("user_id", user.id)
-                    .order("updated_at", { ascending: false })
+                    .select("id, status, proximo_pagamento, access_until, email, valor_pago")
+                    .eq("email", user.email)
                     .limit(1);
 
-                if (byUser.error) {
-                    console.error("Erro ao buscar plano por user_id:", {
-                        message: byUser.error.message,
-                        details: byUser.error.details,
-                        hint: byUser.error.hint,
-                        code: byUser.error.code,
+                if (byEmail.error) {
+                    console.error("Erro ao buscar plano por email:", {
+                        message: byEmail.error.message,
+                        details: byEmail.error.details,
+                        hint: byEmail.error.hint,
+                        code: byEmail.error.code,
                     });
 
-                    const fallbackByUser = await supabase
-                        .from("planos")
-                        .select("id, status, proximo_pagamento, access_until, email, user_id, valor_pago")
-                        .eq("user_id", user.id)
-                        .limit(1);
-
-                    if (fallbackByUser.error) {
-                        console.error("Fallback também falhou:", {
-                            message: fallbackByUser.error.message,
-                            details: fallbackByUser.error.details,
-                            hint: fallbackByUser.error.hint,
-                            code: fallbackByUser.error.code,
-                        });
-
-                        setErrPlano("Erro ao buscar seu plano.");
-                        setLoading(false);
-                        setLoadingPlano(false);
-                        return;
-                    }
-
-                    if (fallbackByUser.data?.length) {
-                        const row = fallbackByUser.data[0] as any;
-                        plano = {
-                            id: row.id,
-                            status: row.status ?? "inativo",
-                            email: row.email ?? null,
-                            user_id: row.user_id ?? null,
-                            proximo_pagamento: row.proximo_pagamento ?? null,
-                            access_until: row.access_until ?? null,
-                            valor_pago: row.valor_pago ?? null,
-                            updated_at: null,
-                        };
-                    }
-                } else if (byUser.data?.length) {
-                    plano = byUser.data[0] as PlanoRow;
+                    setErrPlano("Erro ao buscar seu plano.");
+                    setLoading(false);
+                    setLoadingPlano(false);
+                    return;
                 }
 
-                if (!plano && user.email) {
-                    const byEmail = await supabase
-                        .from("planos")
-                        .select(
-                            "id, status, proximo_pagamento, access_until, email, user_id, updated_at, valor_pago"
-                        )
-                        .eq("email", user.email)
-                        .order("updated_at", { ascending: false })
-                        .limit(1);
-
-                    if (byEmail.error) {
-                        console.error("Erro ao buscar plano por email:", {
-                            message: byEmail.error.message,
-                            details: byEmail.error.details,
-                            hint: byEmail.error.hint,
-                            code: byEmail.error.code,
-                        });
-
-                        const fallbackByEmail = await supabase
-                            .from("planos")
-                            .select("id, status, proximo_pagamento, access_until, email, user_id, valor_pago")
-                            .eq("email", user.email)
-                            .limit(1);
-
-                        if (fallbackByEmail.error) {
-                            console.error("Fallback por email também falhou:", {
-                                message: fallbackByEmail.error.message,
-                                details: fallbackByEmail.error.details,
-                                hint: fallbackByEmail.error.hint,
-                                code: fallbackByEmail.error.code,
-                            });
-
-                            setErrPlano("Erro ao buscar seu plano.");
-                            setLoading(false);
-                            setLoadingPlano(false);
-                            return;
-                        }
-
-                        if (fallbackByEmail.data?.length) {
-                            const row = fallbackByEmail.data[0] as any;
-                            plano = {
-                                id: row.id,
-                                status: row.status ?? "inativo",
-                                email: row.email ?? null,
-                                user_id: row.user_id ?? null,
-                                proximo_pagamento: row.proximo_pagamento ?? null,
-                                access_until: row.access_until ?? null,
-                                valor_pago: row.valor_pago ?? null,
-                                updated_at: null,
-                            };
-                        }
-                    } else {
-                        plano = byEmail.data?.[0] ?? null;
-                    }
-
-                    if (plano && !plano.user_id) {
-                        const { error: bindErr } = await supabase
-                            .from("planos")
-                            .update({
-                                user_id: user.id,
-                                updated_at: new Date().toISOString(),
-                            })
-                            .eq("email", user.email);
-
-                        if (bindErr) {
-                            console.warn("Não foi possível vincular user_id ao plano:", bindErr);
-                        } else {
-                            plano.user_id = user.id;
-                        }
-                    }
-                }
+                plano = byEmail.data?.[0] ?? null;
 
                 if (plano) {
                     setPlanoStatus((plano.status as PlanoStatus) ?? "inativo");
@@ -380,7 +282,6 @@ export default function ContaPage() {
             const { error: upsertErr } = await supabase.from("planos").upsert(
                 [
                     {
-                        user_id: user.id,
                         email: user.email,
                         status: "pendente",
                         updated_at: new Date().toISOString(),
