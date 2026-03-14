@@ -150,36 +150,104 @@ export default function ContaPage() {
                     .from("planos")
                     .select("id, status, proximo_pagamento, access_until, email, user_id, updated_at")
                     .eq("user_id", user.id)
-                    .order("updated_at", { ascending: false, nullsFirst: false })
+                    .order("updated_at", { ascending: false })
                     .limit(1);
 
                 if (byUser.error) {
-                    console.error("Erro ao buscar plano por user_id:", byUser.error);
-                    setErrPlano("Erro ao buscar seu plano.");
-                    setLoading(false);
-                    setLoadingPlano(false);
-                    return;
-                }
+                    console.error("Erro ao buscar plano por user_id:", {
+                        message: byUser.error.message,
+                        details: byUser.error.details,
+                        hint: byUser.error.hint,
+                        code: byUser.error.code,
+                    });
 
-                if (byUser.data && byUser.data.length > 0) {
-                    plano = byUser.data[0] as PlanoRow;
-                } else if (user.email) {
-                    const byEmail = await supabase
+                    const fallbackByUser = await supabase
                         .from("planos")
-                        .select("id, status, proximo_pagamento, access_until, email, user_id, updated_at")
-                        .eq("email", user.email)
-                        .order("updated_at", { ascending: false, nullsFirst: false })
+                        .select("id, status, email, user_id")
+                        .eq("user_id", user.id)
                         .limit(1);
 
-                    if (byEmail.error) {
-                        console.error("Erro ao buscar plano por email:", byEmail.error);
+                    if (fallbackByUser.error) {
+                        console.error("Fallback também falhou:", {
+                            message: fallbackByUser.error.message,
+                            details: fallbackByUser.error.details,
+                            hint: fallbackByUser.error.hint,
+                            code: fallbackByUser.error.code,
+                        });
+
                         setErrPlano("Erro ao buscar seu plano.");
                         setLoading(false);
                         setLoadingPlano(false);
                         return;
                     }
 
-                    plano = byEmail.data?.[0] ?? null;
+                    if (fallbackByUser.data?.length) {
+                        const row = fallbackByUser.data[0] as any;
+                        plano = {
+                            id: row.id,
+                            status: row.status ?? "inativo",
+                            email: row.email ?? null,
+                            user_id: row.user_id ?? null,
+                            proximo_pagamento: null,
+                            access_until: null,
+                            updated_at: null,
+                        };
+                    }
+                } else if (byUser.data?.length) {
+                    plano = byUser.data[0] as PlanoRow;
+                }
+
+                if (!plano && user.email) {
+                    const byEmail = await supabase
+                        .from("planos")
+                        .select("id, status, proximo_pagamento, access_until, email, user_id, updated_at")
+                        .eq("email", user.email)
+                        .order("updated_at", { ascending: false })
+                        .limit(1);
+
+                    if (byEmail.error) {
+                        console.error("Erro ao buscar plano por email:", {
+                            message: byEmail.error.message,
+                            details: byEmail.error.details,
+                            hint: byEmail.error.hint,
+                            code: byEmail.error.code,
+                        });
+
+                        const fallbackByEmail = await supabase
+                            .from("planos")
+                            .select("id, status, email, user_id")
+                            .eq("email", user.email)
+                            .limit(1);
+
+                        if (fallbackByEmail.error) {
+                            console.error("Fallback por email também falhou:", {
+                                message: fallbackByEmail.error.message,
+                                details: fallbackByEmail.error.details,
+                                hint: fallbackByEmail.error.hint,
+                                code: fallbackByEmail.error.code,
+                            });
+
+                            setErrPlano("Erro ao buscar seu plano.");
+                            setLoading(false);
+                            setLoadingPlano(false);
+                            return;
+                        }
+
+                        if (fallbackByEmail.data?.length) {
+                            const row = fallbackByEmail.data[0] as any;
+                            plano = {
+                                id: row.id,
+                                status: row.status ?? "inativo",
+                                email: row.email ?? null,
+                                user_id: row.user_id ?? null,
+                                proximo_pagamento: null,
+                                access_until: null,
+                                updated_at: null,
+                            };
+                        }
+                    } else {
+                        plano = byEmail.data?.[0] ?? null;
+                    }
 
                     if (plano && !plano.user_id) {
                         const { error: bindErr } = await supabase
