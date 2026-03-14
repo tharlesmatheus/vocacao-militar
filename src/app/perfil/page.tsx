@@ -140,8 +140,6 @@ export default function ContaPage() {
 
                 if (authErr || !user) {
                     console.error("Erro ao obter usuário autenticado:", authErr);
-                    setLoading(false);
-                    setLoadingPlano(false);
                     return;
                 }
 
@@ -174,35 +172,29 @@ export default function ContaPage() {
                     return;
                 }
 
-                let plano: PlanoRow | null = null;
-
-                const byEmail = await supabase
+                const { data: plano, error } = await supabase
                     .from("planos")
                     .select("id, status, proximo_pagamento, access_until, email, valor_pago")
                     .eq("email", user.email)
-                    .limit(1);
+                    .maybeSingle();
 
-                if (byEmail.error) {
+                if (error) {
                     console.error("Erro ao buscar plano por email:", {
-                        message: byEmail.error.message,
-                        details: byEmail.error.details,
-                        hint: byEmail.error.hint,
-                        code: byEmail.error.code,
+                        message: error.message,
+                        details: error.details,
+                        hint: error.hint,
+                        code: error.code,
                     });
-
                     setErrPlano("Erro ao buscar seu plano.");
-                    setLoading(false);
-                    setLoadingPlano(false);
                     return;
                 }
 
-                plano = byEmail.data?.[0] ?? null;
-
                 if (plano) {
-                    setPlanoStatus((plano.status as PlanoStatus) ?? "inativo");
-                    setProximoPagamento(plano.proximo_pagamento ?? null);
-                    setAccessUntil(plano.access_until ?? null);
-                    setValorPago(plano.valor_pago ?? null);
+                    const row = plano as PlanoRow;
+                    setPlanoStatus((row.status as PlanoStatus) ?? "inativo");
+                    setProximoPagamento(row.proximo_pagamento ?? null);
+                    setAccessUntil(row.access_until ?? null);
+                    setValorPago(row.valor_pago ?? null);
                 } else {
                     setPlanoStatus("inativo");
                     setProximoPagamento(null);
@@ -433,8 +425,8 @@ export default function ContaPage() {
                                                 <div>
                                                     <p className="font-semibold text-foreground">Conta Google</p>
                                                     <p className="mt-1">
-                                                        Usuários Google não alteram senha neste painel.
-                                                        A alteração deve ser feita na sua conta Google.
+                                                        Usuários Google não alteram senha neste painel. A alteração deve
+                                                        ser feita na sua conta Google.
                                                     </p>
                                                 </div>
                                             </div>
