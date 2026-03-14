@@ -11,13 +11,72 @@ type KiwifyPayload = {
     subscription_id?: string;
     next_payment?: string;
     access_until?: string;
+
+    // Alguns payloads podem trazer valores nesses campos
+    amount?: number | string;
+    net_amount?: number | string;
+    total?: number | string;
+    order_amount?: number | string;
+    product_amount?: number | string;
+    paid_amount?: number | string;
+    price?: number | string;
+    amount_paid?: number | string;
+    amount_liquid?: number | string;
+    valor_pago?: number | string;
+    valor_liquido?: number | string;
+
     Customer?: {
         email?: string;
     };
+
     Subscription?: {
         subscription_id?: string;
+        next_payment?: string;
+        access_until?: string;
+    };
+
+    Commissions?: {
+        charge_amount?: number | string;
+        net_amount?: number | string;
+    };
+
+    Product?: {
+        price?: number | string;
     };
 };
+
+function parseKiwifyDate(value?: string | null) {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
+}
+
+function parseMoney(value: unknown): number | null {
+    if (value === null || value === undefined || value === "") return null;
+
+    if (typeof value === "number") {
+        return Number.isFinite(value) ? value : null;
+    }
+
+    if (typeof value === "string") {
+        const cleaned = value.replace(",", ".").replace(/[^\d.-]/g, "");
+        if (!cleaned) return null;
+
+        const parsed = Number(cleaned);
+        return Number.isNaN(parsed) ? null : parsed;
+    }
+
+    return null;
+}
+
+function pickFirstMoney(...values: unknown[]): number | null {
+    for (const value of values) {
+        const parsed = parseMoney(value);
+        if (parsed !== null) return parsed;
+    }
+    return null;
+}
 
 export async function POST(req: NextRequest) {
     try {
@@ -36,7 +95,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: "Assinatura inválida" }, { status: 400 });
         }
 
-        let payload: any;
+        let payload: unknown;
         try {
             payload = JSON.parse(rawBody);
         } catch (err) {
@@ -44,7 +103,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: "JSON inválido" }, { status: 400 });
         }
 
-        const body: KiwifyPayload = payload?.body || payload;
+        const body = ((payload as any)?.body || payload) as KiwifyPayload;
 
         const event = body.webhook_event_type;
         const email = body.Customer?.email?.trim().toLowerCase() || null;
@@ -90,29 +149,45 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: "Evento ignorado" }, { status: 200 });
         }
 
-        const nextPaymentIso = body.next_payment
-            ? new Date(body.next_payment).toISOString()
-            : null;
+        const nextPaymentIso = parseKiwifyDate(
+            body.next_payment || body.Subscription?.next_payment || null
+        );
 
-        const accessUntilIso = body.access_until
-            ? new Date(body.access_until).toISOString()
-            : null;
+        const accessUntilIso = parseKiwifyDate(
+            body.access_until || body.Subscription?.access_until || null
+        );
+
+        // Prioriza valor líquido quando existir
+        const valorPago = pickFirstMoney(
+            body.valor_liquido,
+            body.amount_liquid,
+            body.net_amount,
+            body.Commissions?.net_amount,
+            body.valor_pago,
+            body.paid_amount,
+            body.amount_paid,
+            body.amount,
+            body.total,
+            body.order_amount,
+            body.product_amount,
+            body.price,
+            body.Product?.price,
+            body.Commissions?.charge_amount
+        );
+
+        const planoPayload = {
+            email,
+            status,
+            subscription_id: subscriptionId,
+            proximo_pagamento: nextPaymentIso,
+            access_until: accessUntilIso,
+            valor_pago: valorPago,
+            updated_at: new Date().toISOString(),
+        };
 
         const { error } = await supabaseAdmin
             .from("planos")
-            .upsert(
-                [
-                    {
-                        email,
-                        status,
-                        subscription_id: subscriptionId,
-                        proximo_pagamento: nextPaymentIso,
-                        access_until: accessUntilIso,
-                        updated_at: new Date().toISOString(),
-                    },
-                ],
-                { onConflict: "email" }
-            );
+            .upsert([planoPayload], { onConflict: "email" });
 
         if (error) {
             console.error("Erro ao atualizar tabela planos:", error);
@@ -128,6 +203,9 @@ export async function POST(req: NextRequest) {
             status,
             orderId,
             subscriptionId,
+            proximo_pagamento: nextPaymentIso,
+            access_until: accessUntilIso,
+            valor_pago: valorPago,
         });
 
         return NextResponse.json({ message: "OK" }, { status: 200 });
