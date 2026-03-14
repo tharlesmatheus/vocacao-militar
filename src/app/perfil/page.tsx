@@ -17,11 +17,13 @@ import {
 type PlanoStatus = "ativo" | "inativo" | "pendente";
 
 type PlanoRow = {
-    status: PlanoStatus;
+    id?: string | number;
+    status?: PlanoStatus | null;
     proximo_pagamento?: string | null;
     access_until?: string | null;
     email?: string | null;
     user_id?: string | null;
+    updated_at?: string | null;
 };
 
 const CHECKOUT_URL = "https://pay.kiwify.com.br/ptQ62f5";
@@ -34,29 +36,21 @@ function toPtBRDate(dateIso: string) {
 }
 
 export default function ContaPage() {
-    // -----------------------------
-    // Auth / User
-    // -----------------------------
     const [loading, setLoading] = useState(true);
     const [savingProfile, setSavingProfile] = useState(false);
 
     const [isGoogleUser, setIsGoogleUser] = useState(false);
     const [criadoEm, setCriadoEm] = useState("");
 
-    // Perfil
     const [editandoPerfil, setEditandoPerfil] = useState(false);
     const [nome, setNome] = useState("");
     const [email, setEmail] = useState("");
     const [telefone, setTelefone] = useState("");
 
-    // Senha
     const [novaSenha, setNovaSenha] = useState("");
     const [msgPerfil, setMsgPerfil] = useState<string | null>(null);
     const [errPerfil, setErrPerfil] = useState<string | null>(null);
 
-    // -----------------------------
-    // Plano
-    // -----------------------------
     const [loadingPlano, setLoadingPlano] = useState(true);
     const [loadingCheckout, setLoadingCheckout] = useState(false);
 
@@ -66,8 +60,6 @@ export default function ContaPage() {
     const [errPlano, setErrPlano] = useState<string | null>(null);
 
     const emDia = useMemo(() => {
-        // 1) Se houver access_until, confia nela.
-        // 2) Senão, considera em dia se status ativo.
         if (accessUntil) {
             const t = new Date(accessUntil).getTime();
             if (Number.isNaN(t)) return planoStatus === "ativo";
@@ -100,111 +92,128 @@ export default function ContaPage() {
     }, [emDia, proximoPagamento]);
 
     const emDiaLabel = useMemo(() => {
-        if (accessUntil) return `Acesso até ${toPtBRDate(accessUntil)}`;
+        if (accessUntil && planoStatus === "ativo") {
+            return `Acesso até ${toPtBRDate(accessUntil)}`;
+        }
         if (planoStatus === "ativo") return "Plano ativo";
         if (planoStatus === "pendente") return "Pagamento pendente";
         return "Plano inativo";
     }, [accessUntil, planoStatus]);
 
-    // -----------------------------
-    // Load user + plan
-    // -----------------------------
     useEffect(() => {
         let unsub:
             | { data: { subscription: { unsubscribe: () => void } | null } }
             | null = null;
 
         async function fetchUserAndPlan() {
-            setLoading(true);
-            setLoadingPlano(true);
-            setErrPlano(null);
-            setErrPerfil(null);
-            setMsgPerfil(null);
+            try {
+                setLoading(true);
+                setLoadingPlano(true);
+                setErrPlano(null);
+                setErrPerfil(null);
+                setMsgPerfil(null);
 
-            const { data: authData, error: authErr } = await supabase.auth.getUser();
-            const user = authData?.user;
+                const { data: authData, error: authErr } = await supabase.auth.getUser();
+                const user = authData?.user;
 
-            if (authErr || !user) {
-                // Você pode redirecionar aqui se quiser, mas deixei neutro.
-                setLoading(false);
-                setLoadingPlano(false);
-                return;
-            }
+                if (authErr || !user) {
+                    console.error("Erro ao obter usuário autenticado:", authErr);
+                    setLoading(false);
+                    setLoadingPlano(false);
+                    return;
+                }
 
-            // Perfil
-            const nomeMeta =
-                (user.user_metadata?.nome as string | undefined) ??
-                (user.user_metadata?.full_name as string | undefined) ??
-                (user.user_metadata?.name as string | undefined) ??
-                "";
+                const nomeMeta =
+                    (user.user_metadata?.nome as string | undefined) ??
+                    (user.user_metadata?.full_name as string | undefined) ??
+                    (user.user_metadata?.name as string | undefined) ??
+                    "";
 
-            setNome(nomeMeta);
-            setEmail(user.email ?? "");
-            setTelefone((user.user_metadata?.telefone as string | undefined) ?? "");
+                setNome(nomeMeta);
+                setEmail(user.email ?? "");
+                setTelefone((user.user_metadata?.telefone as string | undefined) ?? "");
 
-            setCriadoEm(
-                user.created_at
-                    ? new Date(user.created_at).toLocaleDateString("pt-BR", {
-                        month: "long",
-                        year: "numeric",
-                    })
-                    : ""
-            );
+                setCriadoEm(
+                    user.created_at
+                        ? new Date(user.created_at).toLocaleDateString("pt-BR", {
+                            month: "long",
+                            year: "numeric",
+                        })
+                        : ""
+                );
 
-            setIsGoogleUser(user.app_metadata?.provider === "google");
+                setIsGoogleUser(user.app_metadata?.provider === "google");
 
-            // Plano — busca por user_id e fallback por email
-            let plano: PlanoRow | null = null;
+                let plano: PlanoRow | null = null;
 
-            const byUser = await supabase
-                .from("planos")
-                .select("status, proximo_pagamento, access_until, email, user_id")
-                .eq("user_id", user.id)
-                .maybeSingle();
-
-            if (byUser.error) {
-                setErrPlano("Erro ao buscar seu plano.");
-                setLoading(false);
-                setLoadingPlano(false);
-                return;
-            }
-
-            if (byUser.data) {
-                plano = byUser.data as PlanoRow;
-            } else if (user.email) {
-                const byEmail = await supabase
+                const byUser = await supabase
                     .from("planos")
-                    .select("status, proximo_pagamento, access_until, email, user_id")
-                    .eq("email", user.email)
-                    .maybeSingle();
+                    .select("id, status, proximo_pagamento, access_until, email, user_id, updated_at")
+                    .eq("user_id", user.id)
+                    .order("updated_at", { ascending: false, nullsFirst: false })
+                    .limit(1);
 
-                if (byEmail.error) {
+                if (byUser.error) {
+                    console.error("Erro ao buscar plano por user_id:", byUser.error);
                     setErrPlano("Erro ao buscar seu plano.");
                     setLoading(false);
                     setLoadingPlano(false);
                     return;
                 }
 
-                plano = (byEmail.data as PlanoRow | null) ?? null;
+                if (byUser.data && byUser.data.length > 0) {
+                    plano = byUser.data[0] as PlanoRow;
+                } else if (user.email) {
+                    const byEmail = await supabase
+                        .from("planos")
+                        .select("id, status, proximo_pagamento, access_until, email, user_id, updated_at")
+                        .eq("email", user.email)
+                        .order("updated_at", { ascending: false, nullsFirst: false })
+                        .limit(1);
 
-                // Se encontrou por email e não tem user_id, tenta amarrar (se RLS permitir)
-                if (plano && !plano.user_id) {
-                    await supabase.from("planos").update({ user_id: user.id }).eq("email", user.email);
+                    if (byEmail.error) {
+                        console.error("Erro ao buscar plano por email:", byEmail.error);
+                        setErrPlano("Erro ao buscar seu plano.");
+                        setLoading(false);
+                        setLoadingPlano(false);
+                        return;
+                    }
+
+                    plano = byEmail.data?.[0] ?? null;
+
+                    if (plano && !plano.user_id) {
+                        const { error: bindErr } = await supabase
+                            .from("planos")
+                            .update({
+                                user_id: user.id,
+                                updated_at: new Date().toISOString(),
+                            })
+                            .eq("email", user.email);
+
+                        if (bindErr) {
+                            console.warn("Não foi possível vincular user_id ao plano:", bindErr);
+                        } else {
+                            plano.user_id = user.id;
+                        }
+                    }
                 }
-            }
 
-            if (plano) {
-                setPlanoStatus(plano.status ?? "inativo");
-                setProximoPagamento(plano.proximo_pagamento ?? null);
-                setAccessUntil(plano.access_until ?? null);
-            } else {
-                setPlanoStatus("inativo");
-                setProximoPagamento(null);
-                setAccessUntil(null);
+                if (plano) {
+                    setPlanoStatus((plano.status as PlanoStatus) ?? "inativo");
+                    setProximoPagamento(plano.proximo_pagamento ?? null);
+                    setAccessUntil(plano.access_until ?? null);
+                } else {
+                    setPlanoStatus("inativo");
+                    setProximoPagamento(null);
+                    setAccessUntil(null);
+                }
+            } catch (error) {
+                console.error("Erro inesperado ao carregar conta/plano:", error);
+                setErrPlano("Erro ao buscar seu plano.");
+            } finally {
+                setLoading(false);
+                setLoadingPlano(false);
             }
-
-            setLoading(false);
-            setLoadingPlano(false);
         }
 
         fetchUserAndPlan();
@@ -218,16 +227,12 @@ export default function ContaPage() {
         };
     }, []);
 
-    // -----------------------------
-    // Actions
-    // -----------------------------
     async function handleSalvarPerfil(e: React.FormEvent) {
         e.preventDefault();
         setErrPerfil(null);
         setMsgPerfil(null);
         setSavingProfile(true);
 
-        // Atualiza só user_metadata
         const { error } = await supabase.auth.updateUser({
             data: { nome, telefone },
         });
@@ -238,7 +243,6 @@ export default function ContaPage() {
             return;
         }
 
-        // Atualiza senha se informado e se NÃO for Google user
         if (!isGoogleUser && novaSenha.trim()) {
             const { error: errSenha } = await supabase.auth.updateUser({
                 password: novaSenha.trim(),
@@ -263,18 +267,17 @@ export default function ContaPage() {
         setLoadingCheckout(true);
         setErrPlano(null);
 
-        const { data: authData, error: authErr } = await supabase.auth.getUser();
-        const user = authData?.user;
-
-        if (authErr || !user || !user.email) {
-            setErrPlano("Faça login para assinar.");
-            setLoadingCheckout(false);
-            return;
-        }
-
-        // Boa prática: registra pendente antes do checkout (se RLS permitir)
         try {
-            await supabase.from("planos").upsert(
+            const { data: authData, error: authErr } = await supabase.auth.getUser();
+            const user = authData?.user;
+
+            if (authErr || !user || !user.email) {
+                setErrPlano("Faça login para assinar.");
+                setLoadingCheckout(false);
+                return;
+            }
+
+            const { error: upsertErr } = await supabase.from("planos").upsert(
                 [
                     {
                         user_id: user.id,
@@ -285,11 +288,17 @@ export default function ContaPage() {
                 ],
                 { onConflict: "email" }
             );
-        } catch {
-            // ignora: webhook faz upsert por email
-        }
 
-        window.location.href = `${CHECKOUT_URL}?email=${encodeURIComponent(user.email)}`;
+            if (upsertErr) {
+                console.warn("Falha ao registrar status pendente antes do checkout:", upsertErr);
+            }
+
+            window.location.href = `${CHECKOUT_URL}?email=${encodeURIComponent(user.email)}`;
+        } catch (error) {
+            console.error("Erro ao iniciar checkout:", error);
+            setErrPlano("Não foi possível abrir o checkout.");
+            setLoadingCheckout(false);
+        }
     }
 
     if (loading) {
@@ -303,7 +312,6 @@ export default function ContaPage() {
     return (
         <main className="w-full px-4 sm:px-6 lg:px-8 py-6 md:py-10">
             <div className="mx-auto w-full max-w-5xl flex flex-col gap-6">
-                {/* Breadcrumb / título */}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="text-primary">⌂</span>
                     <span>/</span>
@@ -317,11 +325,7 @@ export default function ContaPage() {
                     </p>
                 </div>
 
-                {/* ====== GRID PRINCIPAL ====== */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* =========================
-              COLUNA ESQUERDA (PERFIL)
-             ========================= */}
                     <section className="lg:col-span-2 rounded-2xl border border-border bg-card shadow-sm">
                         <form onSubmit={handleSalvarPerfil} className="p-6">
                             <div className="flex items-start justify-between gap-3">
@@ -351,7 +355,6 @@ export default function ContaPage() {
                             </div>
 
                             <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Membro desde */}
                                 <div className="md:col-span-2">
                                     <label className="block text-sm font-medium text-muted-foreground mb-1">
                                         <span className="inline-flex items-center gap-2">
@@ -367,7 +370,6 @@ export default function ContaPage() {
                                     />
                                 </div>
 
-                                {/* Nome */}
                                 <div className="md:col-span-2">
                                     <label className="block text-sm font-medium text-muted-foreground mb-1">
                                         Nome completo
@@ -382,7 +384,6 @@ export default function ContaPage() {
                                     />
                                 </div>
 
-                                {/* Email */}
                                 <div>
                                     <label className="block text-sm font-medium text-muted-foreground mb-1">
                                         <span className="inline-flex items-center gap-2">
@@ -401,7 +402,6 @@ export default function ContaPage() {
                                     </p>
                                 </div>
 
-                                {/* Telefone */}
                                 <div>
                                     <label className="block text-sm font-medium text-muted-foreground mb-1">
                                         <span className="inline-flex items-center gap-2">
@@ -419,7 +419,6 @@ export default function ContaPage() {
                                     />
                                 </div>
 
-                                {/* Segurança / Senha */}
                                 <div className="md:col-span-2 mt-2">
                                     <div className="flex items-center gap-2 mb-2">
                                         <Lock className="w-4 h-4 text-primary" />
@@ -431,9 +430,7 @@ export default function ContaPage() {
                                             <div className="flex items-start gap-2">
                                                 <AlertTriangle className="w-5 h-5 mt-0.5 text-yellow-600" />
                                                 <div>
-                                                    <p className="font-semibold text-foreground">
-                                                        Conta Google
-                                                    </p>
+                                                    <p className="font-semibold text-foreground">Conta Google</p>
                                                     <p className="mt-1">
                                                         Usuários Google não alteram senha neste painel.
                                                         A alteração deve ser feita na sua conta Google.
@@ -448,7 +445,11 @@ export default function ContaPage() {
                                             </label>
                                             <input
                                                 type="password"
-                                                placeholder={editandoPerfil ? "Digite a nova senha" : "Clique em editar para alterar"}
+                                                placeholder={
+                                                    editandoPerfil
+                                                        ? "Digite a nova senha"
+                                                        : "Clique em editar para alterar"
+                                                }
                                                 className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground outline-none focus:ring-2 focus:ring-primary text-sm font-medium transition disabled:opacity-70"
                                                 value={novaSenha}
                                                 onChange={(e) => setNovaSenha(e.target.value)}
@@ -463,19 +464,18 @@ export default function ContaPage() {
                                 </div>
                             </div>
 
-                            {/* Mensagens */}
                             {errPerfil && (
                                 <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                                     {errPerfil}
                                 </div>
                             )}
+
                             {msgPerfil && (
                                 <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
                                     {msgPerfil}
                                 </div>
                             )}
 
-                            {/* Ações */}
                             {editandoPerfil && (
                                 <div className="mt-6 flex items-center justify-end gap-3">
                                     <button
@@ -504,9 +504,6 @@ export default function ContaPage() {
                         </form>
                     </section>
 
-                    {/* =========================
-              COLUNA DIREITA (PLANO)
-             ========================= */}
                     <aside className="rounded-2xl border border-border bg-card shadow-sm p-6">
                         <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-2">
@@ -574,8 +571,8 @@ export default function ContaPage() {
                             </div>
 
                             <div className="mt-3 rounded-xl border border-border bg-muted p-3 text-xs text-muted-foreground">
-                                Alterações e cancelamentos devem ser feitos pelo painel do comprador da Kiwify (ou link enviado por e-mail
-                                na compra).
+                                Alterações e cancelamentos devem ser feitos pelo painel do comprador da
+                                Kiwify (ou link enviado por e-mail na compra).
                             </div>
                         </div>
 
@@ -588,7 +585,8 @@ export default function ContaPage() {
                                 </div>
                             ) : planoStatus === "pendente" ? (
                                 <div className="rounded-xl border border-border bg-muted p-3 text-sm text-muted-foreground">
-                                    Pagamento pendente. Assim que confirmado, seu acesso será liberado automaticamente.
+                                    Pagamento pendente. Assim que confirmado, seu acesso será liberado
+                                    automaticamente.
                                 </div>
                             ) : (
                                 <button
@@ -604,9 +602,6 @@ export default function ContaPage() {
                     </aside>
                 </div>
 
-                {/* =========================
-            Recursos do plano (separado)
-           ========================= */}
                 <section className="rounded-2xl border border-border bg-card shadow-sm p-6">
                     <h2 className="text-lg font-bold text-foreground">Recursos inclusos</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
