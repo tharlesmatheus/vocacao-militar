@@ -629,7 +629,7 @@ export default function ContaPage() {
                                 {loadingPlano ? "Carregando status..." : emDiaLabel}
                             </div>
 
-                            <div className="mt-4 flex items-center justify-between">
+                            <div className="mt-4 flex items-center justify-between gap-4">
                                 <div>
                                     <div className="text-xs text-muted-foreground">Próximo pagamento</div>
                                     <div className="text-lg font-bold text-foreground">
@@ -638,7 +638,7 @@ export default function ContaPage() {
                                 </div>
 
                                 <div className="text-right">
-                                    <div className="text-xs text-muted-foreground">Valor</div>
+                                    <div className="text-xs text-muted-foreground">Valor pago</div>
                                     <div className="text-sm font-semibold text-foreground">
                                         {loadingPlano ? "—" : valorPagoLabel}
                                     </div>
