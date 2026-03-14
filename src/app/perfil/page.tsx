@@ -23,16 +23,34 @@ type PlanoRow = {
     access_until?: string | null;
     email?: string | null;
     user_id?: string | null;
-    updated_at?: string | null;
+    valor_pago?: number | string | null;
 };
 
 const CHECKOUT_URL = "https://pay.kiwify.com.br/ptQ62f5";
-const PRECO_MENSAL = "R$ 7,00";
+const PRECO_MENSAL_FALLBACK = "R$ 7,00";
 
 function toPtBRDate(dateIso: string) {
     const d = new Date(dateIso);
     if (Number.isNaN(d.getTime())) return "—";
     return d.toLocaleDateString("pt-BR");
+}
+
+function toPtBRMoney(value?: number | string | null) {
+    if (value === null || value === undefined || value === "") {
+        return PRECO_MENSAL_FALLBACK;
+    }
+
+    const parsed =
+        typeof value === "number"
+            ? value
+            : Number(String(value).replace(",", ".").replace(/[^\d.-]/g, ""));
+
+    if (Number.isNaN(parsed)) return PRECO_MENSAL_FALLBACK;
+
+    return new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+    }).format(parsed);
 }
 
 export default function ContaPage() {
@@ -57,6 +75,7 @@ export default function ContaPage() {
     const [planoStatus, setPlanoStatus] = useState<PlanoStatus>("inativo");
     const [proximoPagamento, setProximoPagamento] = useState<string | null>(null);
     const [accessUntil, setAccessUntil] = useState<string | null>(null);
+    const [valorPago, setValorPago] = useState<number | string | null>(null);
     const [errPlano, setErrPlano] = useState<string | null>(null);
 
     const emDia = useMemo(() => {
@@ -87,9 +106,13 @@ export default function ContaPage() {
     }, [planoStatus]);
 
     const proximoPagamentoLabel = useMemo(() => {
-        if (emDia && proximoPagamento) return toPtBRDate(proximoPagamento);
+        if (proximoPagamento) return toPtBRDate(proximoPagamento);
         return "—";
-    }, [emDia, proximoPagamento]);
+    }, [proximoPagamento]);
+
+    const valorPagoLabel = useMemo(() => {
+        return toPtBRMoney(valorPago);
+    }, [valorPago]);
 
     const emDiaLabel = useMemo(() => {
         if (accessUntil && planoStatus === "ativo") {
@@ -148,9 +171,8 @@ export default function ContaPage() {
 
                 const byUser = await supabase
                     .from("planos")
-                    .select("id, status, proximo_pagamento, access_until, email, user_id, updated_at")
+                    .select("id, status, proximo_pagamento, access_until, email, user_id, valor_pago")
                     .eq("user_id", user.id)
-                    .order("updated_at", { ascending: false })
                     .limit(1);
 
                 if (byUser.error) {
@@ -161,48 +183,19 @@ export default function ContaPage() {
                         code: byUser.error.code,
                     });
 
-                    const fallbackByUser = await supabase
-                        .from("planos")
-                        .select("id, status, email, user_id")
-                        .eq("user_id", user.id)
-                        .limit(1);
-
-                    if (fallbackByUser.error) {
-                        console.error("Fallback também falhou:", {
-                            message: fallbackByUser.error.message,
-                            details: fallbackByUser.error.details,
-                            hint: fallbackByUser.error.hint,
-                            code: fallbackByUser.error.code,
-                        });
-
-                        setErrPlano("Erro ao buscar seu plano.");
-                        setLoading(false);
-                        setLoadingPlano(false);
-                        return;
-                    }
-
-                    if (fallbackByUser.data?.length) {
-                        const row = fallbackByUser.data[0] as any;
-                        plano = {
-                            id: row.id,
-                            status: row.status ?? "inativo",
-                            email: row.email ?? null,
-                            user_id: row.user_id ?? null,
-                            proximo_pagamento: null,
-                            access_until: null,
-                            updated_at: null,
-                        };
-                    }
-                } else if (byUser.data?.length) {
-                    plano = byUser.data[0] as PlanoRow;
+                    setErrPlano("Erro ao buscar seu plano.");
+                    setLoading(false);
+                    setLoadingPlano(false);
+                    return;
                 }
 
-                if (!plano && user.email) {
+                if (byUser.data?.length) {
+                    plano = byUser.data[0] as PlanoRow;
+                } else if (user.email) {
                     const byEmail = await supabase
                         .from("planos")
-                        .select("id, status, proximo_pagamento, access_until, email, user_id, updated_at")
+                        .select("id, status, proximo_pagamento, access_until, email, user_id, valor_pago")
                         .eq("email", user.email)
-                        .order("updated_at", { ascending: false })
                         .limit(1);
 
                     if (byEmail.error) {
@@ -213,48 +206,19 @@ export default function ContaPage() {
                             code: byEmail.error.code,
                         });
 
-                        const fallbackByEmail = await supabase
-                            .from("planos")
-                            .select("id, status, email, user_id")
-                            .eq("email", user.email)
-                            .limit(1);
-
-                        if (fallbackByEmail.error) {
-                            console.error("Fallback por email também falhou:", {
-                                message: fallbackByEmail.error.message,
-                                details: fallbackByEmail.error.details,
-                                hint: fallbackByEmail.error.hint,
-                                code: fallbackByEmail.error.code,
-                            });
-
-                            setErrPlano("Erro ao buscar seu plano.");
-                            setLoading(false);
-                            setLoadingPlano(false);
-                            return;
-                        }
-
-                        if (fallbackByEmail.data?.length) {
-                            const row = fallbackByEmail.data[0] as any;
-                            plano = {
-                                id: row.id,
-                                status: row.status ?? "inativo",
-                                email: row.email ?? null,
-                                user_id: row.user_id ?? null,
-                                proximo_pagamento: null,
-                                access_until: null,
-                                updated_at: null,
-                            };
-                        }
-                    } else {
-                        plano = byEmail.data?.[0] ?? null;
+                        setErrPlano("Erro ao buscar seu plano.");
+                        setLoading(false);
+                        setLoadingPlano(false);
+                        return;
                     }
+
+                    plano = byEmail.data?.[0] ?? null;
 
                     if (plano && !plano.user_id) {
                         const { error: bindErr } = await supabase
                             .from("planos")
                             .update({
                                 user_id: user.id,
-                                updated_at: new Date().toISOString(),
                             })
                             .eq("email", user.email);
 
@@ -270,10 +234,12 @@ export default function ContaPage() {
                     setPlanoStatus((plano.status as PlanoStatus) ?? "inativo");
                     setProximoPagamento(plano.proximo_pagamento ?? null);
                     setAccessUntil(plano.access_until ?? null);
+                    setValorPago(plano.valor_pago ?? null);
                 } else {
                     setPlanoStatus("inativo");
                     setProximoPagamento(null);
                     setAccessUntil(null);
+                    setValorPago(null);
                 }
             } catch (error) {
                 console.error("Erro inesperado ao carregar conta/plano:", error);
@@ -351,7 +317,6 @@ export default function ContaPage() {
                         user_id: user.id,
                         email: user.email,
                         status: "pendente",
-                        updated_at: new Date().toISOString(),
                     },
                 ],
                 { onConflict: "email" }
@@ -597,7 +562,7 @@ export default function ContaPage() {
                                 {loadingPlano ? "Carregando status..." : emDiaLabel}
                             </div>
 
-                            <div className="mt-4 flex items-center justify-between">
+                            <div className="mt-4 flex items-center justify-between gap-4">
                                 <div>
                                     <div className="text-xs text-muted-foreground">Próximo pagamento</div>
                                     <div className="text-lg font-bold text-foreground">
@@ -606,9 +571,9 @@ export default function ContaPage() {
                                 </div>
 
                                 <div className="text-right">
-                                    <div className="text-xs text-muted-foreground">Valor</div>
+                                    <div className="text-xs text-muted-foreground">Valor pago</div>
                                     <div className="text-sm font-semibold text-foreground">
-                                        {PRECO_MENSAL}/mês
+                                        {loadingPlano ? "—" : valorPagoLabel}
                                     </div>
                                 </div>
                             </div>
