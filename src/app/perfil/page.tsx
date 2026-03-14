@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import {
     User2,
@@ -17,18 +17,16 @@ import {
 type PlanoStatus = "ativo" | "inativo" | "pendente";
 
 type PlanoRow = {
-    id?: string | number;
     status?: PlanoStatus | null;
     proximo_pagamento?: string | null;
     access_until?: string | null;
-    email?: string | null;
     valor_pago?: number | string | null;
 };
 
 const CHECKOUT_URL = "https://pay.kiwify.com.br/ptQ62f5";
-const PRECO_MENSAL_FALLBACK = "R$ 7,00";
 
-function toPtBRDate(dateIso: string) {
+function toPtBRDate(dateIso?: string | null) {
+    if (!dateIso) return "—";
     const d = new Date(dateIso);
     if (Number.isNaN(d.getTime())) return "—";
     return d.toLocaleDateString("pt-BR");
@@ -36,7 +34,7 @@ function toPtBRDate(dateIso: string) {
 
 function toPtBRMoney(value?: number | string | null) {
     if (value === null || value === undefined || value === "") {
-        return PRECO_MENSAL_FALLBACK;
+        return "—";
     }
 
     const parsed =
@@ -44,7 +42,7 @@ function toPtBRMoney(value?: number | string | null) {
             ? value
             : Number(String(value).replace(",", ".").replace(/[^\d.-]/g, ""));
 
-    if (Number.isNaN(parsed)) return PRECO_MENSAL_FALLBACK;
+    if (Number.isNaN(parsed)) return "—";
 
     return new Intl.NumberFormat("pt-BR", {
         style: "currency",
@@ -54,81 +52,80 @@ function toPtBRMoney(value?: number | string | null) {
 
 export default function ContaPage() {
     const [loading, setLoading] = useState(true);
+    const [loadingPlano, setLoadingPlano] = useState(true);
     const [savingProfile, setSavingProfile] = useState(false);
+    const [loadingCheckout, setLoadingCheckout] = useState(false);
 
     const [isGoogleUser, setIsGoogleUser] = useState(false);
     const [criadoEm, setCriadoEm] = useState("");
 
     const [editandoPerfil, setEditandoPerfil] = useState(false);
+
     const [nome, setNome] = useState("");
     const [email, setEmail] = useState("");
     const [telefone, setTelefone] = useState("");
 
+    const [nomeOriginal, setNomeOriginal] = useState("");
+    const [telefoneOriginal, setTelefoneOriginal] = useState("");
+
     const [novaSenha, setNovaSenha] = useState("");
+
     const [msgPerfil, setMsgPerfil] = useState<string | null>(null);
     const [errPerfil, setErrPerfil] = useState<string | null>(null);
-
-    const [loadingPlano, setLoadingPlano] = useState(true);
-    const [loadingCheckout, setLoadingCheckout] = useState(false);
+    const [errPlano, setErrPlano] = useState<string | null>(null);
 
     const [planoStatus, setPlanoStatus] = useState<PlanoStatus>("inativo");
     const [proximoPagamento, setProximoPagamento] = useState<string | null>(null);
     const [accessUntil, setAccessUntil] = useState<string | null>(null);
     const [valorPago, setValorPago] = useState<number | string | null>(null);
-    const [errPlano, setErrPlano] = useState<string | null>(null);
 
-    const emDia = useMemo(() => {
-        if (accessUntil) {
-            const t = new Date(accessUntil).getTime();
-            if (Number.isNaN(t)) return planoStatus === "ativo";
-            return planoStatus === "ativo" && t >= Date.now();
+    const msgTimeoutRef = useRef<number | null>(null);
+
+    const emDia = (() => {
+        if (planoStatus !== "ativo") return false;
+        if (!accessUntil) return true;
+
+        const t = new Date(accessUntil).getTime();
+        return !Number.isNaN(t) && t >= Date.now();
+    })();
+
+    const badge = (() => {
+        if (planoStatus === "ativo") {
+            return {
+                klass: "bg-green-100 border border-green-200 text-green-700",
+                label: "Ativo",
+            };
         }
-        return planoStatus === "ativo";
-    }, [planoStatus, accessUntil]);
 
-    const badge = useMemo(() => {
-        const klass =
-            planoStatus === "ativo"
-                ? "bg-green-100 border border-green-200 text-green-700"
-                : planoStatus === "pendente"
-                    ? "bg-yellow-100 border border-yellow-300 text-yellow-700"
-                    : "bg-muted border border-border text-muted-foreground";
+        if (planoStatus === "pendente") {
+            return {
+                klass: "bg-yellow-100 border border-yellow-300 text-yellow-700",
+                label: "Pendente",
+            };
+        }
 
-        const label =
-            planoStatus === "ativo"
-                ? "Ativo"
-                : planoStatus === "pendente"
-                    ? "Pendente"
-                    : "Inativo";
+        return {
+            klass: "bg-muted border border-border text-muted-foreground",
+            label: "Inativo",
+        };
+    })();
 
-        return { klass, label };
-    }, [planoStatus]);
-
-    const proximoPagamentoLabel = useMemo(() => {
-        if (proximoPagamento) return toPtBRDate(proximoPagamento);
-        return "—";
-    }, [proximoPagamento]);
-
-    const valorPagoLabel = useMemo(() => {
-        return toPtBRMoney(valorPago);
-    }, [valorPago]);
-
-    const emDiaLabel = useMemo(() => {
+    const emDiaLabel = (() => {
         if (accessUntil && planoStatus === "ativo") {
             return `Acesso até ${toPtBRDate(accessUntil)}`;
         }
         if (planoStatus === "ativo") return "Plano ativo";
         if (planoStatus === "pendente") return "Pagamento pendente";
         return "Plano inativo";
-    }, [accessUntil, planoStatus]);
+    })();
 
     useEffect(() => {
-        let unsub:
-            | { data: { subscription: { unsubscribe: () => void } | null } }
-            | null = null;
+        let mounted = true;
 
         async function fetchUserAndPlan() {
             try {
+                if (!mounted) return;
+
                 setLoading(true);
                 setLoadingPlano(true);
                 setErrPlano(null);
@@ -139,7 +136,11 @@ export default function ContaPage() {
                 const user = authData?.user;
 
                 if (authErr || !user) {
-                    console.error("Erro ao obter usuário autenticado:", authErr);
+                    if (!mounted) return;
+                    setPlanoStatus("inativo");
+                    setProximoPagamento(null);
+                    setAccessUntil(null);
+                    setValorPago(null);
                     return;
                 }
 
@@ -149,9 +150,18 @@ export default function ContaPage() {
                     (user.user_metadata?.name as string | undefined) ??
                     "";
 
+                const telefoneMeta =
+                    (user.user_metadata?.telefone as string | undefined) ?? "";
+
+                if (!mounted) return;
+
                 setNome(nomeMeta);
-                setEmail(user.email ?? "");
-                setTelefone((user.user_metadata?.telefone as string | undefined) ?? "");
+                setNomeOriginal(nomeMeta);
+
+                setEmail((user.email ?? "").toLowerCase());
+
+                setTelefone(telefoneMeta);
+                setTelefoneOriginal(telefoneMeta);
 
                 setCriadoEm(
                     user.created_at
@@ -172,109 +182,144 @@ export default function ContaPage() {
                     return;
                 }
 
+                const normalizedEmail = user.email.trim().toLowerCase();
+
                 const { data: plano, error } = await supabase
                     .from("planos")
-                    .select("id, status, proximo_pagamento, access_until, email, valor_pago")
-                    .eq("email", user.email)
+                    .select("status, proximo_pagamento, access_until, valor_pago")
+                    .eq("email", normalizedEmail)
                     .maybeSingle();
 
                 if (error) {
-                    console.error("Erro ao buscar plano por email:", {
-                        message: error.message,
-                        details: error.details,
-                        hint: error.hint,
-                        code: error.code,
-                    });
-                    setErrPlano("Erro ao buscar seu plano.");
+                    console.error("Erro ao buscar plano:", error.message);
+                    if (mounted) setErrPlano("Erro ao buscar seu plano.");
                     return;
                 }
 
-                if (plano) {
-                    const row = plano as PlanoRow;
-                    setPlanoStatus((row.status as PlanoStatus) ?? "inativo");
-                    setProximoPagamento(row.proximo_pagamento ?? null);
-                    setAccessUntil(row.access_until ?? null);
-                    setValorPago(row.valor_pago ?? null);
-                } else {
-                    setPlanoStatus("inativo");
-                    setProximoPagamento(null);
-                    setAccessUntil(null);
-                    setValorPago(null);
-                }
+                const row = (plano || {}) as PlanoRow;
+
+                if (!mounted) return;
+
+                setPlanoStatus(row.status ?? "inativo");
+                setProximoPagamento(row.proximo_pagamento ?? null);
+                setAccessUntil(row.access_until ?? null);
+                setValorPago(row.valor_pago ?? null);
             } catch (error) {
                 console.error("Erro inesperado ao carregar conta/plano:", error);
-                setErrPlano("Erro ao buscar seu plano.");
+                if (mounted) setErrPlano("Erro ao buscar seu plano.");
             } finally {
-                setLoading(false);
-                setLoadingPlano(false);
+                if (mounted) {
+                    setLoading(false);
+                    setLoadingPlano(false);
+                }
             }
         }
 
         fetchUserAndPlan();
 
-        unsub = supabase.auth.onAuthStateChange(() => {
+        const {
+            data: { subscription },
+        } = supabase.auth.onAuthStateChange(() => {
             fetchUserAndPlan();
         });
 
         return () => {
-            unsub?.data.subscription?.unsubscribe?.();
+            mounted = false;
+            subscription.unsubscribe();
+
+            if (msgTimeoutRef.current) {
+                window.clearTimeout(msgTimeoutRef.current);
+            }
         };
     }, []);
 
-    async function handleSalvarPerfil(e: React.FormEvent) {
-        e.preventDefault();
+    function cancelarEdicao() {
+        setEditandoPerfil(false);
         setErrPerfil(null);
         setMsgPerfil(null);
-        setSavingProfile(true);
+        setNovaSenha("");
+        setNome(nomeOriginal);
+        setTelefone(telefoneOriginal);
+    }
 
-        const { error } = await supabase.auth.updateUser({
-            data: { nome, telefone },
-        });
+    async function handleSalvarPerfil(e: React.FormEvent) {
+        e.preventDefault();
 
-        if (error) {
-            setErrPerfil("Erro ao atualizar dados: " + error.message);
-            setSavingProfile(false);
-            return;
-        }
+        try {
+            setErrPerfil(null);
+            setMsgPerfil(null);
+            setSavingProfile(true);
 
-        if (!isGoogleUser && novaSenha.trim()) {
-            const { error: errSenha } = await supabase.auth.updateUser({
-                password: novaSenha.trim(),
-            });
+            const payload: { data: { nome: string; telefone: string } } = {
+                data: {
+                    nome: nome.trim(),
+                    telefone: telefone.trim(),
+                },
+            };
 
-            if (errSenha) {
-                setErrPerfil("Erro ao atualizar senha: " + errSenha.message);
-                setSavingProfile(false);
+            const { error } = await supabase.auth.updateUser(payload);
+
+            if (error) {
+                setErrPerfil("Erro ao atualizar dados: " + error.message);
                 return;
             }
+
+            if (!isGoogleUser && novaSenha.trim()) {
+                if (novaSenha.trim().length < 8) {
+                    setErrPerfil("A nova senha deve ter pelo menos 8 caracteres.");
+                    return;
+                }
+
+                const { error: errSenha } = await supabase.auth.updateUser({
+                    password: novaSenha.trim(),
+                });
+
+                if (errSenha) {
+                    setErrPerfil("Erro ao atualizar senha: " + errSenha.message);
+                    return;
+                }
+            }
+
+            setNomeOriginal(nome.trim());
+            setTelefoneOriginal(telefone.trim());
+            setMsgPerfil("Dados atualizados com sucesso!");
+            setEditandoPerfil(false);
+            setNovaSenha("");
+
+            if (msgTimeoutRef.current) {
+                window.clearTimeout(msgTimeoutRef.current);
+            }
+
+            msgTimeoutRef.current = window.setTimeout(() => {
+                setMsgPerfil(null);
+            }, 2500);
+        } catch (error) {
+            console.error("Erro ao salvar perfil:", error);
+            setErrPerfil("Erro inesperado ao salvar perfil.");
+        } finally {
+            setSavingProfile(false);
         }
-
-        setMsgPerfil("Dados atualizados com sucesso!");
-        setEditandoPerfil(false);
-        setNovaSenha("");
-        setSavingProfile(false);
-
-        window.setTimeout(() => setMsgPerfil(null), 2500);
     }
 
     async function handleCheckout() {
-        setLoadingCheckout(true);
-        setErrPlano(null);
-
         try {
+            setLoadingCheckout(true);
+            setErrPlano(null);
+
             const { data: authData, error: authErr } = await supabase.auth.getUser();
             const user = authData?.user;
 
             if (authErr || !user || !user.email) {
                 setErrPlano("Faça login para assinar.");
-                setLoadingCheckout(false);
                 return;
             }
+
+            const normalizedEmail = user.email.trim().toLowerCase();
 
             const { error: upsertErr } = await supabase.from("planos").upsert(
                 [
                     {
-                        email: user.email,
+                        email: normalizedEmail,
                         status: "pendente",
                         updated_at: new Date().toISOString(),
                     },
@@ -283,10 +328,12 @@ export default function ContaPage() {
             );
 
             if (upsertErr) {
-                console.warn("Falha ao registrar status pendente antes do checkout:", upsertErr);
+                console.warn("Falha ao registrar status pendente:", upsertErr.message);
             }
 
-            window.location.href = `${CHECKOUT_URL}?email=${encodeURIComponent(user.email)}`;
+            window.location.assign(
+                `${CHECKOUT_URL}?email=${encodeURIComponent(normalizedEmail)}`
+            );
         } catch (error) {
             console.error("Erro ao iniciar checkout:", error);
             setErrPlano("Não foi possível abrir o checkout.");
@@ -312,7 +359,9 @@ export default function ContaPage() {
                 </div>
 
                 <div className="flex flex-col gap-1">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Minha Conta</h1>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+                        Minha Conta
+                    </h1>
                     <p className="text-sm text-muted-foreground">
                         Gerencie seu perfil e seu plano em um só lugar.
                     </p>
@@ -338,8 +387,13 @@ export default function ContaPage() {
                                     onClick={() => {
                                         setErrPerfil(null);
                                         setMsgPerfil(null);
-                                        setEditandoPerfil((v) => !v);
                                         setNovaSenha("");
+
+                                        if (editandoPerfil) {
+                                            cancelarEdicao();
+                                        } else {
+                                            setEditandoPerfil(true);
+                                        }
                                     }}
                                     disabled={savingProfile}
                                 >
@@ -425,8 +479,7 @@ export default function ContaPage() {
                                                 <div>
                                                     <p className="font-semibold text-foreground">Conta Google</p>
                                                     <p className="mt-1">
-                                                        Usuários Google não alteram senha neste painel. A alteração deve
-                                                        ser feita na sua conta Google.
+                                                        Usuários Google não alteram senha neste painel.
                                                     </p>
                                                 </div>
                                             </div>
@@ -474,12 +527,7 @@ export default function ContaPage() {
                                     <button
                                         type="button"
                                         className="rounded-lg border border-border bg-muted px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted/80 transition disabled:opacity-60"
-                                        onClick={() => {
-                                            setEditandoPerfil(false);
-                                            setErrPerfil(null);
-                                            setMsgPerfil(null);
-                                            setNovaSenha("");
-                                        }}
+                                        onClick={cancelarEdicao}
                                         disabled={savingProfile}
                                     >
                                         Cancelar
@@ -526,14 +574,14 @@ export default function ContaPage() {
                                 <div>
                                     <div className="text-xs text-muted-foreground">Próximo pagamento</div>
                                     <div className="text-lg font-bold text-foreground">
-                                        {loadingPlano ? "—" : proximoPagamentoLabel}
+                                        {loadingPlano ? "—" : toPtBRDate(proximoPagamento)}
                                     </div>
                                 </div>
 
                                 <div className="text-right">
                                     <div className="text-xs text-muted-foreground">Valor pago</div>
                                     <div className="text-sm font-semibold text-foreground">
-                                        {loadingPlano ? "—" : valorPagoLabel}
+                                        {loadingPlano ? "—" : toPtBRMoney(valorPago)}
                                     </div>
                                 </div>
                             </div>
@@ -565,7 +613,7 @@ export default function ContaPage() {
 
                             <div className="mt-3 rounded-xl border border-border bg-muted p-3 text-xs text-muted-foreground">
                                 Alterações e cancelamentos devem ser feitos pelo painel do comprador da
-                                Kiwify (ou link enviado por e-mail na compra).
+                                Kiwify.
                             </div>
                         </div>
 
@@ -574,12 +622,11 @@ export default function ContaPage() {
 
                             {planoStatus === "ativo" && emDia ? (
                                 <div className="rounded-xl border border-border bg-muted p-3 text-sm text-muted-foreground">
-                                    Seu plano está ativo! Para cancelar ou alterar, use o painel da Kiwify.
+                                    Seu plano está ativo.
                                 </div>
                             ) : planoStatus === "pendente" ? (
                                 <div className="rounded-xl border border-border bg-muted p-3 text-sm text-muted-foreground">
-                                    Pagamento pendente. Assim que confirmado, seu acesso será liberado
-                                    automaticamente.
+                                    Pagamento pendente.
                                 </div>
                             ) : (
                                 <button
@@ -594,53 +641,6 @@ export default function ContaPage() {
                         </div>
                     </aside>
                 </div>
-
-                <section className="rounded-2xl border border-border bg-card shadow-sm p-6">
-                    <h2 className="text-lg font-bold text-foreground">Recursos inclusos</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        O que você ganha ao assinar o Premium.
-                    </p>
-
-                    <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <ul className="space-y-3 text-sm text-foreground">
-                            <li className="flex items-center gap-3">
-                                <CheckCircle className="w-5 h-5 text-green-500" />
-                                Acesso ilimitado a todas as questões
-                            </li>
-                            <li className="flex items-center gap-3">
-                                <CheckCircle className="w-5 h-5 text-green-500" />
-                                Sistema de conquistas e gamificação
-                            </li>
-                            <li className="flex items-center gap-3">
-                                <CheckCircle className="w-5 h-5 text-green-500" />
-                                Cronograma personalizado de estudos
-                            </li>
-                            <li className="flex items-center gap-3">
-                                <CheckCircle className="w-5 h-5 text-green-500" />
-                                Suporte prioritário
-                            </li>
-                        </ul>
-
-                        <ul className="space-y-3 text-sm text-foreground">
-                            <li className="flex items-center gap-3">
-                                <CheckCircle className="w-5 h-5 text-green-500" />
-                                Estatísticas detalhadas de desempenho
-                            </li>
-                            <li className="flex items-center gap-3">
-                                <CheckCircle className="w-5 h-5 text-green-500" />
-                                Ferramentas de estudo (Pomodoro, cadernos)
-                            </li>
-                            <li className="flex items-center gap-3">
-                                <CheckCircle className="w-5 h-5 text-green-500" />
-                                Sistema de revisão espaçada
-                            </li>
-                            <li className="flex items-center gap-3">
-                                <CheckCircle className="w-5 h-5 text-green-500" />
-                                Atualizações constantes do banco de questões
-                            </li>
-                        </ul>
-                    </div>
-                </section>
             </div>
         </main>
     );
