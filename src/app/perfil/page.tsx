@@ -22,7 +22,6 @@ type PlanoRow = {
     proximo_pagamento?: string | null;
     access_until?: string | null;
     email?: string | null;
-    user_id?: string | null;
     valor_pago?: number | string | null;
 };
 
@@ -167,20 +166,28 @@ export default function ContaPage() {
 
                 setIsGoogleUser(user.app_metadata?.provider === "google");
 
-                let plano: PlanoRow | null = null;
+                if (!user.email) {
+                    setPlanoStatus("inativo");
+                    setProximoPagamento(null);
+                    setAccessUntil(null);
+                    setValorPago(null);
+                    setLoading(false);
+                    setLoadingPlano(false);
+                    return;
+                }
 
-                const byUser = await supabase
+                const byEmail = await supabase
                     .from("planos")
-                    .select("id, status, proximo_pagamento, access_until, email, user_id, valor_pago")
-                    .eq("user_id", user.id)
+                    .select("id, status, proximo_pagamento, access_until, email, valor_pago")
+                    .eq("email", user.email.toLowerCase())
                     .limit(1);
 
-                if (byUser.error) {
-                    console.error("Erro ao buscar plano por user_id:", {
-                        message: byUser.error.message,
-                        details: byUser.error.details,
-                        hint: byUser.error.hint,
-                        code: byUser.error.code,
+                if (byEmail.error) {
+                    console.error("Erro ao buscar plano por email:", {
+                        message: byEmail.error.message,
+                        details: byEmail.error.details,
+                        hint: byEmail.error.hint,
+                        code: byEmail.error.code,
                     });
 
                     setErrPlano("Erro ao buscar seu plano.");
@@ -189,46 +196,7 @@ export default function ContaPage() {
                     return;
                 }
 
-                if (byUser.data?.length) {
-                    plano = byUser.data[0] as PlanoRow;
-                } else if (user.email) {
-                    const byEmail = await supabase
-                        .from("planos")
-                        .select("id, status, proximo_pagamento, access_until, email, user_id, valor_pago")
-                        .eq("email", user.email)
-                        .limit(1);
-
-                    if (byEmail.error) {
-                        console.error("Erro ao buscar plano por email:", {
-                            message: byEmail.error.message,
-                            details: byEmail.error.details,
-                            hint: byEmail.error.hint,
-                            code: byEmail.error.code,
-                        });
-
-                        setErrPlano("Erro ao buscar seu plano.");
-                        setLoading(false);
-                        setLoadingPlano(false);
-                        return;
-                    }
-
-                    plano = byEmail.data?.[0] ?? null;
-
-                    if (plano && !plano.user_id) {
-                        const { error: bindErr } = await supabase
-                            .from("planos")
-                            .update({
-                                user_id: user.id,
-                            })
-                            .eq("email", user.email);
-
-                        if (bindErr) {
-                            console.warn("Não foi possível vincular user_id ao plano:", bindErr);
-                        } else {
-                            plano.user_id = user.id;
-                        }
-                    }
-                }
+                const plano = (byEmail.data?.[0] as PlanoRow | undefined) ?? null;
 
                 if (plano) {
                     setPlanoStatus((plano.status as PlanoStatus) ?? "inativo");
@@ -314,8 +282,7 @@ export default function ContaPage() {
             const { error: upsertErr } = await supabase.from("planos").upsert(
                 [
                     {
-                        user_id: user.id,
-                        email: user.email,
+                        email: user.email.toLowerCase(),
                         status: "pendente",
                     },
                 ],
