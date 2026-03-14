@@ -24,15 +24,34 @@ type PlanoRow = {
     email?: string | null;
     user_id?: string | null;
     updated_at?: string | null;
+    valor_pago?: number | string | null;
 };
 
 const CHECKOUT_URL = "https://pay.kiwify.com.br/ptQ62f5";
-const PRECO_MENSAL = "R$ 7,00";
+const PRECO_MENSAL_FALLBACK = "R$ 7,00";
 
 function toPtBRDate(dateIso: string) {
     const d = new Date(dateIso);
     if (Number.isNaN(d.getTime())) return "—";
     return d.toLocaleDateString("pt-BR");
+}
+
+function toPtBRMoney(value?: number | string | null) {
+    if (value === null || value === undefined || value === "") {
+        return PRECO_MENSAL_FALLBACK;
+    }
+
+    const parsed =
+        typeof value === "number"
+            ? value
+            : Number(String(value).replace(",", ".").replace(/[^\d.-]/g, ""));
+
+    if (Number.isNaN(parsed)) return PRECO_MENSAL_FALLBACK;
+
+    return new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+    }).format(parsed);
 }
 
 export default function ContaPage() {
@@ -57,6 +76,7 @@ export default function ContaPage() {
     const [planoStatus, setPlanoStatus] = useState<PlanoStatus>("inativo");
     const [proximoPagamento, setProximoPagamento] = useState<string | null>(null);
     const [accessUntil, setAccessUntil] = useState<string | null>(null);
+    const [valorPago, setValorPago] = useState<number | string | null>(null);
     const [errPlano, setErrPlano] = useState<string | null>(null);
 
     const emDia = useMemo(() => {
@@ -87,9 +107,13 @@ export default function ContaPage() {
     }, [planoStatus]);
 
     const proximoPagamentoLabel = useMemo(() => {
-        if (emDia && proximoPagamento) return toPtBRDate(proximoPagamento);
+        if (proximoPagamento) return toPtBRDate(proximoPagamento);
         return "—";
-    }, [emDia, proximoPagamento]);
+    }, [proximoPagamento]);
+
+    const valorPagoLabel = useMemo(() => {
+        return toPtBRMoney(valorPago);
+    }, [valorPago]);
 
     const emDiaLabel = useMemo(() => {
         if (accessUntil && planoStatus === "ativo") {
@@ -148,7 +172,9 @@ export default function ContaPage() {
 
                 const byUser = await supabase
                     .from("planos")
-                    .select("id, status, proximo_pagamento, access_until, email, user_id, updated_at")
+                    .select(
+                        "id, status, proximo_pagamento, access_until, email, user_id, updated_at, valor_pago"
+                    )
                     .eq("user_id", user.id)
                     .order("updated_at", { ascending: false })
                     .limit(1);
@@ -163,7 +189,7 @@ export default function ContaPage() {
 
                     const fallbackByUser = await supabase
                         .from("planos")
-                        .select("id, status, email, user_id")
+                        .select("id, status, proximo_pagamento, access_until, email, user_id, valor_pago")
                         .eq("user_id", user.id)
                         .limit(1);
 
@@ -188,8 +214,9 @@ export default function ContaPage() {
                             status: row.status ?? "inativo",
                             email: row.email ?? null,
                             user_id: row.user_id ?? null,
-                            proximo_pagamento: null,
-                            access_until: null,
+                            proximo_pagamento: row.proximo_pagamento ?? null,
+                            access_until: row.access_until ?? null,
+                            valor_pago: row.valor_pago ?? null,
                             updated_at: null,
                         };
                     }
@@ -200,7 +227,9 @@ export default function ContaPage() {
                 if (!plano && user.email) {
                     const byEmail = await supabase
                         .from("planos")
-                        .select("id, status, proximo_pagamento, access_until, email, user_id, updated_at")
+                        .select(
+                            "id, status, proximo_pagamento, access_until, email, user_id, updated_at, valor_pago"
+                        )
                         .eq("email", user.email)
                         .order("updated_at", { ascending: false })
                         .limit(1);
@@ -215,7 +244,7 @@ export default function ContaPage() {
 
                         const fallbackByEmail = await supabase
                             .from("planos")
-                            .select("id, status, email, user_id")
+                            .select("id, status, proximo_pagamento, access_until, email, user_id, valor_pago")
                             .eq("email", user.email)
                             .limit(1);
 
@@ -240,8 +269,9 @@ export default function ContaPage() {
                                 status: row.status ?? "inativo",
                                 email: row.email ?? null,
                                 user_id: row.user_id ?? null,
-                                proximo_pagamento: null,
-                                access_until: null,
+                                proximo_pagamento: row.proximo_pagamento ?? null,
+                                access_until: row.access_until ?? null,
+                                valor_pago: row.valor_pago ?? null,
                                 updated_at: null,
                             };
                         }
@@ -270,10 +300,12 @@ export default function ContaPage() {
                     setPlanoStatus((plano.status as PlanoStatus) ?? "inativo");
                     setProximoPagamento(plano.proximo_pagamento ?? null);
                     setAccessUntil(plano.access_until ?? null);
+                    setValorPago(plano.valor_pago ?? null);
                 } else {
                     setPlanoStatus("inativo");
                     setProximoPagamento(null);
                     setAccessUntil(null);
+                    setValorPago(null);
                 }
             } catch (error) {
                 console.error("Erro inesperado ao carregar conta/plano:", error);
@@ -608,7 +640,7 @@ export default function ContaPage() {
                                 <div className="text-right">
                                     <div className="text-xs text-muted-foreground">Valor</div>
                                     <div className="text-sm font-semibold text-foreground">
-                                        {PRECO_MENSAL}/mês
+                                        {loadingPlano ? "—" : valorPagoLabel}
                                     </div>
                                 </div>
                             </div>
