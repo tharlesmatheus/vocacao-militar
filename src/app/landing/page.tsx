@@ -87,6 +87,9 @@ type QuestaoProcessada = {
     criarFlashcard: boolean;
     flashcardFrente: string;
     flashcardVerso: string;
+    flashcardGerando: boolean;
+    flashcardErro: string;
+    flashcardVersao: number;
 };
 
 type FalhaProcessamento = {
@@ -303,7 +306,8 @@ export default function NovaQuestaoGeminiLote() {
             (q) =>
                 q.resultado &&
                 (!q.criarFlashcard ||
-                    (q.flashcardFrente.trim() &&
+                    (!q.flashcardGerando &&
+                        q.flashcardFrente.trim() &&
                         q.flashcardVerso.trim()))
         ) &&
         !processando &&
@@ -559,11 +563,9 @@ export default function NovaQuestaoGeminiLote() {
         setResultadoSalvamento([]);
     }
 
-    async function chamarGemini(
-        questaoTxt: string
+    async function chamarGeminiJson(
+        prompt: string
     ): Promise<any> {
-        const prompt = PROMPT_PREFIX + questaoTxt;
-
         const res = await fetch(GEMINI_URL, {
             method: "POST",
             headers: {
@@ -610,6 +612,134 @@ export default function NovaQuestaoGeminiLote() {
         }
 
         return extrairJson(texto);
+    }
+
+    async function chamarGemini(
+        questaoTxt: string
+    ): Promise<any> {
+        return chamarGeminiJson(
+            PROMPT_PREFIX + questaoTxt
+        );
+    }
+
+    async function gerarFlashcardComIA(
+        localId: string,
+        forcarNovaVersao = false
+    ) {
+        const questao = questoesProcessadas.find(
+            (q) => q.localId === localId
+        );
+
+        if (!questao) return;
+
+        atualizarQuestao(localId, {
+            criarFlashcard: true,
+            flashcardGerando: true,
+            flashcardErro: "",
+        });
+
+        const prompt = `
+Crie UM flashcard de estudo a partir da questão de concurso abaixo.
+
+Objetivo:
+- testar uma única informação importante;
+- priorizar conceito, regra, requisito, exceção, prazo, distinção ou fórmula;
+- evitar copiar a questão inteira;
+- evitar pergunta longa;
+- manter a frente curta e clara;
+- manter o verso objetivo, suficiente para revisão;
+- não inventar informação que não esteja sustentada pela questão, gabarito ou explicação.
+
+${forcarNovaVersao || questao.flashcardVersao > 0
+                ? `Gere uma NOVA versão, diferente da sugestão anterior.
+Sugestão anterior:
+Frente: ${questao.flashcardFrente || "(vazia)"}
+Verso: ${questao.flashcardVerso || "(vazio)"}`
+                : ""}
+
+Disciplina: ${materiaSelecionada?.nome ?? ""}
+Assunto: ${assuntoSelecionado?.nome ?? ""}
+
+Enunciado:
+${questao.enunciado}
+
+Alternativas:
+${Object.entries(questao.alternativas)
+                .map(([letra, valor]) => `${letra}) ${valor}`)
+                .join("\n")}
+
+Gabarito:
+${questao.correta}
+
+Explicação:
+${questao.explicacao}
+
+Retorne somente JSON válido:
+{
+  "frente": "...",
+  "verso": "..."
+}
+`;
+
+        try {
+            const obj = await chamarGeminiJson(prompt);
+
+            const frente = String(
+                obj?.frente ?? ""
+            ).trim();
+
+            const verso = String(
+                obj?.verso ?? ""
+            ).trim();
+
+            if (!frente || !verso) {
+                throw new Error(
+                    "A IA não retornou frente e verso válidos."
+                );
+            }
+
+            atualizarQuestao(localId, {
+                flashcardFrente: frente,
+                flashcardVerso: verso,
+                flashcardGerando: false,
+                flashcardErro: "",
+                flashcardVersao:
+                    questao.flashcardVersao + 1,
+            });
+        } catch (e) {
+            atualizarQuestao(localId, {
+                flashcardGerando: false,
+                flashcardErro: formatarErro(e),
+            });
+        }
+    }
+
+    async function handleToggleFlashcard(
+        questao: QuestaoProcessada,
+        checked: boolean
+    ) {
+        if (!checked) {
+            atualizarQuestao(questao.localId, {
+                criarFlashcard: false,
+                flashcardGerando: false,
+                flashcardErro: "",
+            });
+            return;
+        }
+
+        atualizarQuestao(questao.localId, {
+            criarFlashcard: true,
+            flashcardErro: "",
+        });
+
+        if (
+            !questao.flashcardFrente.trim() ||
+            !questao.flashcardVerso.trim()
+        ) {
+            await gerarFlashcardComIA(
+                questao.localId
+            );
+        }
     }
 
     async function handleProcessarLote() {
@@ -725,6 +855,9 @@ export default function NovaQuestaoGeminiLote() {
                         criarFlashcard: false,
                         flashcardFrente: "",
                         flashcardVerso: "",
+                        flashcardGerando: false,
+                        flashcardErro: "",
+                        flashcardVersao: 0,
                     });
                 } catch (e) {
                     falhas.push({
@@ -864,6 +997,238 @@ export default function NovaQuestaoGeminiLote() {
             throw new Error(
                 `Falha ao criar tentativa: ${error.message}`
             );
+        }
+    }
+
+    async function sincronizarEstatisticasDoUsuario() {
+        if (!userId) return;
+
+        const {
+            data: tentativasData,
+            error: tentativasError,
+        } = await supabase
+            .from("question_attempts")
+            .select(
+                "questao_id,resultado,created_at"
+            )
+            .eq("user_id", userId)
+            .order("created_at", {
+                ascending: true,
+            });
+
+        if (tentativasError) {
+            throw new Error(
+                `Falha ao ler tentativas para as estatísticas: ${tentativasError.message}`
+            );
+        }
+
+        const tentativas =
+            (tentativasData ?? []) as Array<{
+                questao_id: string;
+                resultado: ResultadoTentativa;
+                created_at: string;
+            }>;
+
+        const questaoIds = Array.from(
+            new Set(
+                tentativas
+                    .map((t) => t.questao_id)
+                    .filter(Boolean)
+            )
+        );
+
+        const questoesMap = new Map<
+            string,
+            {
+                materia_id: string | null;
+                assunto_id: string | null;
+            }
+        >();
+
+        for (
+            let i = 0;
+            i < questaoIds.length;
+            i += 500
+        ) {
+            const lote = questaoIds.slice(
+                i,
+                i + 500
+            );
+
+            const {
+                data: questoesData,
+                error: questoesError,
+            } = await supabase
+                .from("questoes")
+                .select(
+                    "id,materia_id,assunto_id"
+                )
+                .eq("user_id", userId)
+                .in("id", lote);
+
+            if (questoesError) {
+                throw new Error(
+                    `Falha ao ler questões para as estatísticas: ${questoesError.message}`
+                );
+            }
+
+            for (const row of questoesData ?? []) {
+                questoesMap.set(
+                    String(row.id),
+                    {
+                        materia_id:
+                            row.materia_id ?? null,
+                        assunto_id:
+                            row.assunto_id ?? null,
+                    }
+                );
+            }
+        }
+
+        const accPorMateria: Record<
+            string,
+            { total: number; corretas: number }
+        > = {};
+
+        const accPorAssunto: Record<
+            string,
+            { total: number; corretas: number }
+        > = {};
+
+        const porDia = new Map<string, number>();
+
+        let corretas = 0;
+
+        for (const tentativa of tentativas) {
+            const acertou =
+                tentativa.resultado === "ACERTO";
+
+            if (acertou) corretas += 1;
+
+            const questaoMeta = questoesMap.get(
+                tentativa.questao_id
+            );
+
+            if (questaoMeta?.materia_id) {
+                const atual =
+                    accPorMateria[
+                    questaoMeta.materia_id
+                    ] ?? {
+                        total: 0,
+                        corretas: 0,
+                    };
+
+                atual.total += 1;
+
+                if (acertou) {
+                    atual.corretas += 1;
+                }
+
+                accPorMateria[
+                    questaoMeta.materia_id
+                ] = atual;
+            }
+
+            if (questaoMeta?.assunto_id) {
+                const atual =
+                    accPorAssunto[
+                    questaoMeta.assunto_id
+                    ] ?? {
+                        total: 0,
+                        corretas: 0,
+                    };
+
+                atual.total += 1;
+
+                if (acertou) {
+                    atual.corretas += 1;
+                }
+
+                accPorAssunto[
+                    questaoMeta.assunto_id
+                ] = atual;
+            }
+
+            const d = new Date(
+                tentativa.created_at
+            );
+
+            const dia = d.toLocaleDateString(
+                "pt-BR",
+                {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                }
+            );
+
+            porDia.set(
+                dia,
+                (porDia.get(dia) ?? 0) + 1
+            );
+        }
+
+        const total = tentativas.length;
+
+        const taxaAcerto = total
+            ? (corretas / total) * 100
+            : 0;
+
+        const progressoSemanal = Array.from(
+            porDia.entries()
+        ).map(([dia, questoes]) => ({
+            dia,
+            questoes,
+        }));
+
+        const payloadEstatisticas = {
+            questoes_respondidas: total,
+            taxa_acerto: taxaAcerto,
+            progresso_semanal:
+                progressoSemanal,
+            acc_por_materia: accPorMateria,
+            acc_por_assunto: accPorAssunto,
+        };
+
+        const {
+            data: existente,
+            error: existenteError,
+        } = await supabase
+            .from("estatisticas")
+            .select("user_id")
+            .eq("user_id", userId)
+            .maybeSingle();
+
+        if (existenteError) {
+            throw new Error(
+                `Falha ao consultar estatísticas: ${existenteError.message}`
+            );
+        }
+
+        if (existente) {
+            const { error } = await supabase
+                .from("estatisticas")
+                .update(payloadEstatisticas)
+                .eq("user_id", userId);
+
+            if (error) {
+                throw new Error(
+                    `Falha ao atualizar estatísticas: ${error.message}`
+                );
+            }
+        } else {
+            const { error } = await supabase
+                .from("estatisticas")
+                .insert({
+                    user_id: userId,
+                    ...payloadEstatisticas,
+                });
+
+            if (error) {
+                throw new Error(
+                    `Falha ao criar estatísticas: ${error.message}`
+                );
+            }
         }
     }
 
@@ -1036,6 +1401,15 @@ export default function NovaQuestaoGeminiLote() {
                 }
             }
 
+            let avisoEstatisticas = "";
+
+            try {
+                await sincronizarEstatisticasDoUsuario();
+            } catch (e) {
+                avisoEstatisticas =
+                    formatarErro(e);
+            }
+
             setResultadoSalvamento(resultados);
 
             const ok = resultados.filter(
@@ -1048,7 +1422,10 @@ export default function NovaQuestaoGeminiLote() {
 
             if (ok) {
                 setMsg(
-                    `${ok} questão(ões) cadastrada(s) com sucesso.${falhas ? ` ${falhas} falharam.` : ""}`
+                    `${ok} questão(ões) cadastrada(s) com sucesso.${falhas ? ` ${falhas} falharam.` : ""}${avisoEstatisticas
+                        ? ` As questões foram salvas, mas houve falha ao sincronizar as estatísticas: ${avisoEstatisticas}`
+                        : " Estatísticas atualizadas."
+                    }`
                 );
             }
 
@@ -1596,9 +1973,9 @@ QUESTÃO 4 ...
                                                         )
                                                     }
                                                     className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${q.resultado ===
-                                                            "ERRO"
-                                                            ? "border-red-500 bg-red-50 text-red-700"
-                                                            : "border-border hover:bg-muted"
+                                                        "ERRO"
+                                                        ? "border-red-500 bg-red-50 text-red-700"
+                                                        : "border-border hover:bg-muted"
                                                         }`}
                                                 >
                                                     Errei
@@ -1616,9 +1993,9 @@ QUESTÃO 4 ...
                                                         )
                                                     }
                                                     className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${q.resultado ===
-                                                            "ACERTO"
-                                                            ? "border-green-500 bg-green-50 text-green-700"
-                                                            : "border-border hover:bg-muted"
+                                                        "ACERTO"
+                                                        ? "border-green-500 bg-green-50 text-green-700"
+                                                        : "border-border hover:bg-muted"
                                                         }`}
                                                 >
                                                     Acertei
@@ -1691,14 +2068,9 @@ QUESTÃO 4 ...
                                                 onChange={(
                                                     e
                                                 ) =>
-                                                    atualizarQuestao(
-                                                        q.localId,
-                                                        {
-                                                            criarFlashcard:
-                                                                e
-                                                                    .target
-                                                                    .checked,
-                                                        }
+                                                    handleToggleFlashcard(
+                                                        q,
+                                                        e.target.checked
                                                     )
                                                 }
                                                 className="mt-0.5"
@@ -1724,63 +2096,146 @@ QUESTÃO 4 ...
                                         </label>
 
                                         {q.criarFlashcard && (
-                                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                <label className="space-y-1">
-                                                    <span className="text-xs text-muted-foreground">
-                                                        Frente
-                                                        do
-                                                        flashcard
-                                                    </span>
+                                            <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+                                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                                    <div>
+                                                        <div className="text-sm font-semibold text-foreground">
+                                                            Pré-visualização do flashcard
+                                                        </div>
 
-                                                    <textarea
-                                                        value={
-                                                            q.flashcardFrente
-                                                        }
-                                                        onChange={(
-                                                            e
-                                                        ) =>
-                                                            atualizarQuestao(
+                                                        <div className="mt-1 text-xs text-muted-foreground">
+                                                            A IA cria uma sugestão curta. Você pode editar ou gerar outra versão antes de salvar.
+                                                        </div>
+                                                    </div>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            gerarFlashcardComIA(
                                                                 q.localId,
-                                                                {
-                                                                    flashcardFrente:
-                                                                        e
-                                                                            .target
-                                                                            .value,
-                                                                }
+                                                                true
                                                             )
                                                         }
-                                                        placeholder="Pergunta curta, conceito, prazo, exceção..."
-                                                        className="w-full min-h-[110px] rounded-xl border border-border bg-background p-3 text-sm"
-                                                    />
-                                                </label>
-
-                                                <label className="space-y-1">
-                                                    <span className="text-xs text-muted-foreground">
-                                                        Verso do
-                                                        flashcard
-                                                    </span>
-
-                                                    <textarea
-                                                        value={
-                                                            q.flashcardVerso
+                                                        disabled={
+                                                            q.flashcardGerando
                                                         }
-                                                        onChange={(
-                                                            e
-                                                        ) =>
-                                                            atualizarQuestao(
-                                                                q.localId,
-                                                                {
-                                                                    flashcardVerso:
-                                                                        e
-                                                                            .target
-                                                                            .value,
-                                                                }
-                                                            )
-                                                        }
-                                                        placeholder="Resposta objetiva."
-                                                        className="w-full min-h-[110px] rounded-xl border border-border bg-background p-3 text-sm"
-                                                    />
-                                                </label>
+                                                        className="shrink-0 rounded-xl border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                                                    >
+                                                        {q.flashcardGerando
+                                                            ? "Gerando..."
+                                                            : q.flashcardVersao > 0
+                                                                ? "Gerar nova versão"
+                                                                : "Gerar flashcard"}
+                                                    </button>
+                                                </div>
+
+                                                {q.flashcardErro && (
+                                                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                                        {q.flashcardErro}
+                                                    </div>
+                                                )}
+
+                                                {q.flashcardGerando && (
+                                                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div className="min-h-[180px] animate-pulse rounded-2xl border border-border bg-card p-5">
+                                                            <div className="h-3 w-16 rounded bg-muted" />
+                                                            <div className="mt-6 h-4 w-full rounded bg-muted" />
+                                                            <div className="mt-2 h-4 w-4/5 rounded bg-muted" />
+                                                        </div>
+
+                                                        <div className="min-h-[180px] animate-pulse rounded-2xl border border-border bg-card p-5">
+                                                            <div className="h-3 w-16 rounded bg-muted" />
+                                                            <div className="mt-6 h-4 w-full rounded bg-muted" />
+                                                            <div className="mt-2 h-4 w-3/4 rounded bg-muted" />
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {!q.flashcardGerando &&
+                                                    q.flashcardFrente.trim() &&
+                                                    q.flashcardVerso.trim() && (
+                                                        <>
+                                                            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                <div className="min-h-[190px] rounded-2xl border border-border bg-card p-5 shadow-sm">
+                                                                    <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                                                                        Frente
+                                                                    </div>
+
+                                                                    <div className="mt-6 whitespace-pre-wrap text-base font-semibold leading-relaxed text-foreground">
+                                                                        {q.flashcardFrente}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="min-h-[190px] rounded-2xl border border-border bg-card p-5 shadow-sm">
+                                                                    <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                                                                        Verso
+                                                                    </div>
+
+                                                                    <div className="mt-6 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                                                                        {q.flashcardVerso}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                <label className="space-y-1">
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                        Editar frente
+                                                                    </span>
+
+                                                                    <textarea
+                                                                        value={
+                                                                            q.flashcardFrente
+                                                                        }
+                                                                        onChange={(
+                                                                            e
+                                                                        ) =>
+                                                                            atualizarQuestao(
+                                                                                q.localId,
+                                                                                {
+                                                                                    flashcardFrente:
+                                                                                        e.target.value,
+                                                                                }
+                                                                            )
+                                                                        }
+                                                                        className="w-full min-h-[100px] rounded-xl border border-border bg-background p-3 text-sm"
+                                                                    />
+                                                                </label>
+
+                                                                <label className="space-y-1">
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                        Editar verso
+                                                                    </span>
+
+                                                                    <textarea
+                                                                        value={
+                                                                            q.flashcardVerso
+                                                                        }
+                                                                        onChange={(
+                                                                            e
+                                                                        ) =>
+                                                                            atualizarQuestao(
+                                                                                q.localId,
+                                                                                {
+                                                                                    flashcardVerso:
+                                                                                        e.target.value,
+                                                                                }
+                                                                            )
+                                                                        }
+                                                                        className="w-full min-h-[100px] rounded-xl border border-border bg-background p-3 text-sm"
+                                                                    />
+                                                                </label>
+                                                            </div>
+                                                        </>
+                                                    )}
+
+                                                {!q.flashcardGerando &&
+                                                    !q.flashcardFrente.trim() &&
+                                                    !q.flashcardErro && (
+                                                        <div className="mt-4 rounded-xl border border-dashed border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+                                                            Aguardando geração da pré-visualização.
+                                                        </div>
+                                                    )}
                                             </div>
                                         )}
                                     </article>
@@ -1820,8 +2275,9 @@ QUESTÃO 4 ...
                                         Marque Acertei ou
                                         Errei em todas as
                                         questões. Se criar
-                                        flashcard, preencha
-                                        Frente e Verso.
+                                        flashcard, aguarde a
+                                        pré-visualização e
+                                        confirme Frente e Verso.
                                     </p>
                                 )}
                         </div>
@@ -1840,9 +2296,9 @@ QUESTÃO 4 ...
                                     <div
                                         key={`${r.numero}-${r.status}`}
                                         className={`rounded-xl border px-4 py-3 text-sm ${r.status ===
-                                                "OK"
-                                                ? "border-green-200 bg-green-50 text-green-700"
-                                                : "border-red-200 bg-red-50 text-red-700"
+                                            "OK"
+                                            ? "border-green-200 bg-green-50 text-green-700"
+                                            : "border-red-200 bg-red-50 text-red-700"
                                             }`}
                                     >
                                         <strong>
