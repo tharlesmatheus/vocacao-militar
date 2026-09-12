@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 /*
@@ -60,6 +60,14 @@ type Assunto = {
     id: string;
     nome: string;
     materia_id?: string | null;
+};
+
+type OpenStudySession = {
+    id: string;
+    started_at: string;
+    materia_id: string | null;
+    assunto_id: string | null;
+    mode: "cronometro" | "manual";
 };
 
 type Alternativas = Record<string, string>;
@@ -284,6 +292,17 @@ function chavePreferencia(userId: string, nome: string) {
     return `questoes:${userId}:${nome}`;
 }
 
+function formatarDuracao(totalSeconds: number) {
+    const total = Math.max(0, Math.floor(totalSeconds));
+    const horas = Math.floor(total / 3600);
+    const minutos = Math.floor((total % 3600) / 60);
+    const segundos = total % 60;
+
+    return [horas, minutos, segundos]
+        .map((valor) => String(valor).padStart(2, "0"))
+        .join(":");
+}
+
 export default function NovaQuestaoGeminiLote() {
     const [userId, setUserId] = useState<string | null>(null);
 
@@ -336,6 +355,22 @@ export default function NovaQuestaoGeminiLote() {
     const [resultadoSalvamento, setResultadoSalvamento] =
         useState<ResultadoSalvamento[]>([]);
 
+    /*
+     * Tempo de estudo:
+     * a duração real é calculada a partir de started_at salvo no banco.
+     * O setInterval abaixo serve apenas para atualizar a exibição.
+     */
+    const [openStudySession, setOpenStudySession] =
+        useState<OpenStudySession | null>(null);
+    const [studyElapsedSec, setStudyElapsedSec] = useState(0);
+    const [studyActionLoading, setStudyActionLoading] = useState(false);
+    const [studyError, setStudyError] = useState("");
+    const [studyMessage, setStudyMessage] = useState("");
+    const [studyMateriaNome, setStudyMateriaNome] = useState("");
+    const [studyAssuntoNome, setStudyAssuntoNome] = useState("");
+    const [studyEditalId, setStudyEditalId] = useState("");
+    const studyTimerRef = useRef<number | null>(null);
+
     const editalSelecionado = useMemo(
         () => editais.find((e) => e.id === editalId) ?? null,
         [editais, editalId]
@@ -353,12 +388,18 @@ export default function NovaQuestaoGeminiLote() {
         [assuntos, assuntoId]
     );
 
+    const sessaoCorrespondeClassificacao =
+        !openStudySession ||
+        (openStudySession.materia_id === materiaId &&
+            openStudySession.assunto_id === assuntoId);
+
     const podeProcessar =
         !!userId &&
         !!editalId &&
         !!materiaId &&
         !!assuntoId &&
         !!input.trim() &&
+        sessaoCorrespondeClassificacao &&
         !processando &&
         !salvando;
 
@@ -375,6 +416,349 @@ export default function NovaQuestaoGeminiLote() {
         ) &&
         !processando &&
         !salvando;
+
+    useEffect(() => {
+        if (studyTimerRef.current) {
+            window.clearInterval(studyTimerRef.current);
+            studyTimerRef.current = null;
+        }
+
+        if (!openStudySession?.started_at) {
+            setStudyElapsedSec(0);
+            return;
+        }
+
+        const atualizar = () => {
+            const inicio = new Date(openStudySession.started_at).getTime();
+            const agora = Date.now();
+
+            setStudyElapsedSec(
+                Number.isFinite(inicio)
+                    ? Math.max(0, Math.floor((agora - inicio) / 1000))
+                    : 0
+            );
+        };
+
+        atualizar();
+
+        studyTimerRef.current = window.setInterval(
+            atualizar,
+            1000
+        );
+
+        return () => {
+            if (studyTimerRef.current) {
+                window.clearInterval(studyTimerRef.current);
+                studyTimerRef.current = null;
+            }
+        };
+    }, [
+        openStudySession?.id,
+        openStudySession?.started_at,
+    ]);
+
+    async function getStudyAccessToken() {
+        const {
+            data,
+            error,
+        } = await supabase.auth.getSession();
+
+        const token = data?.session?.access_token;
+
+        if (error || !token) {
+            throw new Error(
+                "Sua sessão expirou. Entre novamente para controlar o tempo de estudo."
+            );
+        }
+
+        return token;
+    }
+
+    async function carregarNomesDaSessao(
+        session: OpenStudySession,
+        uid: string
+    ) {
+        const [materiaReq, assuntoReq] = await Promise.all([
+            session.materia_id
+                ? supabase
+                    .from("materias")
+                    .select("nome,edital_id")
+                    .eq("user_id", uid)
+                    .eq("id", session.materia_id)
+                    .maybeSingle()
+                : Promise.resolve({
+                    data: null,
+                    error: null,
+                }),
+            session.assunto_id
+                ? supabase
+                    .from("assuntos")
+                    .select("nome")
+                    .eq("user_id", uid)
+                    .eq("id", session.assunto_id)
+                    .maybeSingle()
+                : Promise.resolve({
+                    data: null,
+                    error: null,
+                }),
+        ]);
+
+        const materiaSessao =
+            materiaReq.data as
+            | {
+                nome?: string;
+                edital_id?: string | null;
+            }
+            | null;
+
+        setStudyMateriaNome(
+            String(
+                materiaSessao?.nome ?? ""
+            ).trim()
+        );
+
+        setStudyEditalId(
+            String(
+                materiaSessao?.edital_id ?? ""
+            )
+        );
+
+        setStudyAssuntoNome(
+            String(
+                (assuntoReq.data as { nome?: string } | null)
+                    ?.nome ?? ""
+            ).trim()
+        );
+    }
+
+    async function carregarSessaoAberta(uid: string) {
+        const {
+            data,
+            error,
+        } = await supabase
+            .from("study_sessions")
+            .select(
+                "id,started_at,materia_id,assunto_id,mode"
+            )
+            .eq("user_id", uid)
+            .is("ended_at", null)
+            .order("started_at", {
+                ascending: false,
+            })
+            .limit(1)
+            .maybeSingle();
+
+        if (error) {
+            throw new Error(
+                `Não foi possível verificar o cronômetro: ${error.message}`
+            );
+        }
+
+        if (!data) {
+            setOpenStudySession(null);
+            setStudyElapsedSec(0);
+            setStudyMateriaNome("");
+            setStudyAssuntoNome("");
+            setStudyEditalId("");
+            return;
+        }
+
+        const session = data as OpenStudySession;
+
+        setOpenStudySession(session);
+
+        await carregarNomesDaSessao(
+            session,
+            uid
+        );
+    }
+
+    async function iniciarEstudo() {
+        setStudyError("");
+        setStudyMessage("");
+
+        if (!userId) {
+            setStudyError("Usuário não autenticado.");
+            return;
+        }
+
+        if (!materiaId || !assuntoId) {
+            setStudyError(
+                "Selecione a Disciplina e o Assunto antes de iniciar o estudo."
+            );
+            return;
+        }
+
+        if (openStudySession) {
+            setStudyError(
+                "Já existe uma sessão de estudo em andamento. Finalize-a antes de iniciar outra."
+            );
+            return;
+        }
+
+        setStudyActionLoading(true);
+
+        try {
+            const access_token =
+                await getStudyAccessToken();
+
+            const res = await fetch(
+                "/api/study-sessions",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+                    },
+                    body: JSON.stringify({
+                        action: "start",
+                        access_token,
+                        materia_id: materiaId,
+                        assunto_id: assuntoId,
+                    }),
+                }
+            );
+
+            const out = await res
+                .json()
+                .catch(() => null);
+
+            if (!res.ok) {
+                throw new Error(
+                    out?.error ||
+                    "Falha ao iniciar o tempo de estudo."
+                );
+            }
+
+            const session =
+                out?.session as
+                | OpenStudySession
+                | undefined;
+
+            if (!session?.id) {
+                throw new Error(
+                    "A sessão foi iniciada, mas o servidor não retornou seus dados."
+                );
+            }
+
+            setOpenStudySession(session);
+
+            if (
+                session.materia_id === materiaId &&
+                session.assunto_id === assuntoId
+            ) {
+                setStudyMateriaNome(
+                    materiaSelecionada?.nome ?? ""
+                );
+                setStudyAssuntoNome(
+                    assuntoSelecionado?.nome ?? ""
+                );
+                setStudyEditalId(editalId);
+            } else {
+                await carregarNomesDaSessao(
+                    session,
+                    userId
+                );
+            }
+
+            setStudyMessage(
+                "Cronômetro iniciado. Você pode estudar em outra plataforma e voltar depois; o tempo continuará sendo calculado pelo horário salvo no banco."
+            );
+        } catch (e) {
+            setStudyError(formatarErro(e));
+        } finally {
+            setStudyActionLoading(false);
+        }
+    }
+
+    async function encerrarEstudo(
+        silencioso = false
+    ): Promise<boolean> {
+        setStudyError("");
+
+        if (!openStudySession?.id) {
+            return true;
+        }
+
+        setStudyActionLoading(true);
+
+        try {
+            const access_token =
+                await getStudyAccessToken();
+
+            const res = await fetch(
+                "/api/study-sessions",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+                    },
+                    body: JSON.stringify({
+                        action: "stop",
+                        access_token,
+                        session_id:
+                            openStudySession.id,
+                    }),
+                }
+            );
+
+            const out = await res
+                .json()
+                .catch(() => null);
+
+            if (!res.ok) {
+                throw new Error(
+                    out?.error ||
+                    "Falha ao finalizar o tempo de estudo."
+                );
+            }
+
+            const duracaoFinal =
+                studyElapsedSec;
+
+            setOpenStudySession(null);
+            setStudyElapsedSec(0);
+            setStudyMateriaNome("");
+            setStudyAssuntoNome("");
+            setStudyEditalId("");
+
+            if (!silencioso) {
+                setStudyMessage(
+                    `Sessão finalizada. Tempo contabilizado: ${formatarDuracao(
+                        duracaoFinal
+                    )}.`
+                );
+            }
+
+            return true;
+        } catch (e) {
+            setStudyError(formatarErro(e));
+            return false;
+        } finally {
+            setStudyActionLoading(false);
+        }
+    }
+
+    async function confirmarTrocaDeClassificacao(
+        descricaoDestino: string
+    ) {
+        if (!openStudySession) {
+            return true;
+        }
+
+        const confirmou = window.confirm(
+            `Existe um estudo em andamento em ${studyMateriaNome || "outra disciplina"} / ${studyAssuntoNome || "outro assunto"} (${formatarDuracao(
+                studyElapsedSec
+            )}).\n\nPara alterar ${descricaoDestino}, a sessão atual precisa ser finalizada. Deseja finalizar agora?`
+        );
+
+        if (!confirmou) {
+            return false;
+        }
+
+        return encerrarEstudo(true);
+    }
 
     useEffect(() => {
         let cancelled = false;
@@ -400,6 +784,12 @@ export default function NovaQuestaoGeminiLote() {
                 if (cancelled) return;
 
                 setUserId(user.id);
+
+                try {
+                    await carregarSessaoAberta(user.id);
+                } catch (e) {
+                    setStudyError(formatarErro(e));
+                }
 
                 const [
                     editaisReq,
@@ -636,6 +1026,18 @@ export default function NovaQuestaoGeminiLote() {
     async function handleEditalChange(
         novoEditalId: string
     ) {
+        if (
+            openStudySession &&
+            novoEditalId !== studyEditalId
+        ) {
+            const podeTrocar =
+                await confirmarTrocaDeClassificacao(
+                    "o Edital"
+                );
+
+            if (!podeTrocar) return;
+        }
+
         setEditalId(novoEditalId);
         setMateriaId("");
         setAssuntoId("");
@@ -691,6 +1093,18 @@ export default function NovaQuestaoGeminiLote() {
     async function handleMateriaChange(
         novaMateriaId: string
     ) {
+        if (
+            openStudySession &&
+            openStudySession.materia_id !== novaMateriaId
+        ) {
+            const podeTrocar =
+                await confirmarTrocaDeClassificacao(
+                    "a Disciplina"
+                );
+
+            if (!podeTrocar) return;
+        }
+
         setMateriaId(novaMateriaId);
         setAssuntoId("");
         setAssuntos([]);
@@ -734,9 +1148,21 @@ export default function NovaQuestaoGeminiLote() {
         setAssuntos((data ?? []) as Assunto[]);
     }
 
-    function handleAssuntoChange(
+    async function handleAssuntoChange(
         novoAssuntoId: string
     ) {
+        if (
+            openStudySession &&
+            openStudySession.assunto_id !== novoAssuntoId
+        ) {
+            const podeTrocar =
+                await confirmarTrocaDeClassificacao(
+                    "o Assunto"
+                );
+
+            if (!podeTrocar) return;
+        }
+
         setAssuntoId(novoAssuntoId);
         setQuestõesLimparDepoisDaClassificacao();
         setErro("");
@@ -2245,8 +2671,161 @@ Retorne somente JSON válido:
                 </section>
 
                 <section className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <h2 className="text-base font-semibold">
+                                2. Tempo de estudo
+                            </h2>
+
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                Inicie o cronômetro antes de resolver
+                                questões na plataforma externa. O tempo
+                                fica associado à Disciplina e ao Assunto
+                                selecionados acima.
+                            </p>
+                        </div>
+
+                        <a
+                            href="/tempo-de-estudo"
+                            className="text-xs font-medium text-primary hover:underline"
+                        >
+                            Ver histórico de tempo
+                        </a>
+                    </div>
+
+                    {studyError && (
+                        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                            {studyError}
+                        </div>
+                    )}
+
+                    {studyMessage && (
+                        <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                            {studyMessage}
+                        </div>
+                    )}
+
+                    {openStudySession ? (
+                        <div className="mt-5 rounded-2xl border border-green-300 bg-green-50/70 p-5">
+                            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <span className="relative flex h-3 w-3">
+                                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-50" />
+                                            <span className="relative inline-flex h-3 w-3 rounded-full bg-green-600" />
+                                        </span>
+
+                                        <span className="text-xs font-semibold uppercase tracking-wider text-green-700">
+                                            Estudo em andamento
+                                        </span>
+                                    </div>
+
+                                    <div className="mt-3 text-lg font-semibold text-foreground">
+                                        {studyMateriaNome ||
+                                            "Disciplina da sessão"}
+                                    </div>
+
+                                    <div className="mt-1 text-sm text-muted-foreground">
+                                        {studyAssuntoNome ||
+                                            "Assunto da sessão"}
+                                    </div>
+
+                                    <div className="mt-2 text-xs text-muted-foreground">
+                                        Iniciado em{" "}
+                                        {new Date(
+                                            openStudySession.started_at
+                                        ).toLocaleString("pt-BR")}
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col items-stretch gap-3 sm:items-end">
+                                    <div className="font-mono text-4xl font-bold tabular-nums text-foreground">
+                                        {formatarDuracao(
+                                            studyElapsedSec
+                                        )}
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            encerrarEstudo(false)
+                                        }
+                                        disabled={studyActionLoading}
+                                        className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        {studyActionLoading
+                                            ? "Finalizando..."
+                                            : "Finalizar estudo"}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 rounded-xl border border-green-200 bg-white/60 px-4 py-3 text-xs text-green-800">
+                                Você pode sair desta página, trocar de aba
+                                ou estudar em outro site. O tempo real é
+                                calculado pelo horário de início salvo no
+                                banco, e não pelo contador visual desta
+                                página.
+                            </div>
+
+                            {!sessaoCorrespondeClassificacao && (
+                                <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                                    A classificação selecionada na página
+                                    é diferente da sessão em andamento.
+                                    Para evitar contabilizar tempo na
+                                    matéria errada, o processamento das
+                                    questões fica bloqueado até você
+                                    selecionar a mesma Disciplina/Assunto
+                                    da sessão ou finalizar o estudo.
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="mt-5 rounded-2xl border border-border bg-background p-5">
+                            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                                <div>
+                                    <div className="text-sm font-semibold">
+                                        {materiaSelecionada?.nome ||
+                                            "Selecione uma Disciplina"}
+                                    </div>
+
+                                    <div className="mt-1 text-sm text-muted-foreground">
+                                        {assuntoSelecionado?.nome ||
+                                            "Selecione um Assunto"}
+                                    </div>
+
+                                    <p className="mt-3 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+                                        Ao iniciar, uma sessão é criada
+                                        em <code>study_sessions</code>.
+                                        Ela continua aberta enquanto você
+                                        resolve as questões externamente
+                                        e só termina quando você clicar
+                                        em Finalizar estudo.
+                                    </p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={iniciarEstudo}
+                                    disabled={
+                                        studyActionLoading ||
+                                        !materiaId ||
+                                        !assuntoId
+                                    }
+                                    className="shrink-0 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {studyActionLoading
+                                        ? "Iniciando..."
+                                        : "Iniciar estudo"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </section>
+
+                <section className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm">
                     <h2 className="text-base font-semibold">
-                        2. Cole as questões
+                        3. Cole as questões
                     </h2>
 
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -2322,7 +2901,7 @@ QUESTÃO 4 ...
                     <section className="space-y-5">
                         <div>
                             <h2 className="text-lg font-semibold">
-                                3. Revise e informe o resultado
+                                4. Revise e informe o resultado
                             </h2>
 
                             <p className="mt-1 text-sm text-muted-foreground">
