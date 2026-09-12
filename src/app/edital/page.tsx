@@ -251,6 +251,23 @@ export default function EditalPage() {
         setAssuntos(byMateria);
     };
 
+    // Ao voltar para esta aba depois de concluir revisões, recarrega o
+    // progresso do edital. A função complete_review do Supabase incrementa
+    // automaticamente assuntos.visto_count a cada revisão concluída.
+    useEffect(() => {
+        const handleFocus = () => {
+            if (selEdital) {
+                refreshTudo(selEdital);
+            }
+        };
+
+        window.addEventListener("focus", handleFocus);
+
+        return () => {
+            window.removeEventListener("focus", handleFocus);
+        };
+    }, [selEdital]);
+
     /** helpers (tokens) */
     const selectBase =
         "rounded border border-border p-2 bg-input text-foreground appearance-none " +
@@ -329,14 +346,31 @@ export default function EditalPage() {
     return (
         <div className="mx-auto max-w-6xl p-4 text-foreground">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <h1 className="text-2xl font-semibold">Edital</h1>
-                <div className="flex gap-2">
+                <div>
+                    <h1 className="text-2xl font-semibold">Edital</h1>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        O progresso também é atualizado automaticamente pelas revisões concluídas.
+                    </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        className="rounded-lg border border-border bg-card px-3 py-2 text-foreground hover:bg-muted"
+                        onClick={() => {
+                            window.location.href = "/revisao";
+                        }}
+                    >
+                        Centro de Revisões
+                    </button>
+
                     <button
                         className="rounded-lg bg-primary px-3 py-2 text-primary-foreground"
                         onClick={() => setOpenNovo(true)}
                     >
                         + Novo Edital
                     </button>
+
                     <button
                         className="rounded-lg px-3 py-2 bg-transparent text-foreground border border-border disabled:opacity-60"
                         onClick={() => setOpenEditar(true)}
@@ -381,8 +415,8 @@ export default function EditalPage() {
                         <button
                             onClick={() => setShowOnlyNeverSeen((v) => !v)}
                             className={`rounded px-3 py-2 border border-border ${showOnlyNeverSeen
-                                    ? "bg-amber-100 text-amber-700"
-                                    : "bg-transparent"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-transparent"
                                 }`}
                             title="Exibir apenas assuntos com 0 vistas"
                         >
@@ -392,8 +426,8 @@ export default function EditalPage() {
                         <button
                             onClick={() => setShowGrafico((v) => !v)}
                             className={`rounded px-3 py-2 border border-border ${showGrafico
-                                    ? "bg-green-100 text-green-700"
-                                    : "bg-transparent"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-transparent"
                                 }`}
                             title="Ver um resumo por matéria"
                         >
@@ -439,8 +473,9 @@ export default function EditalPage() {
 
                             <div className="mt-2 text-xs text-muted-foreground">
                                 A barra só atinge <b>100%</b> quando <b>todos</b> os assuntos dessa
-                                matéria tiverem sido vistos <b>7 vezes</b> cada. Se algum estiver
-                                abaixo disso, a barra fica proporcional à média (visto/7).
+                                matéria tiverem acumulado <b>7 registros de estudo/revisão</b> cada.
+                                Revisões concluídas no Centro de Revisões incrementam esse progresso
+                                automaticamente.
                             </div>
                         </div>
                     )}

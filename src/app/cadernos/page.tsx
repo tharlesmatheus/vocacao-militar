@@ -471,14 +471,28 @@ export default function CadernosPageGeral() {
     return (
         <div className="max-w-6xl mx-auto px-4 py-10">
             {/* Header */}
-            <div className="flex items-start gap-3 mb-8">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                    <BookIcon className="w-6 h-6" />
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
+                <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                        <BookIcon className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-extrabold text-foreground">Meus Cadernos</h1>
+                        <p className="text-sm text-muted-foreground">
+                            Organize suas questões. As revisões efetivas acontecem no Centro de Revisões.
+                        </p>
+                    </div>
                 </div>
-                <div>
-                    <h1 className="text-2xl font-extrabold text-foreground">Meus Cadernos</h1>
-                    <p className="text-sm text-muted-foreground">Organize e revise suas questões de forma eficiente</p>
-                </div>
+
+                <button
+                    type="button"
+                    onClick={() => {
+                        window.location.href = "/revisao";
+                    }}
+                    className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                >
+                    Ir para Revisões
+                </button>
             </div>
 
             {!userId && !loading && (
@@ -726,8 +740,8 @@ export default function CadernosPageGeral() {
                                     >
                                         <div
                                             className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS"
-                                                    ? "bg-red-500/10 text-red-600"
-                                                    : "bg-emerald-500/10 text-emerald-600"
+                                                ? "bg-red-500/10 text-red-600"
+                                                : "bg-emerald-500/10 text-emerald-600"
                                                 }`}
                                         >
                                             <BookIcon className="w-6 h-6" />
@@ -806,8 +820,8 @@ export default function CadernosPageGeral() {
                                     >
                                         <div
                                             className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS"
-                                                    ? "bg-red-500/10 text-red-600"
-                                                    : "bg-emerald-500/10 text-emerald-600"
+                                                ? "bg-red-500/10 text-red-600"
+                                                : "bg-emerald-500/10 text-emerald-600"
                                                 }`}
                                         >
                                             <BookIcon className="w-6 h-6" />

@@ -774,10 +774,10 @@ export default function FlashcardsPage() {
      * ========================= */
 
     function iniciarRevisao() {
-        setReviewIndex(0);
-        setShowBack(false);
-        setReviewMode(true);
-        setErro("");
+        // A revisão efetiva agora acontece no Centro de Revisões.
+        // Esta página continua responsável por criar, editar, pausar
+        // e organizar os flashcards.
+        window.location.href = "/revisao";
     }
 
     function sairRevisao() {
@@ -1058,9 +1058,9 @@ export default function FlashcardsPage() {
                                     )
                                 }
                                 className={`p-2 rounded-lg transition ${viewMode ===
-                                        "grid"
-                                        ? "bg-background shadow"
-                                        : "text-muted-foreground"
+                                    "grid"
+                                    ? "bg-background shadow"
+                                    : "text-muted-foreground"
                                     }`}
                             >
                                 <LayoutGrid
@@ -1077,9 +1077,9 @@ export default function FlashcardsPage() {
                                     )
                                 }
                                 className={`p-2 rounded-lg transition ${viewMode ===
-                                        "list"
-                                        ? "bg-background shadow"
-                                        : "text-muted-foreground"
+                                    "list"
+                                    ? "bg-background shadow"
+                                    : "text-muted-foreground"
                                     }`}
                             >
                                 <List size={18} />
@@ -1384,7 +1384,7 @@ export default function FlashcardsPage() {
                                         <RotateCcw
                                             size={17}
                                         />
-                                        Revisar ativos
+                                        Revisar no Centro de Revisões
                                     </button>
                                 )}
                         </div>
@@ -2268,7 +2268,7 @@ function ReviewArea({
                     className="h-full bg-primary transition-all"
                     style={{
                         width: `${((index + 1) /
-                                cards.length) *
+                            cards.length) *
                             100
                             }%`,
                     }}

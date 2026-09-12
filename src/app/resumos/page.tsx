@@ -175,8 +175,8 @@ export default function ResumosPage() {
                         <button
                             onClick={() => setViewMode("grid")}
                             className={`p-2 rounded-lg ${viewMode === "grid"
-                                    ? "bg-background shadow"
-                                    : "text-muted-foreground"
+                                ? "bg-background shadow"
+                                : "text-muted-foreground"
                                 }`}
                         >
                             <LayoutGrid size={18} />
@@ -185,13 +185,23 @@ export default function ResumosPage() {
                         <button
                             onClick={() => setViewMode("list")}
                             className={`p-2 rounded-lg ${viewMode === "list"
-                                    ? "bg-background shadow"
-                                    : "text-muted-foreground"
+                                ? "bg-background shadow"
+                                : "text-muted-foreground"
                                 }`}
                         >
                             <List size={18} />
                         </button>
                     </div>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            window.location.href = "/revisao";
+                        }}
+                        className="border border-border bg-card px-5 py-2 rounded-xl hover:bg-muted"
+                    >
+                        Revisar
+                    </button>
 
                     <button className="bg-primary text-white px-5 py-2 rounded-xl">
                         + Novo resumo
