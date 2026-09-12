@@ -87,6 +87,7 @@ type QuestaoProcessada = {
     flashcardGerando: boolean;
     flashcardErro: string;
     flashcardVersao: number;
+    flashcardConfirmado: boolean;
 };
 
 type FalhaProcessamento = {
@@ -297,7 +298,8 @@ export default function NovaQuestaoGeminiLote() {
                 (!q.criarFlashcard ||
                     (!q.flashcardGerando &&
                         q.flashcardFrente.trim() &&
-                        q.flashcardVerso.trim()))
+                        q.flashcardVerso.trim() &&
+                        q.flashcardConfirmado))
         ) &&
         !processando &&
         !salvando;
@@ -625,6 +627,7 @@ export default function NovaQuestaoGeminiLote() {
             criarFlashcard: true,
             flashcardGerando: true,
             flashcardErro: "",
+            flashcardConfirmado: false,
         });
 
         const prompt = `
@@ -694,6 +697,7 @@ Retorne somente JSON válido:
                 flashcardErro: "",
                 flashcardVersao:
                     questao.flashcardVersao + 1,
+                flashcardConfirmado: false,
             });
         } catch (e) {
             atualizarQuestao(localId, {
@@ -710,8 +714,12 @@ Retorne somente JSON válido:
         if (!checked) {
             atualizarQuestao(questao.localId, {
                 criarFlashcard: false,
+                flashcardFrente: "",
+                flashcardVerso: "",
                 flashcardGerando: false,
                 flashcardErro: "",
+                flashcardVersao: 0,
+                flashcardConfirmado: false,
             });
             return;
         }
@@ -719,6 +727,7 @@ Retorne somente JSON válido:
         atualizarQuestao(questao.localId, {
             criarFlashcard: true,
             flashcardErro: "",
+            flashcardConfirmado: false,
         });
 
         if (
@@ -847,6 +856,7 @@ Retorne somente JSON válido:
                         flashcardGerando: false,
                         flashcardErro: "",
                         flashcardVersao: 0,
+                        flashcardConfirmado: false,
                     });
                 } catch (e) {
                     falhas.push({
@@ -881,11 +891,31 @@ Retorne somente JSON válido:
         patch: Partial<QuestaoProcessada>
     ) {
         setQuestoesProcessadas((prev) =>
-            prev.map((q) =>
-                q.localId === localId
-                    ? { ...q, ...patch }
-                    : q
-            )
+            prev.map((q) => {
+                if (q.localId !== localId) return q;
+
+                const alteraConteudoBase =
+                    "enunciado" in patch ||
+                    "correta" in patch ||
+                    "explicacao" in patch;
+
+                const alteraConteudoFlashcard =
+                    "flashcardFrente" in patch ||
+                    "flashcardVerso" in patch;
+
+                const deveInvalidarConfirmacao =
+                    q.criarFlashcard &&
+                    (alteraConteudoBase ||
+                        alteraConteudoFlashcard);
+
+                return {
+                    ...q,
+                    ...patch,
+                    ...(deveInvalidarConfirmacao
+                        ? { flashcardConfirmado: false }
+                        : {}),
+                };
+            })
         );
     }
 
@@ -906,6 +936,9 @@ Retorne somente JSON válido:
                         ...q.alternativas,
                         [letra]: valor,
                     },
+                    ...(q.criarFlashcard
+                        ? { flashcardConfirmado: false }
+                        : {}),
                 };
             })
         );
@@ -1271,7 +1304,21 @@ Retorne somente JSON válido:
 
         if (flashcardsInvalidos.length) {
             setErro(
-                "Preencha Frente e Verso de todos os flashcards marcados."
+                "Gere e revise Frente e Verso de todos os flashcards marcados."
+            );
+            return;
+        }
+
+        const flashcardsNaoConfirmados =
+            questoesProcessadas.filter(
+                (q) =>
+                    q.criarFlashcard &&
+                    !q.flashcardConfirmado
+            );
+
+        if (flashcardsNaoConfirmados.length) {
+            setErro(
+                "Confirme a prévia de todos os flashcards antes de salvar."
             );
             return;
         }
@@ -1352,7 +1399,10 @@ Retorne somente JSON válido:
                         );
                     }
 
-                    if (q.criarFlashcard) {
+                    if (
+                        q.criarFlashcard &&
+                        q.flashcardConfirmado
+                    ) {
                         await inserirFlashcard(
                             questaoId,
                             q
@@ -1995,11 +2045,30 @@ QUESTÃO 4 ...
                                         {q.resultado ===
                                             "ERRO" && (
                                                 <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-xs text-red-700">
-                                                    Esta questão
-                                                    será enviada
-                                                    automaticamente
-                                                    para o Caderno
-                                                    de Erros.
+                                                    Esta tentativa entrará nas estatísticas e a questão será enviada automaticamente para o Caderno de Erros de{" "}
+                                                    <strong>
+                                                        {materiaSelecionada?.nome ?? "Disciplina"}
+                                                    </strong>
+                                                    {" / "}
+                                                    <strong>
+                                                        {assuntoSelecionado?.nome ?? "Assunto"}
+                                                    </strong>
+                                                    .
+                                                </div>
+                                            )}
+
+                                        {q.resultado ===
+                                            "ACERTO" && (
+                                                <div className="mt-3 rounded-xl bg-green-50 px-4 py-3 text-xs text-green-700">
+                                                    Esta tentativa será registrada como acerto nas estatísticas de{" "}
+                                                    <strong>
+                                                        {materiaSelecionada?.nome ?? "Disciplina"}
+                                                    </strong>
+                                                    {" / "}
+                                                    <strong>
+                                                        {assuntoSelecionado?.nome ?? "Assunto"}
+                                                    </strong>
+                                                    .
                                                 </div>
                                             )}
 
@@ -2074,12 +2143,7 @@ QUESTÃO 4 ...
                                                 </span>
 
                                                 <span className="block text-xs text-muted-foreground mt-1">
-                                                    O flashcard
-                                                    herdará o
-                                                    mesmo
-                                                    Edital,
-                                                    Disciplina e
-                                                    Assunto.
+                                                    A IA gera Frente e Verso usando esta questão. Você verá a prévia, poderá editar ou gerar outra versão e só depois confirmar.
                                                 </span>
                                             </span>
                                         </label>
@@ -2093,7 +2157,7 @@ QUESTÃO 4 ...
                                                         </div>
 
                                                         <div className="mt-1 text-xs text-muted-foreground">
-                                                            A IA cria uma sugestão curta. Você pode editar ou gerar outra versão antes de salvar.
+                                                            Revise Frente e Verso. Se gostar, confirme a prévia. Qualquer edição ou nova geração exige uma nova confirmação.
                                                         </div>
                                                     </div>
 
@@ -2215,6 +2279,46 @@ QUESTÃO 4 ...
                                                                     />
                                                                 </label>
                                                             </div>
+
+                                                            <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-border bg-background p-4">
+                                                                <div>
+                                                                    <div className="text-sm font-medium">
+                                                                        {q.flashcardConfirmado
+                                                                            ? "Flashcard confirmado"
+                                                                            : "Confirme esta prévia antes de salvar"}
+                                                                    </div>
+                                                                    <div className="mt-1 text-xs text-muted-foreground">
+                                                                        {q.flashcardConfirmado
+                                                                            ? "Esta versão será salva junto com a questão."
+                                                                            : "O botão Salvar todas só será liberado depois da confirmação."}
+                                                                    </div>
+                                                                </div>
+
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        atualizarQuestao(
+                                                                            q.localId,
+                                                                            {
+                                                                                flashcardConfirmado: true,
+                                                                            }
+                                                                        )
+                                                                    }
+                                                                    disabled={
+                                                                        q.flashcardGerando ||
+                                                                        !q.flashcardFrente.trim() ||
+                                                                        !q.flashcardVerso.trim()
+                                                                    }
+                                                                    className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${q.flashcardConfirmado
+                                                                            ? "border border-green-300 bg-green-50 text-green-700"
+                                                                            : "bg-primary text-primary-foreground hover:opacity-90"
+                                                                        }`}
+                                                                >
+                                                                    {q.flashcardConfirmado
+                                                                        ? "Prévia confirmada"
+                                                                        : "Confirmar flashcard"}
+                                                                </button>
+                                                            </div>
                                                         </>
                                                     )}
 
@@ -2264,9 +2368,9 @@ QUESTÃO 4 ...
                                         Marque Acertei ou
                                         Errei em todas as
                                         questões. Se criar
-                                        flashcard, aguarde a
+                                        flashcard, revise a
                                         pré-visualização e
-                                        confirme Frente e Verso.
+                                        clique em Confirmar flashcard.
                                     </p>
                                 )}
                         </div>
