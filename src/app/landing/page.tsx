@@ -233,6 +233,57 @@ function criarLocalId() {
         .slice(2)}`;
 }
 
+
+const NOVA_OPCAO = "__NOVA_OPCAO__";
+
+function ordenarOpcoes(valores: Array<string | null | undefined>) {
+    const mapa = new Map<string, string>();
+
+    for (const valor of valores) {
+        const limpo = String(valor ?? "").trim();
+        if (!limpo) continue;
+
+        const chave = limpo.toLocaleLowerCase("pt-BR");
+
+        if (!mapa.has(chave)) {
+            mapa.set(chave, limpo);
+        }
+    }
+
+    return Array.from(mapa.values()).sort((a, b) =>
+        a.localeCompare(b, "pt-BR", { sensitivity: "base" })
+    );
+}
+
+function lerListaLocal(chave: string): string[] {
+    if (typeof window === "undefined") return [];
+
+    try {
+        const raw = window.localStorage.getItem(chave);
+        if (!raw) return [];
+
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed)
+            ? ordenarOpcoes(parsed.map((v) => String(v ?? "")))
+            : [];
+    } catch {
+        return [];
+    }
+}
+
+function salvarListaLocal(chave: string, valores: string[]) {
+    if (typeof window === "undefined") return;
+
+    window.localStorage.setItem(
+        chave,
+        JSON.stringify(ordenarOpcoes(valores))
+    );
+}
+
+function chavePreferencia(userId: string, nome: string) {
+    return `questoes:${userId}:${nome}`;
+}
+
 export default function NovaQuestaoGeminiLote() {
     const [userId, setUserId] = useState<string | null>(null);
 
@@ -243,6 +294,27 @@ export default function NovaQuestaoGeminiLote() {
     const [editalId, setEditalId] = useState("");
     const [materiaId, setMateriaId] = useState("");
     const [assuntoId, setAssuntoId] = useState("");
+
+    /*
+     * Instituição, Cargo e Banca funcionam como dados-padrão
+     * do lote. As opções vêm das questões já salvas no banco
+     * e das opções criadas manualmente neste navegador.
+     */
+    const [instituicoes, setInstituicoes] = useState<string[]>([]);
+    const [cargos, setCargos] = useState<string[]>([]);
+    const [bancas, setBancas] = useState<string[]>([]);
+
+    const [instituicaoPadrao, setInstituicaoPadrao] = useState("");
+    const [cargoPadrao, setCargoPadrao] = useState("");
+    const [bancaPadrao, setBancaPadrao] = useState("");
+
+    const [criandoInstituicao, setCriandoInstituicao] = useState(false);
+    const [criandoCargo, setCriandoCargo] = useState(false);
+    const [criandoBanca, setCriandoBanca] = useState(false);
+
+    const [novaInstituicao, setNovaInstituicao] = useState("");
+    const [novoCargo, setNovoCargo] = useState("");
+    const [novaBanca, setNovaBanca] = useState("");
 
     const [input, setInput] = useState("");
 
@@ -329,25 +401,124 @@ export default function NovaQuestaoGeminiLote() {
 
                 setUserId(user.id);
 
-                const {
-                    data: editaisData,
-                    error: editaisError,
-                } = await supabase
-                    .from("editais")
-                    .select("id,nome")
-                    .eq("user_id", user.id)
-                    .order("nome");
+                const [
+                    editaisReq,
+                    metadadosReq,
+                ] = await Promise.all([
+                    supabase
+                        .from("editais")
+                        .select("id,nome")
+                        .eq("user_id", user.id)
+                        .order("nome"),
 
-                if (editaisError) throw editaisError;
+                    /*
+                     * Não precisa de tabelas extras de catálogo.
+                     * Usamos os valores já existentes nas questões
+                     * do próprio usuário como opções reutilizáveis.
+                     */
+                    supabase
+                        .from("questoes")
+                        .select("instituicao,cargo,banca")
+                        .eq("user_id", user.id)
+                        .limit(5000),
+                ]);
+
+                if (editaisReq.error) throw editaisReq.error;
+
+                /*
+                 * Se a leitura dos metadados falhar, a classificação
+                 * principal continua funcionando. O usuário ainda
+                 * poderá criar opções manualmente.
+                 */
+                const metadadosBanco =
+                    metadadosReq.error
+                        ? []
+                        : (metadadosReq.data ?? []);
 
                 if (cancelled) return;
 
                 const listaEditais =
-                    (editaisData ?? []) as Edital[];
+                    (editaisReq.data ?? []) as Edital[];
 
                 setEditais(listaEditais);
 
+                const instituicoesBanco = ordenarOpcoes(
+                    metadadosBanco.map((row: any) => row?.instituicao)
+                );
+                const cargosBanco = ordenarOpcoes(
+                    metadadosBanco.map((row: any) => row?.cargo)
+                );
+                const bancasBanco = ordenarOpcoes(
+                    metadadosBanco.map((row: any) => row?.banca)
+                );
+
+                const instituicoesLocais = lerListaLocal(
+                    chavePreferencia(user.id, "custom_instituicoes")
+                );
+                const cargosLocais = lerListaLocal(
+                    chavePreferencia(user.id, "custom_cargos")
+                );
+                const bancasLocais = lerListaLocal(
+                    chavePreferencia(user.id, "custom_bancas")
+                );
+
+                const listaInstituicoes = ordenarOpcoes([
+                    ...instituicoesBanco,
+                    ...instituicoesLocais,
+                ]);
+                const listaCargos = ordenarOpcoes([
+                    ...cargosBanco,
+                    ...cargosLocais,
+                ]);
+                const listaBancas = ordenarOpcoes([
+                    ...bancasBanco,
+                    ...bancasLocais,
+                ]);
+
+                setInstituicoes(listaInstituicoes);
+                setCargos(listaCargos);
+                setBancas(listaBancas);
+
+                const savedInstituicao =
+                    window.localStorage.getItem(
+                        chavePreferencia(user.id, "last_instituicao")
+                    ) ?? "";
+
+                const savedCargo =
+                    window.localStorage.getItem(
+                        chavePreferencia(user.id, "last_cargo")
+                    ) ?? "";
+
+                const savedBanca =
+                    window.localStorage.getItem(
+                        chavePreferencia(user.id, "last_banca")
+                    ) ?? "";
+
+                if (savedInstituicao) {
+                    setInstituicaoPadrao(savedInstituicao);
+                    setInstituicoes((prev) =>
+                        ordenarOpcoes([...prev, savedInstituicao])
+                    );
+                }
+
+                if (savedCargo) {
+                    setCargoPadrao(savedCargo);
+                    setCargos((prev) =>
+                        ordenarOpcoes([...prev, savedCargo])
+                    );
+                }
+
+                if (savedBanca) {
+                    setBancaPadrao(savedBanca);
+                    setBancas((prev) =>
+                        ordenarOpcoes([...prev, savedBanca])
+                    );
+                }
+
                 const savedEdital =
+                    window.localStorage.getItem(
+                        chavePreferencia(user.id, "last_edital_id")
+                    ) ??
                     window.sessionStorage.getItem(
                         "questoes:last_edital_id"
                     );
@@ -386,6 +557,9 @@ export default function NovaQuestaoGeminiLote() {
                 setMaterias(listaMaterias);
 
                 const savedMateria =
+                    window.localStorage.getItem(
+                        chavePreferencia(user.id, "last_materia_id")
+                    ) ??
                     window.sessionStorage.getItem(
                         "questoes:last_materia_id"
                     );
@@ -424,6 +598,9 @@ export default function NovaQuestaoGeminiLote() {
                 setAssuntos(listaAssuntos);
 
                 const savedAssunto =
+                    window.localStorage.getItem(
+                        chavePreferencia(user.id, "last_assunto_id")
+                    ) ??
                     window.sessionStorage.getItem(
                         "questoes:last_assunto_id"
                     );
@@ -473,6 +650,19 @@ export default function NovaQuestaoGeminiLote() {
             novoEditalId
         );
 
+        if (userId) {
+            window.localStorage.setItem(
+                chavePreferencia(userId, "last_edital_id"),
+                novoEditalId
+            );
+            window.localStorage.removeItem(
+                chavePreferencia(userId, "last_materia_id")
+            );
+            window.localStorage.removeItem(
+                chavePreferencia(userId, "last_assunto_id")
+            );
+        }
+
         window.sessionStorage.removeItem(
             "questoes:last_materia_id"
         );
@@ -513,6 +703,16 @@ export default function NovaQuestaoGeminiLote() {
             novaMateriaId
         );
 
+        if (userId) {
+            window.localStorage.setItem(
+                chavePreferencia(userId, "last_materia_id"),
+                novaMateriaId
+            );
+            window.localStorage.removeItem(
+                chavePreferencia(userId, "last_assunto_id")
+            );
+        }
+
         window.sessionStorage.removeItem(
             "questoes:last_assunto_id"
         );
@@ -546,6 +746,174 @@ export default function NovaQuestaoGeminiLote() {
             "questoes:last_assunto_id",
             novoAssuntoId
         );
+
+        if (userId) {
+            window.localStorage.setItem(
+                chavePreferencia(userId, "last_assunto_id"),
+                novoAssuntoId
+            );
+        }
+    }
+
+    function aplicarMetadadoNasQuestoes(
+        campo: "instituicao" | "cargo" | "banca",
+        valor: string
+    ) {
+        if (!valor.trim()) return;
+
+        setQuestoesProcessadas((prev) =>
+            prev.map((q) => ({
+                ...q,
+                [campo]: valor,
+            }))
+        );
+    }
+
+    function handleInstituicaoChange(valor: string) {
+        if (valor === NOVA_OPCAO) {
+            setCriandoInstituicao(true);
+            setNovaInstituicao("");
+            return;
+        }
+
+        setInstituicaoPadrao(valor);
+        setCriandoInstituicao(false);
+
+        if (userId) {
+            window.localStorage.setItem(
+                chavePreferencia(userId, "last_instituicao"),
+                valor
+            );
+        }
+
+        aplicarMetadadoNasQuestoes("instituicao", valor);
+    }
+
+    function handleCargoChange(valor: string) {
+        if (valor === NOVA_OPCAO) {
+            setCriandoCargo(true);
+            setNovoCargo("");
+            return;
+        }
+
+        setCargoPadrao(valor);
+        setCriandoCargo(false);
+
+        if (userId) {
+            window.localStorage.setItem(
+                chavePreferencia(userId, "last_cargo"),
+                valor
+            );
+        }
+
+        aplicarMetadadoNasQuestoes("cargo", valor);
+    }
+
+    function handleBancaChange(valor: string) {
+        if (valor === NOVA_OPCAO) {
+            setCriandoBanca(true);
+            setNovaBanca("");
+            return;
+        }
+
+        setBancaPadrao(valor);
+        setCriandoBanca(false);
+
+        if (userId) {
+            window.localStorage.setItem(
+                chavePreferencia(userId, "last_banca"),
+                valor
+            );
+        }
+
+        aplicarMetadadoNasQuestoes("banca", valor);
+    }
+
+    function adicionarInstituicao() {
+        const valor = novaInstituicao.trim();
+        if (!valor || !userId) return;
+
+        const novaLista = ordenarOpcoes([...instituicoes, valor]);
+
+        setInstituicoes(novaLista);
+        setInstituicaoPadrao(valor);
+        setNovaInstituicao("");
+        setCriandoInstituicao(false);
+
+        const chaveLista = chavePreferencia(
+            userId,
+            "custom_instituicoes"
+        );
+
+        salvarListaLocal(
+            chaveLista,
+            ordenarOpcoes([...lerListaLocal(chaveLista), valor])
+        );
+
+        window.localStorage.setItem(
+            chavePreferencia(userId, "last_instituicao"),
+            valor
+        );
+
+        aplicarMetadadoNasQuestoes("instituicao", valor);
+    }
+
+    function adicionarCargo() {
+        const valor = novoCargo.trim();
+        if (!valor || !userId) return;
+
+        const novaLista = ordenarOpcoes([...cargos, valor]);
+
+        setCargos(novaLista);
+        setCargoPadrao(valor);
+        setNovoCargo("");
+        setCriandoCargo(false);
+
+        const chaveLista = chavePreferencia(
+            userId,
+            "custom_cargos"
+        );
+
+        salvarListaLocal(
+            chaveLista,
+            ordenarOpcoes([...lerListaLocal(chaveLista), valor])
+        );
+
+        window.localStorage.setItem(
+            chavePreferencia(userId, "last_cargo"),
+            valor
+        );
+
+        aplicarMetadadoNasQuestoes("cargo", valor);
+    }
+
+    function adicionarBanca() {
+        const valor = novaBanca.trim();
+        if (!valor || !userId) return;
+
+        const novaLista = ordenarOpcoes([...bancas, valor]);
+
+        setBancas(novaLista);
+        setBancaPadrao(valor);
+        setNovaBanca("");
+        setCriandoBanca(false);
+
+        const chaveLista = chavePreferencia(
+            userId,
+            "custom_bancas"
+        );
+
+        salvarListaLocal(
+            chaveLista,
+            ordenarOpcoes([...lerListaLocal(chaveLista), valor])
+        );
+
+        window.localStorage.setItem(
+            chavePreferencia(userId, "last_banca"),
+            valor
+        );
+
+        aplicarMetadadoNasQuestoes("banca", valor);
     }
 
     function setQuestõesLimparDepoisDaClassificacao() {
@@ -825,19 +1193,25 @@ Retorne somente JSON válido:
                         numero: i + 1,
                         textoOriginal: questaoTxt,
 
-                        instituicao: String(
-                            obj?.instituicao ?? ""
-                        ).trim(),
+                        instituicao:
+                            instituicaoPadrao ||
+                            String(
+                                obj?.instituicao ?? ""
+                            ).trim(),
 
-                        cargo: String(
-                            obj?.cargo ?? ""
-                        ).trim(),
+                        cargo:
+                            cargoPadrao ||
+                            String(
+                                obj?.cargo ?? ""
+                            ).trim(),
 
                         modalidade,
 
-                        banca: String(
-                            obj?.banca ?? ""
-                        ).trim(),
+                        banca:
+                            bancaPadrao ||
+                            String(
+                                obj?.banca ?? ""
+                            ).trim(),
 
                         enunciado,
                         alternativas,
@@ -869,6 +1243,32 @@ Retorne somente JSON válido:
 
             setQuestoesProcessadas(prontas);
             setFalhasProcessamento(falhas);
+
+            /*
+             * Valores identificados pela IA também aparecem como
+             * opções durante esta sessão. Depois que a questão for
+             * salva, passam a vir do banco nas próximas visitas.
+             */
+            setInstituicoes((prev) =>
+                ordenarOpcoes([
+                    ...prev,
+                    ...prontas.map((q) => q.instituicao),
+                ])
+            );
+
+            setCargos((prev) =>
+                ordenarOpcoes([
+                    ...prev,
+                    ...prontas.map((q) => q.cargo),
+                ])
+            );
+
+            setBancas((prev) =>
+                ordenarOpcoes([
+                    ...prev,
+                    ...prontas.map((q) => q.banca),
+                ])
+            );
 
             if (prontas.length) {
                 setMsg(
@@ -1017,7 +1417,7 @@ Retorne somente JSON válido:
 
         if (error) {
             throw new Error(
-                `Falha ao criar tentativa: ${error.message}`
+                `Falha ao registrar o resultado da questão: ${error.message}`
             );
         }
     }
@@ -1030,13 +1430,9 @@ Retorne somente JSON válido:
             error: tentativasError,
         } = await supabase
             .from("question_attempts")
-            .select(
-                "questao_id,resultado,created_at"
-            )
+            .select("questao_id,resultado,created_at")
             .eq("user_id", userId)
-            .order("created_at", {
-                ascending: true,
-            });
+            .order("created_at", { ascending: true });
 
         if (tentativasError) {
             throw new Error(
@@ -1072,19 +1468,14 @@ Retorne somente JSON válido:
             i < questaoIds.length;
             i += 500
         ) {
-            const lote = questaoIds.slice(
-                i,
-                i + 500
-            );
+            const lote = questaoIds.slice(i, i + 500);
 
             const {
                 data: questoesData,
                 error: questoesError,
             } = await supabase
                 .from("questoes")
-                .select(
-                    "id,materia_id,assunto_id"
-                )
+                .select("id,materia_id,assunto_id")
                 .eq("user_id", userId)
                 .in("id", lote);
 
@@ -1095,15 +1486,10 @@ Retorne somente JSON válido:
             }
 
             for (const row of questoesData ?? []) {
-                questoesMap.set(
-                    String(row.id),
-                    {
-                        materia_id:
-                            row.materia_id ?? null,
-                        assunto_id:
-                            row.assunto_id ?? null,
-                    }
-                );
+                questoesMap.set(String(row.id), {
+                    materia_id: row.materia_id ?? null,
+                    assunto_id: row.assunto_id ?? null,
+                });
             }
         }
 
@@ -1206,8 +1592,7 @@ Retorne somente JSON válido:
         const payloadEstatisticas = {
             questoes_respondidas: total,
             taxa_acerto: taxaAcerto,
-            progresso_semanal:
-                progressoSemanal,
+            progresso_semanal: progressoSemanal,
             acc_por_materia: accPorMateria,
             acc_por_assunto: accPorAssunto,
         };
@@ -1238,21 +1623,24 @@ Retorne somente JSON válido:
                     `Falha ao atualizar estatísticas: ${error.message}`
                 );
             }
-        } else {
-            const { error } = await supabase
-                .from("estatisticas")
-                .insert({
-                    user_id: userId,
-                    ...payloadEstatisticas,
-                });
 
-            if (error) {
-                throw new Error(
-                    `Falha ao criar estatísticas: ${error.message}`
-                );
-            }
+            return;
+        }
+
+        const { error } = await supabase
+            .from("estatisticas")
+            .insert({
+                user_id: userId,
+                ...payloadEstatisticas,
+            });
+
+        if (error) {
+            throw new Error(
+                `Falha ao criar estatísticas: ${error.message}`
+            );
         }
     }
+
 
     async function handleSalvarTodas() {
         if (!userId) {
@@ -1342,8 +1730,8 @@ Retorne somente JSON válido:
                         assunto_id: assuntoId,
 
                         /*
-                         * Mantém também os nomes em texto para
-                         * compatibilidade com as telas antigas.
+                         * Mantemos também os nomes em texto para
+                         * compatibilidade com telas antigas.
                          */
                         disciplina: materiaSelecionada.nome,
                         assunto: assuntoSelecionado.nome,
@@ -1414,17 +1802,32 @@ Retorne somente JSON válido:
                         status: "OK",
                         questaoId,
                     });
+
                 } catch (e) {
                     /*
-                     * Compensação simples:
-                     * se a questão foi criada, mas alguma operação
-                     * dependente falhou, removemos a questão.
-                     *
-                     * Com FK ON DELETE CASCADE nas tentativas,
-                     * flashcards/cadernos relacionados também podem
-                     * ser limpos conforme seu schema.
+                     * Compensação:
+                     * se a questão foi criada mas o caderno ou o
+                     * flashcard falhar, tentamos remover registros
+                     * dependentes antes de remover a própria questão.
                      */
                     if (questaoId) {
+                        await Promise.allSettled([
+                            supabase
+                                .from("flashcards")
+                                .delete()
+                                .eq(
+                                    "questao_origem_id",
+                                    questaoId
+                                )
+                                .eq("user_id", userId),
+
+                            supabase
+                                .from("caderno_itens")
+                                .delete()
+                                .eq("questao_id", questaoId)
+                                .eq("user_id", userId),
+                        ]);
+
                         await supabase
                             .from("questoes")
                             .delete()
@@ -1622,16 +2025,221 @@ Retorne somente JSON válido:
                         </label>
                     </div>
 
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium">
+                                Instituição
+                            </label>
+
+                            <select
+                                value={instituicaoPadrao}
+                                onChange={(e) =>
+                                    handleInstituicaoChange(
+                                        e.target.value
+                                    )
+                                }
+                                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                            >
+                                <option value="">
+                                    Deixar a IA identificar
+                                </option>
+
+                                {instituicoes.map((valor) => (
+                                    <option
+                                        key={valor}
+                                        value={valor}
+                                    >
+                                        {valor}
+                                    </option>
+                                ))}
+
+                                <option value={NOVA_OPCAO}>
+                                    + Adicionar nova instituição
+                                </option>
+                            </select>
+
+                            {criandoInstituicao && (
+                                <div className="flex gap-2">
+                                    <input
+                                        autoFocus
+                                        value={novaInstituicao}
+                                        onChange={(e) =>
+                                            setNovaInstituicao(
+                                                e.target.value
+                                            )
+                                        }
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                adicionarInstituicao();
+                                            }
+                                        }}
+                                        placeholder="Nova instituição"
+                                        className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={adicionarInstituicao}
+                                        disabled={!novaInstituicao.trim()}
+                                        className="rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                                    >
+                                        Adicionar
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium">
+                                Cargo
+                            </label>
+
+                            <select
+                                value={cargoPadrao}
+                                onChange={(e) =>
+                                    handleCargoChange(
+                                        e.target.value
+                                    )
+                                }
+                                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                            >
+                                <option value="">
+                                    Deixar a IA identificar
+                                </option>
+
+                                {cargos.map((valor) => (
+                                    <option
+                                        key={valor}
+                                        value={valor}
+                                    >
+                                        {valor}
+                                    </option>
+                                ))}
+
+                                <option value={NOVA_OPCAO}>
+                                    + Adicionar novo cargo
+                                </option>
+                            </select>
+
+                            {criandoCargo && (
+                                <div className="flex gap-2">
+                                    <input
+                                        autoFocus
+                                        value={novoCargo}
+                                        onChange={(e) =>
+                                            setNovoCargo(
+                                                e.target.value
+                                            )
+                                        }
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                adicionarCargo();
+                                            }
+                                        }}
+                                        placeholder="Novo cargo"
+                                        className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={adicionarCargo}
+                                        disabled={!novoCargo.trim()}
+                                        className="rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                                    >
+                                        Adicionar
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium">
+                                Banca
+                            </label>
+
+                            <select
+                                value={bancaPadrao}
+                                onChange={(e) =>
+                                    handleBancaChange(
+                                        e.target.value
+                                    )
+                                }
+                                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                            >
+                                <option value="">
+                                    Deixar a IA identificar
+                                </option>
+
+                                {bancas.map((valor) => (
+                                    <option
+                                        key={valor}
+                                        value={valor}
+                                    >
+                                        {valor}
+                                    </option>
+                                ))}
+
+                                <option value={NOVA_OPCAO}>
+                                    + Adicionar nova banca
+                                </option>
+                            </select>
+
+                            {criandoBanca && (
+                                <div className="flex gap-2">
+                                    <input
+                                        autoFocus
+                                        value={novaBanca}
+                                        onChange={(e) =>
+                                            setNovaBanca(
+                                                e.target.value
+                                            )
+                                        }
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                adicionarBanca();
+                                            }
+                                        }}
+                                        placeholder="Nova banca"
+                                        className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={adicionarBanca}
+                                        disabled={!novaBanca.trim()}
+                                        className="rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                                    >
+                                        Adicionar
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     {editalSelecionado &&
                         materiaSelecionada &&
                         assuntoSelecionado && (
                             <div className="mt-4 rounded-xl bg-muted px-4 py-3 text-sm">
-                                <span className="font-medium">
-                                    Classificação:
-                                </span>{" "}
-                                {editalSelecionado.nome} /{" "}
-                                {materiaSelecionada.nome} /{" "}
-                                {assuntoSelecionado.nome}
+                                <div>
+                                    <span className="font-medium">
+                                        Classificação:
+                                    </span>{" "}
+                                    {editalSelecionado.nome} /{" "}
+                                    {materiaSelecionada.nome} /{" "}
+                                    {assuntoSelecionado.nome}
+                                </div>
+
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                    Padrões do próximo lote:{" "}
+                                    {instituicaoPadrao ||
+                                        "Instituição pela IA"}{" "}
+                                    /{" "}
+                                    {cargoPadrao ||
+                                        "Cargo pela IA"}{" "}
+                                    /{" "}
+                                    {bancaPadrao ||
+                                        "Banca pela IA"}
+                                </div>
                             </div>
                         )}
                 </section>
@@ -1763,82 +2371,37 @@ QUESTÃO 4 ...
                                             </button>
                                         </div>
 
-                                        <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                            <label className="space-y-1">
-                                                <span className="text-xs text-muted-foreground">
+                                        <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-xl border border-border bg-muted/40 p-4">
+                                            <div>
+                                                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
                                                     Instituição
-                                                </span>
+                                                </div>
+                                                <div className="mt-1 text-sm font-medium">
+                                                    {q.instituicao || "Não informada"}
+                                                </div>
+                                            </div>
 
-                                                <input
-                                                    value={
-                                                        q.instituicao
-                                                    }
-                                                    onChange={(
-                                                        e
-                                                    ) =>
-                                                        atualizarQuestao(
-                                                            q.localId,
-                                                            {
-                                                                instituicao:
-                                                                    e
-                                                                        .target
-                                                                        .value,
-                                                            }
-                                                        )
-                                                    }
-                                                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                                                />
-                                            </label>
-
-                                            <label className="space-y-1">
-                                                <span className="text-xs text-muted-foreground">
+                                            <div>
+                                                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
                                                     Cargo
-                                                </span>
+                                                </div>
+                                                <div className="mt-1 text-sm font-medium">
+                                                    {q.cargo || "Não informado"}
+                                                </div>
+                                            </div>
 
-                                                <input
-                                                    value={
-                                                        q.cargo
-                                                    }
-                                                    onChange={(
-                                                        e
-                                                    ) =>
-                                                        atualizarQuestao(
-                                                            q.localId,
-                                                            {
-                                                                cargo: e
-                                                                    .target
-                                                                    .value,
-                                                            }
-                                                        )
-                                                    }
-                                                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                                                />
-                                            </label>
-
-                                            <label className="space-y-1">
-                                                <span className="text-xs text-muted-foreground">
+                                            <div>
+                                                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
                                                     Banca
-                                                </span>
+                                                </div>
+                                                <div className="mt-1 text-sm font-medium">
+                                                    {q.banca || "Não informada"}
+                                                </div>
+                                            </div>
 
-                                                <input
-                                                    value={
-                                                        q.banca
-                                                    }
-                                                    onChange={(
-                                                        e
-                                                    ) =>
-                                                        atualizarQuestao(
-                                                            q.localId,
-                                                            {
-                                                                banca: e
-                                                                    .target
-                                                                    .value,
-                                                            }
-                                                        )
-                                                    }
-                                                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                                                />
-                                            </label>
+                                            <div className="sm:col-span-3 text-xs text-muted-foreground">
+                                                Para alterar esses dados em lote, use Instituição, Cargo e Banca na seção 1. A nova seleção é aplicada às questões que já estão abertas e fica lembrada para os próximos lançamentos.
+                                            </div>
                                         </div>
 
                                         <label className="mt-4 block space-y-1">
@@ -2310,8 +2873,8 @@ QUESTÃO 4 ...
                                                                         !q.flashcardVerso.trim()
                                                                     }
                                                                     className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${q.flashcardConfirmado
-                                                                            ? "border border-green-300 bg-green-50 text-green-700"
-                                                                            : "bg-primary text-primary-foreground hover:opacity-90"
+                                                                        ? "border border-green-300 bg-green-50 text-green-700"
+                                                                        : "bg-primary text-primary-foreground hover:opacity-90"
                                                                         }`}
                                                                 >
                                                                     {q.flashcardConfirmado
