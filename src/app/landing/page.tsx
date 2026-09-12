@@ -4,12 +4,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 /*
- * Mantida a chamada do Gemini no client, conforme solicitado.
- * Por segurança, não repito a credencial enviada no chat.
- * Substitua o valor abaixo pela mesma chave que você já está usando.
+ * A chave do Gemini não fica mais no client.
+ * Toda chamada de IA passa pelo endpoint server-side /api/gemini.
  */
-const GEMINI_API_KEY = "AIzaSyDNkRmNcf9zpRYn9gl8w0z3VlyMheOuXSI";
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
 
 const PROMPT_PREFIX = `
 Receba a seguinte questão de concurso e extraia SOMENTE os campos:
@@ -206,14 +203,6 @@ function normalizarAlternativas(value: unknown): Alternativas {
     }
 
     return result;
-}
-
-function textoRespostaGemini(data: any): string {
-    return String(
-        data?.candidates?.[0]?.content?.parts?.[0]?.text ??
-        data?.candidates?.[0]?.content?.text ??
-        ""
-    ).trim();
 }
 
 function formatarErro(error: unknown): string {
@@ -566,44 +555,44 @@ export default function NovaQuestaoGeminiLote() {
     async function chamarGeminiJson(
         prompt: string
     ): Promise<any> {
-        const res = await fetch(GEMINI_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-goog-api-key": GEMINI_API_KEY,
-            },
-            body: JSON.stringify({
-                contents: [
-                    {
-                        parts: [
-                            {
-                                text: prompt,
-                            },
-                        ],
-                    },
-                ],
-                generationConfig: {
-                    responseMimeType: "application/json",
-                },
-            }),
-        });
+        const {
+            data: sessionData,
+            error: sessionError,
+        } = await supabase.auth.getSession();
 
-        if (!res.ok) {
-            const detalhe = await res
-                .text()
-                .catch(() => "");
+        const accessToken =
+            sessionData?.session?.access_token;
 
+        if (sessionError || !accessToken) {
             throw new Error(
-                `Gemini retornou HTTP ${res.status}${detalhe
-                    ? `: ${detalhe.slice(0, 250)}`
-                    : ""
-                }`
+                "Sua sessão expirou. Entre novamente para usar a IA."
             );
         }
 
-        const data = await res.json();
+        const res = await fetch("/api/gemini", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ prompt }),
+            cache: "no-store",
+        });
 
-        const texto = textoRespostaGemini(data);
+        const data = (await res
+            .json()
+            .catch(() => null)) as
+            | { text?: string; error?: string }
+            | null;
+
+        if (!res.ok) {
+            throw new Error(
+                data?.error ||
+                `Falha ao processar a requisição de IA (HTTP ${res.status}).`
+            );
+        }
+
+        const texto = String(data?.text ?? "").trim();
 
         if (!texto) {
             throw new Error(
