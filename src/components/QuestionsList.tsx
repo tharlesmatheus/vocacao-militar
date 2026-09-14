@@ -18,6 +18,10 @@ type Filters = {
 
 type Questao = {
     id: string;
+    user_id?: string | null;
+    edital_id?: string | null;
+    materia_id?: string | null;
+    assunto_id?: string | null;
     instituicao: string;
     cargo: string;
     disciplina: string;
@@ -83,35 +87,87 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
         };
     }, []);
 
-    // Carrega questões do banco ao montar e quando filtros mudam
+    // Carrega questões do banco ao montar e quando filtros mudam.
+    // "Excluir respondidas" usa question_attempts, que é a fonte real
+    // do histórico de respostas usado pela página de Estatísticas.
     useEffect(() => {
-        setLoading(true);
+        let cancelled = false;
 
-        let query = supabase.from("questoes").select("*");
+        (async () => {
+            setLoading(true);
+            setPage(1);
 
-        // Aplica os filtros (exceto excluirRespondidas)
-        Object.entries(filters).forEach(([key, value]) => {
-            if (value && key !== "excluirRespondidas") {
-                query = query.eq(key, value as string);
+            try {
+                let query = supabase.from("questoes").select("*");
+
+                // Se já conhecemos o usuário, restringimos explicitamente.
+                // O RLS continua sendo a proteção principal no banco.
+                if (userId) {
+                    query = query.eq("user_id", userId);
+                }
+
+                // Aplica os filtros visuais (exceto excluirRespondidas).
+                Object.entries(filters).forEach(([key, value]) => {
+                    if (value && key !== "excluirRespondidas") {
+                        query = query.eq(key, value as string);
+                    }
+                });
+
+                const { data, error } = await query.order("created_at", {
+                    ascending: false,
+                });
+
+                if (error) throw error;
+
+                let rows = (data ?? []) as Questao[];
+
+                /*
+                 * Não dependemos mais de questoes.respondida.
+                 * Uma questão é considerada respondida quando existe
+                 * pelo menos uma linha em question_attempts para o usuário.
+                 */
+                if (filters.excluirRespondidas && userId && rows.length) {
+                    const respondidas = new Set<string>();
+                    const ids = rows.map((q) => q.id);
+
+                    for (const ch of chunkArray(ids, 200)) {
+                        const { data: attempts, error: attemptsError } =
+                            await supabase
+                                .from("question_attempts")
+                                .select("questao_id")
+                                .eq("user_id", userId)
+                                .in("questao_id", ch);
+
+                        if (attemptsError) throw attemptsError;
+
+                        for (const row of attempts ?? []) {
+                            if (row.questao_id) {
+                                respondidas.add(String(row.questao_id));
+                            }
+                        }
+                    }
+
+                    rows = rows.filter((q) => !respondidas.has(q.id));
+                }
+
+                if (!cancelled) {
+                    setQuestoes(rows);
+                }
+            } catch {
+                if (!cancelled) {
+                    setQuestoes([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                }
             }
-        });
+        })();
 
-        // Filtro especial: excluir já respondidas (ajuste esse campo se necessário)
-        if (filters.excluirRespondidas) {
-            query = query.eq("respondida", false);
-        }
-
-        query
-            .order("created_at", { ascending: false })
-            .then(({ data, error }) => {
-                if (!error && data) setQuestoes(data as Questao[]);
-                else setQuestoes([]);
-                setLoading(false);
-            });
-
-        // Volta para página 1 ao alterar filtros
-        setPage(1);
-    }, [filters]);
+        return () => {
+            cancelled = true;
+        };
+    }, [filters, userId]);
 
     // Atualiza erros localmente sem refetch
     const handleNotificarErro = (questaoId: string, erroText: string) => {
@@ -236,6 +292,66 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
         }
     }
 
+
+    /**
+     * Garante que a questão esteja em um caderno sem usar comportamento de toggle.
+     * É usado quando uma resposta errada precisa entrar automaticamente
+     * no Caderno de Erros.
+     */
+    async function garantirNoCaderno(
+        questaoId: string,
+        tipo: CadernoTipo
+    ) {
+        if (!userId) {
+            setCadernoError("Faça login para adicionar aos cadernos.");
+            return;
+        }
+
+        const key = `${questaoId}-${tipo}`;
+
+        if (cadernosByQuestao?.[questaoId]?.[tipo]) {
+            return;
+        }
+
+        setCadernoBusy((m) => ({ ...m, [key]: true }));
+        setCadernoError("");
+
+        try {
+            const { error } = await supabase
+                .from("caderno_itens")
+                .upsert(
+                    {
+                        user_id: userId,
+                        questao_id: questaoId,
+                        tipo,
+                    },
+                    {
+                        onConflict: "user_id,questao_id,tipo",
+                    }
+                );
+
+            if (error) throw error;
+
+            setCadernosByQuestao((m) => ({
+                ...m,
+                [questaoId]: {
+                    ...(m[questaoId] ?? {
+                        ERROS: false,
+                        ACERTOS: false,
+                    }),
+                    [tipo]: true,
+                },
+            }));
+        } catch (e: any) {
+            setCadernoError(
+                e?.message ||
+                "Erro ao adicionar automaticamente ao caderno."
+            );
+        } finally {
+            setCadernoBusy((m) => ({ ...m, [key]: false }));
+        }
+    }
+
     return (
         <div className="mt-2">
             <div className="bg-card rounded-2xl p-8 shadow-xl mb-8 transition-colors border border-border">
@@ -283,6 +399,8 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                                 <QuestionCard
                                     key={q.id}
                                     id={q.id}
+                                    materiaId={q.materia_id ?? null}
+                                    assuntoId={q.assunto_id ?? null}
                                     materiaNome={q.disciplina}
                                     assuntoNome={q.assunto}
                                     tags={[
@@ -311,6 +429,9 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                                     cadernoStatus={status}
                                     onToggleCadernoErros={() => toggleCaderno(q.id, "ERROS")}
                                     onToggleCadernoAcertos={() => toggleCaderno(q.id, "ACERTOS")}
+                                    onGarantirCadernoErros={() =>
+                                        garantirNoCaderno(q.id, "ERROS")
+                                    }
                                     cadernoLoading={{
                                         ERROS: !!cadernoBusy[`${q.id}-ERROS`],
                                         ACERTOS: !!cadernoBusy[`${q.id}-ACERTOS`],

@@ -55,8 +55,15 @@ interface QuestionCardProps {
     // Se não passar, o card faz tudo sozinho via Supabase.
     cadernoStatus?: CadernoStatus;
     cadernoLoading?: { ERROS?: boolean; ACERTOS?: boolean };
-    onToggleCadernoErros?: () => void;
-    onToggleCadernoAcertos?: () => void;
+    onToggleCadernoErros?: () => void | Promise<void>;
+    onToggleCadernoAcertos?: () => void | Promise<void>;
+
+    /**
+     * Usado quando o usuário erra a questão.
+     * Diferente de toggle: deve apenas garantir que a questão esteja
+     * no Caderno de Erros, sem risco de removê-la se já existir.
+     */
+    onGarantirCadernoErros?: () => void | Promise<void>;
 }
 
 /* ===================== HELPERS ===================== */
@@ -239,6 +246,32 @@ async function registrarResolucao(
     });
 }
 
+/**
+ * Fonte de verdade para as estatísticas por período.
+ * Cada clique em "Conferir Resposta" gera uma tentativa real,
+ * permitindo filtrar por 7/30/90 dias, período personalizado ou todo o histórico.
+ */
+async function registrarQuestionAttempt(
+    userId: string,
+    questaoId: string,
+    correta: boolean
+) {
+    const { error } = await supabase
+        .from("question_attempts")
+        .insert({
+            user_id: userId,
+            questao_id: questaoId,
+            resultado: correta ? "ACERTO" : "ERRO",
+            is_revisao: false,
+        });
+
+    if (error) {
+        throw new Error(
+            `Não foi possível registrar a tentativa: ${error.message}`
+        );
+    }
+}
+
 /* ===================== NOVO: CADERNOS (fallback interno) ===================== */
 /**
  * Requer tabela: caderno_itens(user_id, questao_id, tipo) com UNIQUE(user_id,questao_id,tipo)
@@ -306,10 +339,13 @@ export function QuestionCard(props: QuestionCardProps) {
         cadernoLoading,
         onToggleCadernoErros,
         onToggleCadernoAcertos,
+        onGarantirCadernoErros,
     } = props;
 
     const [selected, setSelected] = useState<string | null>(null);
     const [showResult, setShowResult] = useState(false);
+    const [registrandoResposta, setRegistrandoResposta] =
+        useState(false);
     const [showModal, setShowModal] = useState(false);
     const [showComentarios, setShowComentarios] = useState(false);
     const [errorText, setErrorText] = useState("");
@@ -495,18 +531,33 @@ export function QuestionCard(props: QuestionCardProps) {
                 <button
                     className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-5 rounded-xl text-sm transition"
                     onClick={async () => {
-                        setShowResult(true);
-                        if (!selected) return;
+                        if (!selected || showResult || registrandoResposta) {
+                            return;
+                        }
 
-                        const correta = selected === correct;
+                        setRegistrandoResposta(true);
+                        setCadernoMsg(null);
 
-                        const { data: auth } = await supabase.auth.getUser();
-                        const uid: string | undefined = auth?.user?.id ?? undefined;
+                        try {
+                            const correta = selected === correct;
 
-                        let resolvedMid: string | null = materiaId ?? null;
-                        let resolvedAid: string | null = assuntoId ?? null;
+                            const { data: auth, error: authError } =
+                                await supabase.auth.getUser();
 
-                        if (uid) {
+                            const uid = auth?.user?.id;
+
+                            if (authError || !uid) {
+                                throw new Error(
+                                    "Sua sessão expirou. Entre novamente para registrar a resposta."
+                                );
+                            }
+
+                            let resolvedMid: string | null =
+                                materiaId ?? null;
+
+                            let resolvedAid: string | null =
+                                assuntoId ?? null;
+
                             const resolved = await ensureIds(
                                 uid,
                                 materiaId ?? null,
@@ -516,20 +567,109 @@ export function QuestionCard(props: QuestionCardProps) {
                                 tags,
                                 caches
                             );
+
                             resolvedMid = resolved.mid;
                             resolvedAid = resolved.aid;
+
+                            /*
+                             * 1) QUESTION_ATTEMPTS é a fonte de verdade.
+                             * Só mostramos o resultado depois que a tentativa
+                             * foi persistida com sucesso.
+                             */
+                            await registrarQuestionAttempt(
+                                uid,
+                                id,
+                                correta
+                            );
+
+                            setShowResult(true);
+
+                            /*
+                             * 2) Mantemos as estruturas antigas sincronizadas
+                             * por compatibilidade com outras telas do sistema.
+                             * Uma falha aqui não apaga a tentativa já registrada.
+                             */
+                            const secundarios =
+                                await Promise.allSettled([
+                                    registrarResolucao(
+                                        id,
+                                        correta,
+                                        resolvedMid,
+                                        resolvedAid
+                                    ),
+                                    atualizarEstatisticasQuestao(
+                                        correta,
+                                        resolvedMid,
+                                        resolvedAid
+                                    ),
+                                ]);
+
+                            const falhaSecundaria =
+                                secundarios.some(
+                                    (r) => r.status === "rejected"
+                                );
+
+                            /*
+                             * 3) Errou => entra automaticamente no Caderno
+                             * de Erros. O upsert impede duplicidade.
+                             */
+                            if (!correta) {
+                                try {
+                                    if (onGarantirCadernoErros) {
+                                        await onGarantirCadernoErros();
+                                    } else {
+                                        await addToCaderno(
+                                            uid,
+                                            id,
+                                            "ERROS"
+                                        );
+
+                                        setLocalCadernoStatus(
+                                            (status) => ({
+                                                ...status,
+                                                ERROS: true,
+                                            })
+                                        );
+                                    }
+                                } catch (e: any) {
+                                    setCadernoMsg(
+                                        e?.message ||
+                                        "A tentativa foi registrada, mas não foi possível adicionar ao Caderno de Erros."
+                                    );
+                                }
+                            }
+
+                            if (falhaSecundaria) {
+                                setCadernoMsg(
+                                    (atual) =>
+                                        atual ||
+                                        "A tentativa foi registrada nas estatísticas, mas uma sincronização secundária falhou."
+                                );
+                            }
+
+                            showFeedback(
+                                correta
+                                    ? "Você acertou! ✅"
+                                    : "Resposta incorreta. Enviada ao Caderno de Erros."
+                            );
+                        } catch (e: any) {
+                            setCadernoMsg(
+                                e?.message ||
+                                "Não foi possível registrar a resposta."
+                            );
+                        } finally {
+                            setRegistrandoResposta(false);
                         }
-
-                        await Promise.all([
-                            registrarResolucao(id, correta, resolvedMid, resolvedAid),
-                            atualizarEstatisticasQuestao(correta, resolvedMid, resolvedAid),
-                        ]);
-
-                        showFeedback(correta ? "Você acertou! ✅" : "Resposta incorreta. 😉");
                     }}
-                    disabled={!selected || showResult}
+                    disabled={
+                        !selected ||
+                        showResult ||
+                        registrandoResposta
+                    }
                 >
-                    Conferir Resposta
+                    {registrandoResposta
+                        ? "Registrando..."
+                        : "Conferir Resposta"}
                 </button>
 
                 {/* ===================== NOVO: BOTÕES CADERNOS ===================== */}
