@@ -1,506 +1,1126 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+    ArrowDown,
+    ArrowUp,
+    CheckCircle2,
+    Clock3,
+    ListRestart,
+    Pencil,
+    Play,
+    Plus,
+    RotateCcw,
+    Save,
+    Target,
+    Trash2,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
-type Bloco = {
+/* ========================================================================== */
+/* Tipos                                                                      */
+/* ========================================================================== */
+
+type Materia = {
     id: string;
-    hora: string;
-    atividades: string[];
+    nome: string;
 };
 
-const DIAS_DA_SEMANA = [
-    { nome: "Segunda", abrev: "Seg" },
-    { nome: "Terça", abrev: "Ter" },
-    { nome: "Quarta", abrev: "Qua" },
-    { nome: "Quinta", abrev: "Qui" },
-    { nome: "Sexta", abrev: "Sex" },
-    { nome: "Sábado", abrev: "Sáb" },
-    { nome: "Domingo", abrev: "Dom" },
+type Assunto = {
+    id: string;
+    nome: string;
+    materia_id: string | null;
+};
+
+type CycleActivity =
+    | "TEORIA_QUESTOES"
+    | "QUESTOES"
+    | "REVISAO"
+    | "FLASHCARDS"
+    | "RESUMOS";
+
+type CycleItem = {
+    id: string;
+    materia_id: string | null;
+    assunto_id: string | null;
+    free_title: string | null;
+    activity: CycleActivity;
+    duration_min: number;
+    target_questions: number | null;
+    active: boolean;
+};
+
+type CyclePayload = {
+    version: 2;
+    current_item_id: string | null;
+    round: number;
+    items: CycleItem[];
+};
+
+type LegacyBloco = {
+    hora?: unknown;
+    atividades?: unknown;
+};
+
+type FormState = {
+    materiaId: string;
+    assuntoId: string;
+    activity: CycleActivity;
+    durationMin: number;
+    targetQuestions: string;
+};
+
+/* ========================================================================== */
+/* Constantes / helpers                                                       */
+/* ========================================================================== */
+
+const ACTIVITY_OPTIONS: Array<{ value: CycleActivity; label: string }> = [
+    { value: "TEORIA_QUESTOES", label: "Teoria + Questões" },
+    { value: "QUESTOES", label: "Questões" },
+    { value: "REVISAO", label: "Revisão" },
+    { value: "FLASHCARDS", label: "Flashcards" },
+    { value: "RESUMOS", label: "Resumos" },
 ];
 
-const BLOCOS_PADRAO = [
-    "08:00 - 09:00",
-    "09:00 - 10:00",
-    "14:00 - 15:00",
-    "20:00 - 21:00",
-];
+const EMPTY_FORM: FormState = {
+    materiaId: "",
+    assuntoId: "",
+    activity: "TEORIA_QUESTOES",
+    durationMin: 50,
+    targetQuestions: "",
+};
 
-const DIAS_TOTAL = 7;
-const HORARIO_REGEX = /^([01]\d|2[0-3]):([0-5]\d)\s-\s([01]\d|2[0-3]):([0-5]\d)$/;
-
-function gerarId() {
-    return crypto.randomUUID();
+function newId() {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+        return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function criarBloco(hora: string): Bloco {
+function clampInt(value: unknown, min: number, max: number, fallback: number) {
+    const n = Math.floor(Number(value));
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+}
+
+function normalizeText(value: string) {
+    return value
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeActivity(value: unknown): CycleActivity {
+    const candidate = String(value ?? "").toUpperCase();
+    if (
+        candidate === "TEORIA_QUESTOES" ||
+        candidate === "QUESTOES" ||
+        candidate === "REVISAO" ||
+        candidate === "FLASHCARDS" ||
+        candidate === "RESUMOS"
+    ) {
+        return candidate;
+    }
+    return "TEORIA_QUESTOES";
+}
+
+function emptyPayload(): CyclePayload {
     return {
-        id: gerarId(),
-        hora,
-        atividades: Array(DIAS_TOTAL).fill(""),
+        version: 2,
+        current_item_id: null,
+        round: 1,
+        items: [],
     };
 }
 
-function criarBlocosPadrao(): Bloco[] {
-    return BLOCOS_PADRAO.map(criarBloco);
+function normalizeCurrentId(payload: CyclePayload): CyclePayload {
+    const active = payload.items.filter((item) => item.active);
+    if (!active.length) {
+        return { ...payload, current_item_id: null };
+    }
+
+    if (active.some((item) => item.id === payload.current_item_id)) {
+        return payload;
+    }
+
+    return { ...payload, current_item_id: active[0].id };
 }
 
-function normalizarBlocos(raw: unknown): Bloco[] {
-    if (!Array.isArray(raw)) return criarBlocosPadrao();
+function parseCyclePayload(
+    raw: unknown,
+    materias: Materia[]
+): { payload: CyclePayload; migratedLegacy: boolean } {
+    if (isRecord(raw) && Number(raw.version) === 2 && Array.isArray(raw.items)) {
+        const items: CycleItem[] = raw.items
+            .filter(isRecord)
+            .map((item) => ({
+                id:
+                    typeof item.id === "string" && item.id.trim()
+                        ? item.id
+                        : newId(),
+                materia_id:
+                    typeof item.materia_id === "string" && item.materia_id
+                        ? item.materia_id
+                        : null,
+                assunto_id:
+                    typeof item.assunto_id === "string" && item.assunto_id
+                        ? item.assunto_id
+                        : null,
+                free_title:
+                    typeof item.free_title === "string" && item.free_title.trim()
+                        ? item.free_title.trim()
+                        : null,
+                activity: normalizeActivity(item.activity),
+                duration_min: clampInt(item.duration_min, 10, 240, 50),
+                target_questions:
+                    item.target_questions == null || item.target_questions === ""
+                        ? null
+                        : clampInt(item.target_questions, 0, 300, 0),
+                active: item.active !== false,
+            }));
 
-    return raw
-        .filter((item): item is Partial<Bloco> & { hora: string } => {
-            return !!item && typeof item === "object" && typeof item.hora === "string";
-        })
-        .map((item) => ({
-            id: typeof item.id === "string" && item.id.trim() ? item.id : gerarId(),
-            hora: item.hora.trim(),
-            atividades: Array.isArray(item.atividades)
-                ? Array.from({ length: DIAS_TOTAL }, (_, i) =>
-                    typeof item.atividades?.[i] === "string" ? item.atividades[i] : ""
-                )
-                : Array(DIAS_TOTAL).fill(""),
-        }));
+        return {
+            payload: normalizeCurrentId({
+                version: 2,
+                current_item_id:
+                    typeof raw.current_item_id === "string"
+                        ? raw.current_item_id
+                        : null,
+                round: clampInt(raw.round, 1, 999999, 1),
+                items,
+            }),
+            migratedLegacy: false,
+        };
+    }
+
+    // Migração segura do antigo cronograma semanal. Não descartamos as atividades:
+    // cada texto único vira uma etapa do ciclo. Quando o nome coincidir com uma matéria,
+    // o vínculo é reaproveitado automaticamente.
+    if (Array.isArray(raw)) {
+        const materiaByName = new Map(
+            materias.map((m) => [normalizeText(m.nome), m] as const)
+        );
+        const seen = new Set<string>();
+        const items: CycleItem[] = [];
+
+        for (const rawBlock of raw as LegacyBloco[]) {
+            if (!rawBlock || !Array.isArray(rawBlock.atividades)) continue;
+
+            for (const activity of rawBlock.atividades) {
+                if (typeof activity !== "string") continue;
+                const title = activity.trim();
+                if (!title) continue;
+
+                const key = normalizeText(title);
+                if (!key || seen.has(key)) continue;
+                seen.add(key);
+
+                const matched = materiaByName.get(key) ?? null;
+
+                items.push({
+                    id: newId(),
+                    materia_id: matched?.id ?? null,
+                    assunto_id: null,
+                    free_title: matched ? null : title,
+                    activity: "TEORIA_QUESTOES",
+                    duration_min: 50,
+                    target_questions: null,
+                    active: true,
+                });
+            }
+        }
+
+        const payload = normalizeCurrentId({
+            version: 2,
+            current_item_id: items[0]?.id ?? null,
+            round: 1,
+            items,
+        });
+
+        return { payload, migratedLegacy: true };
+    }
+
+    return { payload: emptyPayload(), migratedLegacy: false };
 }
 
-function horarioEhValido(valor: string) {
-    const match = valor.match(HORARIO_REGEX);
-    if (!match) return false;
-
-    const [, h1, m1, h2, m2] = match;
-    const inicio = Number(h1) * 60 + Number(m1);
-    const fim = Number(h2) * 60 + Number(m2);
-
-    return fim > inicio;
-}
-
-type EditState = { i: number; j: number } | null;
-
-type EditableCellProps = {
-    value: string;
-    isEditing: boolean;
-    onStartEdit: () => void;
-    onChange: (value: string) => void;
-    onEndEdit: () => void;
-    onClear: () => void;
-    compact?: boolean;
-};
-
-function EditableCell({
-    value,
-    isEditing,
-    onStartEdit,
-    onChange,
-    onEndEdit,
-    onClear,
-}: EditableCellProps) {
+function activityLabel(activity: CycleActivity) {
     return (
-        <td
-            className="p-1 text-center group cursor-pointer relative min-w-[90px]"
-            onClick={onStartEdit}
-        >
-            {isEditing ? (
-                <input
-                    className="w-full rounded px-1 py-1 border border-primary text-xs sm:text-sm outline-none"
-                    autoFocus
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                    onBlur={onEndEdit}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter") onEndEdit();
-                        if (e.key === "Escape") onEndEdit();
-                    }}
-                    placeholder="Tarefa..."
-                    maxLength={64}
-                />
-            ) : (
-                <div className="transition-colors px-1 py-2 rounded group-hover:bg-muted text-foreground min-h-[20px]">
-                    {value || <span className="text-muted-foreground italic">—</span>}
-
-                    {value && (
-                        <button
-                            type="button"
-                            className="absolute top-1 right-1 text-xs text-muted-foreground hover:text-destructive"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onClear();
-                            }}
-                            aria-label="Limpar"
-                        >
-                            <Trash2 size={13} />
-                        </button>
-                    )}
-                </div>
-            )}
-        </td>
+        ACTIVITY_OPTIONS.find((option) => option.value === activity)?.label ??
+        "Teoria + Questões"
     );
 }
 
-export default function CronogramaSemanalPage() {
-    const [blocos, setBlocos] = useState<Bloco[]>([]);
-    const [edit, setEdit] = useState<EditState>(null);
-    const [novoBloco, setNovoBloco] = useState("");
-    const [loadingInicial, setLoadingInicial] = useState(true);
-    const [salvando, setSalvando] = useState(false);
+/* ========================================================================== */
+/* Página                                                                      */
+/* ========================================================================== */
+
+export default function CicloDeEstudosPage() {
+    const router = useRouter();
+
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
     const [msg, setMsg] = useState("");
-    const [cronogramaId, setCronogramaId] = useState<string | null>(null);
+    const [error, setError] = useState("");
+
     const [userId, setUserId] = useState<string | null>(null);
-    const [modoCards, setModoCards] = useState(false);
-    const [cardDiaAtivo, setCardDiaAtivo] = useState(0);
+    const [cronogramaId, setCronogramaId] = useState<string | null>(null);
+    const [materias, setMaterias] = useState<Materia[]>([]);
+    const [assuntos, setAssuntos] = useState<Assunto[]>([]);
+    const [cycle, setCycle] = useState<CyclePayload>(emptyPayload());
 
-    const carregouDoBancoRef = useRef(false);
-    const msgTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [form, setForm] = useState<FormState>(EMPTY_FORM);
+    const [editingId, setEditingId] = useState<string | null>(null);
 
-    const blocosOrdenados = useMemo(() => blocos, [blocos]);
+    const loadedRef = useRef(false);
+    const saveMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    useEffect(() => {
-        function checkMobile() {
-            setModoCards(window.innerWidth < 640);
+    const materiaMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        materias.forEach((m) => (map[m.id] = m.nome));
+        return map;
+    }, [materias]);
+
+    const assuntoMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        assuntos.forEach((a) => (map[a.id] = a.nome));
+        return map;
+    }, [assuntos]);
+
+    const formAssuntos = useMemo(
+        () => assuntos.filter((a) => a.materia_id === form.materiaId),
+        [assuntos, form.materiaId]
+    );
+
+    const activeItems = useMemo(
+        () => cycle.items.filter((item) => item.active),
+        [cycle.items]
+    );
+
+    const currentItem = useMemo(() => {
+        if (!activeItems.length) return null;
+        return (
+            activeItems.find((item) => item.id === cycle.current_item_id) ??
+            activeItems[0]
+        );
+    }, [activeItems, cycle.current_item_id]);
+
+    const currentActiveIndex = useMemo(() => {
+        if (!currentItem) return -1;
+        return activeItems.findIndex((item) => item.id === currentItem.id);
+    }, [activeItems, currentItem]);
+
+    const nextItems = useMemo(() => {
+        if (!activeItems.length || currentActiveIndex < 0) return [];
+
+        const out: CycleItem[] = [];
+        const limit = Math.min(3, Math.max(0, activeItems.length - 1));
+
+        for (let offset = 1; offset <= limit; offset += 1) {
+            const index = (currentActiveIndex + offset) % activeItems.length;
+            out.push(activeItems[index]);
         }
 
-        checkMobile();
-        window.addEventListener("resize", checkMobile);
-        return () => window.removeEventListener("resize", checkMobile);
-    }, []);
+        return out;
+    }, [activeItems, currentActiveIndex]);
+
+    const totalMinutes = useMemo(
+        () => activeItems.reduce((sum, item) => sum + item.duration_min, 0),
+        [activeItems]
+    );
+
+    const totalTargetQuestions = useMemo(
+        () =>
+            activeItems.reduce(
+                (sum, item) => sum + Math.max(0, item.target_questions ?? 0),
+                0
+            ),
+        [activeItems]
+    );
 
     useEffect(() => {
-        async function fetchCronograma() {
-            setLoadingInicial(true);
+        let mounted = true;
 
-            const {
-                data: { user },
-                error: authError,
-            } = await supabase.auth.getUser();
+        (async () => {
+            setLoading(true);
+            setError("");
+            setMsg("");
 
-            if (authError || !user) {
-                setMsg("Usuário não autenticado.");
-                setLoadingInicial(false);
-                return;
-            }
+            try {
+                const { data: auth, error: authError } = await supabase.auth.getUser();
+                const user = auth?.user;
 
-            setUserId(user.id);
-
-            const { data, error } = await supabase
-                .from("cronograma")
-                .select("id, blocos")
-                .eq("user_id", user.id)
-                .maybeSingle();
-
-            if (error) {
-                setMsg("Erro ao carregar cronograma.");
-                setLoadingInicial(false);
-                return;
-            }
-
-            if (!data) {
-                const blocosIniciais = criarBlocosPadrao();
-
-                const { data: criado, error: insertError } = await supabase
-                    .from("cronograma")
-                    .insert({
-                        user_id: user.id,
-                        blocos: blocosIniciais,
-                    })
-                    .select("id, blocos")
-                    .single();
-
-                if (insertError || !criado) {
-                    setMsg("Erro ao criar cronograma.");
-                    setLoadingInicial(false);
-                    return;
+                if (authError || !user?.id) {
+                    throw new Error("Usuário não autenticado.");
                 }
 
-                setCronogramaId(criado.id);
-                setBlocos(normalizarBlocos(criado.blocos));
-            } else {
-                setCronogramaId(data.id);
-                setBlocos(normalizarBlocos(data.blocos));
+                const [materiasRes, assuntosRes, cronogramaRes] = await Promise.all([
+                    supabase
+                        .from("materias")
+                        .select("id,nome")
+                        .eq("user_id", user.id)
+                        .order("nome"),
+                    supabase
+                        .from("assuntos")
+                        .select("id,nome,materia_id")
+                        .eq("user_id", user.id)
+                        .order("nome"),
+                    supabase
+                        .from("cronograma")
+                        .select("id,blocos")
+                        .eq("user_id", user.id)
+                        .maybeSingle(),
+                ]);
+
+                if (!mounted) return;
+                if (materiasRes.error) throw materiasRes.error;
+                if (assuntosRes.error) throw assuntosRes.error;
+                if (cronogramaRes.error) throw cronogramaRes.error;
+
+                const mList = (materiasRes.data ?? []) as Materia[];
+                const aList = (assuntosRes.data ?? []) as Assunto[];
+
+                setUserId(user.id);
+                setMaterias(mList);
+                setAssuntos(aList);
+
+                if (!cronogramaRes.data) {
+                    const initial = emptyPayload();
+                    const { data: created, error: createError } = await supabase
+                        .from("cronograma")
+                        .insert({
+                            user_id: user.id,
+                            blocos: initial,
+                        })
+                        .select("id,blocos")
+                        .single();
+
+                    if (createError || !created) {
+                        throw createError ?? new Error("Não foi possível criar o ciclo.");
+                    }
+
+                    setCronogramaId(created.id);
+                    setCycle(initial);
+                } else {
+                    const parsed = parseCyclePayload(
+                        cronogramaRes.data.blocos,
+                        mList
+                    );
+                    setCronogramaId(cronogramaRes.data.id);
+                    setCycle(parsed.payload);
+
+                    if (parsed.migratedLegacy) {
+                        setMsg(
+                            "Seu cronograma semanal antigo foi convertido em um ciclo de estudos. Revise as etapas e ajuste matéria, duração e atividade quando necessário."
+                        );
+                    }
+                }
+
+                loadedRef.current = true;
+            } catch (e: any) {
+                if (!mounted) return;
+                setError(e?.message || "Não foi possível carregar o ciclo de estudos.");
+            } finally {
+                if (mounted) setLoading(false);
             }
-
-            carregouDoBancoRef.current = true;
-            setLoadingInicial(false);
-        }
-
-        fetchCronograma();
+        })();
 
         return () => {
-            if (msgTimeoutRef.current) clearTimeout(msgTimeoutRef.current);
+            mounted = false;
+            if (saveMessageTimerRef.current) {
+                clearTimeout(saveMessageTimerRef.current);
+            }
         };
     }, []);
 
     useEffect(() => {
-        if (!carregouDoBancoRef.current) return;
-        if (!cronogramaId || !userId) return;
+        if (!loadedRef.current || !cronogramaId || !userId) return;
 
         const timeout = setTimeout(async () => {
-            setSalvando(true);
-            setMsg("Salvando...");
+            setSaving(true);
 
-            const { error } = await supabase
+            const payload: CyclePayload = normalizeCurrentId({
+                ...cycle,
+                version: 2,
+                round: Math.max(1, cycle.round),
+            });
+
+            const { error: saveError } = await supabase
                 .from("cronograma")
                 .update({
-                    blocos,
+                    blocos: payload,
                     atualizado_em: new Date().toISOString(),
                 })
                 .eq("id", cronogramaId)
                 .eq("user_id", userId);
 
-            setSalvando(false);
+            setSaving(false);
 
-            if (error) {
-                setMsg("Erro ao salvar.");
+            if (saveError) {
+                setError(saveError.message || "Não foi possível salvar o ciclo.");
                 return;
             }
 
-            setMsg("Cronograma salvo!");
+            setError("");
+            setMsg("Ciclo salvo.");
 
-            if (msgTimeoutRef.current) clearTimeout(msgTimeoutRef.current);
-            msgTimeoutRef.current = setTimeout(() => setMsg(""), 1500);
+            if (saveMessageTimerRef.current) {
+                clearTimeout(saveMessageTimerRef.current);
+            }
+            saveMessageTimerRef.current = setTimeout(() => setMsg(""), 1400);
         }, 700);
 
         return () => clearTimeout(timeout);
-    }, [blocos, cronogramaId, userId]);
+    }, [cycle, cronogramaId, userId]);
 
-    function handleCellEdit(i: number, j: number, value: string) {
-        setBlocos((prev) => {
-            const next = [...prev];
-            const bloco = next[i];
+    function itemTitle(item: CycleItem) {
+        if (item.materia_id && materiaMap[item.materia_id]) {
+            return materiaMap[item.materia_id];
+        }
+        return item.free_title || "Matéria não vinculada";
+    }
 
-            if (!bloco) return prev;
+    function itemSubtitle(item: CycleItem) {
+        if (item.assunto_id && assuntoMap[item.assunto_id]) {
+            return assuntoMap[item.assunto_id];
+        }
+        return "Todos os assuntos";
+    }
 
-            const atividades = Array.isArray(bloco.atividades)
-                ? [...bloco.atividades]
-                : Array(DIAS_TOTAL).fill("");
+    function resetForm() {
+        setForm(EMPTY_FORM);
+        setEditingId(null);
+    }
 
-            atividades[j] = value;
+    function saveForm() {
+        setError("");
 
-            next[i] = { ...bloco, atividades };
-            return next;
+        if (!form.materiaId) {
+            setError("Selecione uma matéria para adicionar ao ciclo.");
+            return;
+        }
+
+        const duration = clampInt(form.durationMin, 10, 240, 50);
+        const target = form.targetQuestions.trim()
+            ? clampInt(form.targetQuestions, 0, 300, 0)
+            : null;
+
+        if (editingId) {
+            setCycle((prev) => ({
+                ...prev,
+                items: prev.items.map((item) =>
+                    item.id === editingId
+                        ? {
+                            ...item,
+                            materia_id: form.materiaId,
+                            assunto_id: form.assuntoId || null,
+                            free_title: null,
+                            activity: form.activity,
+                            duration_min: duration,
+                            target_questions: target,
+                        }
+                        : item
+                ),
+            }));
+        } else {
+            const nextItem: CycleItem = {
+                id: newId(),
+                materia_id: form.materiaId,
+                assunto_id: form.assuntoId || null,
+                free_title: null,
+                activity: form.activity,
+                duration_min: duration,
+                target_questions: target,
+                active: true,
+            };
+
+            setCycle((prev) => {
+                const items = [...prev.items, nextItem];
+                return {
+                    ...prev,
+                    items,
+                    current_item_id: prev.current_item_id ?? nextItem.id,
+                };
+            });
+        }
+
+        resetForm();
+    }
+
+    function startEditing(item: CycleItem) {
+        setEditingId(item.id);
+        setForm({
+            materiaId: item.materia_id ?? "",
+            assuntoId: item.assunto_id ?? "",
+            activity: item.activity,
+            durationMin: item.duration_min,
+            targetQuestions:
+                item.target_questions == null
+                    ? ""
+                    : String(item.target_questions),
+        });
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function removeItem(id: string) {
+        setCycle((prev) => {
+            const items = prev.items.filter((item) => item.id !== id);
+            const candidate: CyclePayload = {
+                ...prev,
+                items,
+                current_item_id:
+                    prev.current_item_id === id ? null : prev.current_item_id,
+            };
+            return normalizeCurrentId(candidate);
+        });
+
+        if (editingId === id) resetForm();
+    }
+
+    function toggleActive(id: string) {
+        setCycle((prev) => {
+            const items = prev.items.map((item) =>
+                item.id === id ? { ...item, active: !item.active } : item
+            );
+            return normalizeCurrentId({ ...prev, items });
         });
     }
 
-    function handleAddBloco() {
-        const valor = novoBloco.trim();
+    function moveItem(id: string, direction: -1 | 1) {
+        setCycle((prev) => {
+            const index = prev.items.findIndex((item) => item.id === id);
+            if (index < 0) return prev;
 
-        if (!valor) {
-            setMsg("Informe um horário.");
-            return;
-        }
+            const nextIndex = index + direction;
+            if (nextIndex < 0 || nextIndex >= prev.items.length) return prev;
 
-        if (!horarioEhValido(valor)) {
-            setMsg("Use o formato HH:MM - HH:MM com horário válido.");
-            return;
-        }
+            const items = [...prev.items];
+            [items[index], items[nextIndex]] = [items[nextIndex], items[index]];
+            return { ...prev, items };
+        });
+    }
 
-        const duplicado = blocos.some(
-            (bloco) => bloco.hora.toLowerCase() === valor.toLowerCase()
+    function setCurrent(id: string) {
+        setCycle((prev) => ({
+            ...prev,
+            current_item_id: id,
+        }));
+    }
+
+    function advanceCycle() {
+        if (!currentItem || !activeItems.length) return;
+
+        const index = activeItems.findIndex((item) => item.id === currentItem.id);
+        if (index < 0) return;
+
+        const nextIndex = (index + 1) % activeItems.length;
+        const wrapped = nextIndex === 0 && activeItems.length > 0;
+
+        setCycle((prev) => ({
+            ...prev,
+            current_item_id: activeItems[nextIndex].id,
+            round: wrapped ? prev.round + 1 : prev.round,
+        }));
+    }
+
+    function resetCyclePosition() {
+        setCycle((prev) => ({
+            ...prev,
+            current_item_id: activeItems[0]?.id ?? null,
+            round: 1,
+        }));
+    }
+
+    if (loading) {
+        return (
+            <main className="flex min-h-[60vh] items-center justify-center px-4">
+                <div className="text-sm text-muted-foreground">
+                    Carregando ciclo de estudos...
+                </div>
+            </main>
         );
-
-        if (duplicado) {
-            setMsg("Esse bloco já existe.");
-            return;
-        }
-
-        setBlocos((prev) => [...prev, criarBloco(valor)]);
-        setNovoBloco("");
-        setMsg("");
-    }
-
-    function handleRemoveBloco(index: number) {
-        setBlocos((prev) => prev.filter((_, i) => i !== index));
-        setEdit((prev) => {
-            if (!prev) return null;
-            if (prev.i === index) return null;
-            if (prev.i > index) return { ...prev, i: prev.i - 1 };
-            return prev;
-        });
-    }
-
-    function prevCard() {
-        setCardDiaAtivo((v) => (v + DIAS_TOTAL - 1) % DIAS_TOTAL);
-    }
-
-    function nextCard() {
-        setCardDiaAtivo((v) => (v + 1) % DIAS_TOTAL);
     }
 
     return (
-        <div className="w-full max-w-5xl mx-auto px-2 sm:px-4 py-7 flex flex-col gap-8">
-            <div className="flex flex-col sm:flex-row items-center gap-3 mb-4">
-                <input
-                    type="text"
-                    className="border border-border rounded-lg px-3 py-2 text-sm w-56 focus:ring-2 focus:ring-primary outline-none shadow-sm bg-input text-foreground"
-                    placeholder="Ex: 18:00 - 19:00"
-                    value={novoBloco}
-                    onChange={(e) => setNovoBloco(e.target.value)}
-                    maxLength={20}
-                    disabled={loadingInicial || salvando}
-                />
-                <button
-                    type="button"
-                    className="flex items-center gap-2 bg-primary hover:bg-primary/80 text-primary-foreground font-bold px-4 py-2 rounded-lg text-sm shadow transition disabled:opacity-50"
-                    onClick={handleAddBloco}
-                    disabled={loadingInicial || salvando}
-                >
-                    <Plus className="w-4 h-4" /> Adicionar Bloco
-                </button>
-            </div>
-
-            {modoCards ? (
-                <div className="w-full flex flex-col items-center">
-                    <div className="flex items-center justify-center gap-1 mb-4">
-                        <button
-                            type="button"
-                            className="p-2 rounded-full bg-muted border border-border hover:bg-muted/80 transition"
-                            onClick={prevCard}
-                        >
-                            <ChevronLeft className="w-5 h-5 text-primary" />
-                        </button>
-
-                        <span className="text-lg font-bold text-foreground w-32 text-center">
-                            {DIAS_DA_SEMANA[cardDiaAtivo].nome}
-                        </span>
-
-                        <button
-                            type="button"
-                            className="p-2 rounded-full bg-muted border border-border hover:bg-muted/80 transition"
-                            onClick={nextCard}
-                        >
-                            <ChevronRight className="w-5 h-5 text-primary" />
-                        </button>
+        <main className="mx-auto w-full max-w-6xl space-y-6 px-3 py-6 sm:px-6 lg:py-8">
+            <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                        <ListRestart size={18} />
+                        Ciclo de estudos
                     </div>
-
-                    <div className="w-full max-w-md mx-auto bg-card rounded-2xl border border-border shadow-lg p-3 transition-all">
-                        <table className="w-full text-xs">
-                            <thead>
-                                <tr>
-                                    <th className="bg-muted text-foreground font-bold px-2 py-2 rounded-tl-2xl text-center min-w-[70px]">
-                                        Horário
-                                    </th>
-                                    <th className="bg-muted text-foreground font-bold px-2 py-2 rounded-tr-2xl text-center">
-                                        Atividade
-                                    </th>
-                                    <th className="bg-muted px-1 py-2" />
-                                </tr>
-                            </thead>
-
-                            <tbody>
-                                {blocosOrdenados.map((bloco, i) => (
-                                    <tr key={bloco.id} className="border-b border-muted">
-                                        <td className="px-2 py-2 text-primary font-semibold text-center bg-input whitespace-nowrap rounded-l-2xl text-xs">
-                                            {bloco.hora}
-                                        </td>
-
-                                        <EditableCell
-                                            value={bloco.atividades[cardDiaAtivo] ?? ""}
-                                            isEditing={!!edit && edit.i === i && edit.j === cardDiaAtivo}
-                                            onStartEdit={() => setEdit({ i, j: cardDiaAtivo })}
-                                            onChange={(value) => handleCellEdit(i, cardDiaAtivo, value)}
-                                            onEndEdit={() => setEdit(null)}
-                                            onClear={() => handleCellEdit(i, cardDiaAtivo, "")}
-                                        />
-
-                                        <td className="pl-1 pr-1 text-center align-middle">
-                                            <button
-                                                type="button"
-                                                className="bg-destructive/10 hover:bg-destructive/20 border border-destructive/10 text-destructive rounded p-1 transition disabled:opacity-50"
-                                                title="Remover bloco"
-                                                onClick={() => handleRemoveBloco(i)}
-                                                disabled={loadingInicial || salvando}
-                                            >
-                                                <Trash2 size={15} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div className="flex gap-2 justify-center mt-3">
-                        {DIAS_DA_SEMANA.map((dia, idx) => (
-                            <button
-                                key={dia.nome}
-                                type="button"
-                                className={`w-2.5 h-2.5 rounded-full transition ${cardDiaAtivo === idx ? "bg-primary" : "bg-border"
-                                    }`}
-                                onClick={() => setCardDiaAtivo(idx)}
-                                aria-label={`Ir para ${dia.nome}`}
-                            />
-                        ))}
-                    </div>
+                    <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">
+                        Estude por sequência, não por dia da semana
+                    </h1>
+                    <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                        Monte uma sequência de matérias e avance de onde parou. Se hoje você
+                        interromper no meio do ciclo, amanhã continua na próxima etapa — sem
+                        prender cada disciplina a uma segunda, terça ou quarta-feira.
+                    </p>
                 </div>
-            ) : (
-                <div className="w-full overflow-x-auto rounded-2xl border border-border shadow bg-card scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
-                    <table className="min-w-[700px] sm:min-w-full text-xs sm:text-sm">
-                        <thead>
-                            <tr>
-                                <th className="bg-muted text-foreground font-bold px-2 py-2 rounded-tl-2xl text-center min-w-[70px] sm:min-w-[110px]">
-                                    Horário
-                                </th>
 
-                                {DIAS_DA_SEMANA.map((dia) => (
-                                    <th
-                                        key={dia.nome}
-                                        className="bg-muted text-foreground font-bold px-2 py-2 text-center min-w-[64px] sm:min-w-[110px]"
-                                    >
-                                        <span className="block sm:hidden">{dia.abrev}</span>
-                                        <span className="hidden sm:block">{dia.nome}</span>
-                                    </th>
-                                ))}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Save size={14} />
+                    {saving ? "Salvando..." : "Salvamento automático"}
+                </div>
+            </header>
 
-                                <th className="bg-muted px-1 py-2 rounded-tr-2xl" />
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            {blocosOrdenados.map((bloco, i) => (
-                                <tr key={bloco.id} className="border-b border-muted">
-                                    <td className="px-2 py-2 text-primary font-semibold text-center bg-input whitespace-nowrap rounded-l-2xl text-xs sm:text-sm">
-                                        {bloco.hora}
-                                    </td>
-
-                                    {DIAS_DA_SEMANA.map((_, j) => (
-                                        <EditableCell
-                                            key={`${bloco.id}-${j}`}
-                                            value={bloco.atividades[j] ?? ""}
-                                            isEditing={!!edit && edit.i === i && edit.j === j}
-                                            onStartEdit={() => setEdit({ i, j })}
-                                            onChange={(value) => handleCellEdit(i, j, value)}
-                                            onEndEdit={() => setEdit(null)}
-                                            onClear={() => handleCellEdit(i, j, "")}
-                                        />
-                                    ))}
-
-                                    <td className="pl-1 pr-1 text-center align-middle rounded-r-2xl">
-                                        <button
-                                            type="button"
-                                            className="bg-destructive/10 hover:bg-destructive/20 border border-destructive/10 text-destructive rounded p-1 transition disabled:opacity-50"
-                                            title="Remover bloco"
-                                            onClick={() => handleRemoveBloco(i)}
-                                            disabled={loadingInicial || salvando}
-                                        >
-                                            <Trash2 size={15} />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            {error && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                    {error}
                 </div>
             )}
 
             {msg && (
-                <div
-                    className={`text-center mt-2 ${msg.toLowerCase().includes("erro")
-                        ? "text-red-600"
-                        : "text-green-600"
-                        }`}
-                >
+                <div className="rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
                     {msg}
                 </div>
             )}
+
+            <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <SummaryCard
+                    label="Etapas ativas"
+                    value={activeItems.length}
+                    icon={<ListRestart size={19} />}
+                />
+                <SummaryCard
+                    label="Duração do ciclo"
+                    value={`${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`}
+                    icon={<Clock3 size={19} />}
+                />
+                <SummaryCard
+                    label="Meta de questões"
+                    value={totalTargetQuestions}
+                    icon={<Target size={19} />}
+                />
+                <SummaryCard
+                    label="Volta atual"
+                    value={cycle.round}
+                    icon={<RotateCcw size={19} />}
+                />
+            </section>
+
+            <section className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+                <div className="rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-7">
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Agora no ciclo
+                            </p>
+                            {currentItem ? (
+                                <>
+                                    <h2 className="mt-1 text-2xl font-bold">
+                                        {itemTitle(currentItem)}
+                                    </h2>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        {itemSubtitle(currentItem)} • {activityLabel(currentItem.activity)}
+                                    </p>
+                                </>
+                            ) : (
+                                <h2 className="mt-1 text-xl font-semibold">
+                                    Adicione sua primeira etapa
+                                </h2>
+                            )}
+                        </div>
+
+                        {currentItem && (
+                            <div className="rounded-xl bg-primary/10 px-3 py-2 text-right">
+                                <div className="text-xs text-muted-foreground">Tempo sugerido</div>
+                                <div className="text-lg font-bold text-primary">
+                                    {currentItem.duration_min} min
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {currentItem && (
+                        <div className="mt-5 flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={advanceCycle}
+                                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                            >
+                                <CheckCircle2 size={17} />
+                                Concluir etapa e avançar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => router.push("/tempo-de-estudo")}
+                                className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold hover:bg-muted"
+                            >
+                                <Play size={17} />
+                                Abrir tempo de estudo
+                            </button>
+                            <button
+                                type="button"
+                                onClick={resetCyclePosition}
+                                className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold hover:bg-muted"
+                            >
+                                <RotateCcw size={16} />
+                                Reiniciar posição
+                            </button>
+                        </div>
+                    )}
+
+                    <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+                        “Concluir etapa” apenas move a posição do ciclo. Tempo, questões e
+                        revisões continuam sendo contabilizados pelas respectivas áreas do app,
+                        evitando gerar progresso artificial só por clicar no cronograma.
+                    </p>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-5">
+                    <h2 className="font-semibold">Próximas etapas</h2>
+                    <div className="mt-4 space-y-2">
+                        {nextItems.map((item, index) => (
+                            <div
+                                key={item.id}
+                                className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-3 py-2.5"
+                            >
+                                <div className="min-w-0">
+                                    <div className="truncate text-sm font-medium">
+                                        {index + 1}. {itemTitle(item)}
+                                    </div>
+                                    <div className="truncate text-xs text-muted-foreground">
+                                        {activityLabel(item.activity)} • {item.duration_min} min
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setCurrent(item.id)}
+                                    className="shrink-0 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-semibold hover:bg-muted"
+                                >
+                                    Ir para
+                                </button>
+                            </div>
+                        ))}
+
+                        {!nextItems.length && (
+                            <div className="py-5 text-sm text-muted-foreground">
+                                Adicione pelo menos duas etapas ativas para visualizar a sequência.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <div className="flex flex-col gap-1">
+                    <h2 className="text-lg font-semibold">
+                        {editingId ? "Editar etapa" : "Adicionar etapa ao ciclo"}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                        Escolha a matéria, opcionalmente um assunto, a atividade e o tempo sugerido.
+                    </p>
+                </div>
+
+                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+                    <Field label="Matéria">
+                        <select
+                            value={form.materiaId}
+                            onChange={(e) =>
+                                setForm((prev) => ({
+                                    ...prev,
+                                    materiaId: e.target.value,
+                                    assuntoId: "",
+                                }))
+                            }
+                            className="w-full rounded-xl border border-border bg-input px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                        >
+                            <option value="">Selecione</option>
+                            {materias.map((materia) => (
+                                <option key={materia.id} value={materia.id}>
+                                    {materia.nome}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+
+                    <Field label="Assunto (opcional)">
+                        <select
+                            value={form.assuntoId}
+                            onChange={(e) =>
+                                setForm((prev) => ({
+                                    ...prev,
+                                    assuntoId: e.target.value,
+                                }))
+                            }
+                            disabled={!form.materiaId}
+                            className="w-full rounded-xl border border-border bg-input px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+                        >
+                            <option value="">Todos os assuntos</option>
+                            {formAssuntos.map((assunto) => (
+                                <option key={assunto.id} value={assunto.id}>
+                                    {assunto.nome}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+
+                    <Field label="Atividade">
+                        <select
+                            value={form.activity}
+                            onChange={(e) =>
+                                setForm((prev) => ({
+                                    ...prev,
+                                    activity: e.target.value as CycleActivity,
+                                }))
+                            }
+                            className="w-full rounded-xl border border-border bg-input px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                        >
+                            {ACTIVITY_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+
+                    <Field label="Duração (min)">
+                        <input
+                            type="number"
+                            min={10}
+                            max={240}
+                            step={5}
+                            value={form.durationMin}
+                            onChange={(e) =>
+                                setForm((prev) => ({
+                                    ...prev,
+                                    durationMin: Number(e.target.value),
+                                }))
+                            }
+                            className="w-full rounded-xl border border-border bg-input px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                        />
+                    </Field>
+
+                    <Field label="Meta de questões">
+                        <input
+                            type="number"
+                            min={0}
+                            max={300}
+                            value={form.targetQuestions}
+                            onChange={(e) =>
+                                setForm((prev) => ({
+                                    ...prev,
+                                    targetQuestions: e.target.value,
+                                }))
+                            }
+                            placeholder="Opcional"
+                            className="w-full rounded-xl border border-border bg-input px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                        />
+                    </Field>
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        onClick={saveForm}
+                        className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                    >
+                        {editingId ? <Save size={17} /> : <Plus size={17} />}
+                        {editingId ? "Salvar alterações" : "Adicionar ao ciclo"}
+                    </button>
+
+                    {editingId && (
+                        <button
+                            type="button"
+                            onClick={resetForm}
+                            className="rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold hover:bg-muted"
+                        >
+                            Cancelar edição
+                        </button>
+                    )}
+                </div>
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <h2 className="text-lg font-semibold">Sequência do ciclo</h2>
+                        <p className="text-sm text-muted-foreground">
+                            A ordem abaixo é a ordem real em que as etapas serão apresentadas.
+                        </p>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                        {cycle.items.length} cadastradas • {activeItems.length} ativas
+                    </div>
+                </div>
+
+                <div className="mt-5 space-y-3">
+                    {cycle.items.map((item, index) => {
+                        const isCurrent = currentItem?.id === item.id;
+
+                        return (
+                            <article
+                                key={item.id}
+                                className={`rounded-2xl border p-4 transition ${isCurrent
+                                        ? "border-primary bg-primary/5"
+                                        : "border-border bg-background"
+                                    } ${!item.active ? "opacity-60" : ""}`}
+                            >
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                    <div className="flex min-w-0 items-start gap-3">
+                                        <div
+                                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${isCurrent
+                                                    ? "bg-primary text-primary-foreground"
+                                                    : "bg-muted text-muted-foreground"
+                                                }`}
+                                        >
+                                            {index + 1}
+                                        </div>
+
+                                        <div className="min-w-0">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <h3 className="font-semibold">
+                                                    {itemTitle(item)}
+                                                </h3>
+                                                {isCurrent && (
+                                                    <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
+                                                        Atual
+                                                    </span>
+                                                )}
+                                                {!item.active && (
+                                                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                                                        Pausada
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                {itemSubtitle(item)}
+                                            </p>
+
+                                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                                <span className="rounded-full border border-border bg-muted/50 px-2.5 py-1">
+                                                    {activityLabel(item.activity)}
+                                                </span>
+                                                <span className="rounded-full border border-border bg-muted/50 px-2.5 py-1">
+                                                    {item.duration_min} min
+                                                </span>
+                                                {item.target_questions != null && (
+                                                    <span className="rounded-full border border-border bg-muted/50 px-2.5 py-1">
+                                                        Meta: {item.target_questions} questões
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => moveItem(item.id, -1)}
+                                            disabled={index === 0}
+                                            className="rounded-lg border border-border bg-card p-2 hover:bg-muted disabled:opacity-30"
+                                            title="Mover para cima"
+                                        >
+                                            <ArrowUp size={16} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => moveItem(item.id, 1)}
+                                            disabled={index === cycle.items.length - 1}
+                                            className="rounded-lg border border-border bg-card p-2 hover:bg-muted disabled:opacity-30"
+                                            title="Mover para baixo"
+                                        >
+                                            <ArrowDown size={16} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => startEditing(item)}
+                                            className="rounded-lg border border-border bg-card p-2 hover:bg-muted"
+                                            title="Editar"
+                                        >
+                                            <Pencil size={16} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrent(item.id)}
+                                            disabled={!item.active || isCurrent}
+                                            className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted disabled:opacity-40"
+                                        >
+                                            Tornar atual
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleActive(item.id)}
+                                            className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted"
+                                        >
+                                            {item.active ? "Pausar" : "Ativar"}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeItem(item.id)}
+                                            className="rounded-lg border border-destructive/20 bg-destructive/5 p-2 text-destructive hover:bg-destructive/10"
+                                            title="Excluir"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </article>
+                        );
+                    })}
+
+                    {!cycle.items.length && (
+                        <div className="rounded-2xl border border-dashed border-border py-12 text-center">
+                            <ListRestart className="mx-auto h-8 w-8 text-muted-foreground" />
+                            <h3 className="mt-3 font-semibold">Seu ciclo ainda está vazio</h3>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Adicione matérias acima para criar uma sequência de estudo.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </section>
+        </main>
+    );
+}
+
+/* ========================================================================== */
+/* Componentes auxiliares                                                     */
+/* ========================================================================== */
+
+function Field({
+    label,
+    children,
+}: {
+    label: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+                {label}
+            </span>
+            {children}
+        </label>
+    );
+}
+
+function SummaryCard({
+    label,
+    value,
+    icon,
+}: {
+    label: string;
+    value: string | number;
+    icon: React.ReactNode;
+}) {
+    return (
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <div className="text-xs text-muted-foreground">{label}</div>
+                    <div className="mt-1 text-2xl font-bold">{value}</div>
+                </div>
+                <div className="rounded-xl bg-primary/10 p-2 text-primary">{icon}</div>
+            </div>
         </div>
     );
 }

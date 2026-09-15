@@ -1,6 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+    Activity,
+    BookOpenText,
+    Brain,
+    CheckCircle2,
+    Clock3,
+    Layers3,
+    RotateCcw,
+    Target,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import {
     ResponsiveContainer,
@@ -14,11 +24,21 @@ import {
     Bar,
 } from "recharts";
 
-/* ============== helpers / consts ============== */
-type Daily = { dia: string; minutos: number; questoes?: number };
+/* ========================================================================== */
+/* Tipos                                                                      */
+/* ========================================================================== */
+
+type Daily = {
+    dia: string;
+    minutos: number;
+    questoes: number;
+    revisoes: number;
+};
+
 type TopItem = { nome: string; valor: number };
 type AccItem = { nome: string; acerto: number; total: number };
 type PeriodMode = "7" | "30" | "90" | "custom" | "all";
+type ReviewMethod = "CADERNO" | "FLASHCARD" | "RESUMO";
 
 type SessionRow = {
     duration_seconds: number | null;
@@ -39,12 +59,43 @@ type QuestaoMeta = {
     assunto_id: string | null;
 };
 
+type ReviewProgressMeta = {
+    item_id: string;
+    method: ReviewMethod;
+    materia_id: string | null;
+    assunto_id: string | null;
+};
+
+type ReviewEventRow = {
+    event_type: "REVIEW_COMPLETED" | "LEGACY_REVIEW_COUNT" | string;
+    source_id: string | null;
+    metadata: unknown;
+    occurred_at: string;
+};
+
 type PeriodBounds = {
     start: Date | null;
     endExclusive: Date | null;
 };
 
-const ONE_DAY = 24 * 60 * 60 * 1000;
+type ReviewTotals = {
+    total: number;
+    caderno: number;
+    flashcards: number;
+    resumos: number;
+};
+
+type MetricCard = {
+    label: string;
+    value: string | number;
+    icon: React.ReactNode;
+    tone: string;
+    helper?: string;
+};
+
+/* ========================================================================== */
+/* Constantes / helpers                                                       */
+/* ========================================================================== */
 
 const WEAK_THRESHOLD = 70;
 const MIN_QTD_FRACO = 5;
@@ -130,11 +181,7 @@ function resolveBounds(
     };
 }
 
-function rangeLabel(
-    mode: PeriodMode,
-    customStart: string,
-    customEnd: string
-) {
+function rangeLabel(mode: PeriodMode, customStart: string, customEnd: string) {
     if (mode === "all") return "Todo o período";
     if (mode === "7" || mode === "30" || mode === "90") {
         return `Últimos ${mode} dias`;
@@ -155,7 +202,8 @@ function buildSeries(
     start: Date,
     endInclusive: Date,
     byDayMin: Record<string, number>,
-    byDayQ: Record<string, number>
+    byDayQ: Record<string, number>,
+    byDayReview: Record<string, number>
 ): Daily[] {
     const out: Daily[] = [];
     let cursor = new Date(start);
@@ -173,6 +221,7 @@ function buildSeries(
             }),
             minutos: byDayMin[key] ?? 0,
             questoes: byDayQ[key] ?? 0,
+            revisoes: byDayReview[key] ?? 0,
         });
         cursor = addLocalDays(cursor, 1);
     }
@@ -180,7 +229,38 @@ function buildSeries(
     return out;
 }
 
-/* ============== page ============== */
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function metaString(metadata: unknown, key: string): string | null {
+    if (!isRecord(metadata)) return null;
+    const value = metadata[key];
+    return typeof value === "string" ? value : null;
+}
+
+function metaNumber(metadata: unknown, key: string): number | null {
+    if (!isRecord(metadata)) return null;
+    const value = Number(metadata[key]);
+    return Number.isFinite(value) ? value : null;
+}
+
+function normalizeReviewMethod(value: unknown): ReviewMethod | null {
+    const method = String(value ?? "").toUpperCase();
+    if (method === "CADERNO" || method === "FLASHCARD" || method === "RESUMO") {
+        return method;
+    }
+    return null;
+}
+
+function reviewMapKey(method: ReviewMethod, itemId: string) {
+    return `${method}:${itemId}`;
+}
+
+/* ========================================================================== */
+/* Página                                                                      */
+/* ========================================================================== */
+
 export default function EstatisticasPage() {
     const [periodMode, setPeriodMode] = useState<PeriodMode>("30");
     const [customStartInput, setCustomStartInput] = useState("");
@@ -191,8 +271,8 @@ export default function EstatisticasPage() {
 
     const [loading, setLoading] = useState(true);
     const [erro, setErro] = useState<string | null>(null);
+    const [reviewWarning, setReviewWarning] = useState<string | null>(null);
 
-    // filtros
     const [materias, setMaterias] = useState<Array<{ id: string; nome: string }>>([]);
     const [assuntos, setAssuntos] = useState<
         Array<{ id: string; nome: string; materia_id?: string | null }>
@@ -200,24 +280,26 @@ export default function EstatisticasPage() {
     const [materiaId, setMateriaId] = useState("");
     const [assuntoId, setAssuntoId] = useState("");
 
-    // nomes
     const [matName, setMatName] = useState<Record<string, string>>({});
     const [assName, setAssName] = useState<Record<string, string>>({});
 
-    // cards
     const [tempoTotalSeg, setTempoTotalSeg] = useState(0);
     const [sessoes, setSessoes] = useState(0);
     const [questoesTotal, setQuestoesTotal] = useState(0);
     const [acertoTotal, setAcertoTotal] = useState(0);
+    const [reviewTotals, setReviewTotals] = useState<ReviewTotals>({
+        total: 0,
+        caderno: 0,
+        flashcards: 0,
+        resumos: 0,
+    });
 
-    // gráficos
     const [serie, setSerie] = useState<Daily[]>([]);
     const [topMateriasTempo, setTopMateriasTempo] = useState<TopItem[]>([]);
     const [topAssuntosTempo, setTopAssuntosTempo] = useState<TopItem[]>([]);
     const [matAcc, setMatAcc] = useState<TopItem[]>([]);
     const [assAcc, setAssAcc] = useState<TopItem[]>([]);
 
-    // piores
     const [pioresMaterias, setPioresMaterias] = useState<AccItem[]>([]);
     const [pioresAssuntos, setPioresAssuntos] = useState<AccItem[]>([]);
 
@@ -226,7 +308,6 @@ export default function EstatisticasPage() {
         [periodMode, customStartApplied, customEndApplied]
     );
 
-    /* ---------- listas para filtros ---------- */
     useEffect(() => {
         let cancelled = false;
 
@@ -272,13 +353,13 @@ export default function EstatisticasPage() {
         };
     }, []);
 
-    /* ---------- dados respeitando período + matéria + assunto ---------- */
     useEffect(() => {
         let cancelled = false;
 
         (async () => {
             setLoading(true);
             setErro(null);
+            setReviewWarning(null);
 
             try {
                 const { data: auth } = await supabase.auth.getUser();
@@ -302,11 +383,10 @@ export default function EstatisticasPage() {
                     return q as T;
                 };
 
-                /* ===== TEMPO DE ESTUDO =====
-                 * Soma:
-                 * 1) pomodoro_sessions (sessões de estudo antigas/cronômetro Pomodoro)
-                 * 2) study_sessions (Tempo de estudo, Landing e Revisões)
-                 */
+                /* ------------------------------------------------------------------ */
+                /* Tempo de estudo                                                    */
+                /* ------------------------------------------------------------------ */
+
                 let pomodoroQuery = supabase
                     .from("pomodoro_sessions")
                     .select("duration_seconds,started_at,materia_id,assunto_id")
@@ -335,16 +415,70 @@ export default function EstatisticasPage() {
                     studyQuery = studyQuery.eq("assunto_id", assuntoId);
                 }
 
-                const [pomodoroRes, studyRes] = await Promise.all([
+                /* ------------------------------------------------------------------ */
+                /* Questões                                                           */
+                /* ------------------------------------------------------------------ */
+
+                let attemptQuery = supabase
+                    .from("question_attempts")
+                    .select("questao_id,resultado,created_at")
+                    .eq("user_id", user.id)
+                    .order("created_at", { ascending: true });
+
+                attemptQuery = applyDateBounds(attemptQuery, "created_at");
+
+                /* ------------------------------------------------------------------ */
+                /* Revisões                                                           */
+                /* ------------------------------------------------------------------ */
+
+                let reviewEventQuery = supabase
+                    .from("gamification_events")
+                    .select("event_type,source_id,metadata,occurred_at")
+                    .eq("user_id", user.id)
+                    .order("occurred_at", { ascending: true });
+
+                if (periodMode === "all") {
+                    reviewEventQuery = reviewEventQuery.in("event_type", [
+                        "REVIEW_COMPLETED",
+                        "LEGACY_REVIEW_COUNT",
+                    ]);
+                } else {
+                    reviewEventQuery = reviewEventQuery.eq(
+                        "event_type",
+                        "REVIEW_COMPLETED"
+                    );
+                    reviewEventQuery = applyDateBounds(
+                        reviewEventQuery,
+                        "occurred_at"
+                    );
+                }
+
+                const [
+                    pomodoroRes,
+                    studyRes,
+                    attemptRes,
+                    reviewProgressRes,
+                    reviewEventsRes,
+                ] = await Promise.all([
                     pomodoroQuery,
                     studyQuery,
+                    attemptQuery,
+                    supabase
+                        .from("review_progress")
+                        .select("item_id,method,materia_id,assunto_id")
+                        .eq("user_id", user.id),
+                    reviewEventQuery,
                 ]);
 
-                // O sistema pode ter histórico em uma das duas tabelas.
-                // Só falhamos se nenhuma delas puder ser consultada.
                 if (pomodoroRes.error && studyRes.error) {
                     throw new Error(
                         `Falha ao carregar tempo de estudo: ${pomodoroRes.error.message}`
+                    );
+                }
+
+                if (attemptRes.error) {
+                    throw new Error(
+                        `Falha ao carregar tentativas de questões: ${attemptRes.error.message}`
                     );
                 }
 
@@ -356,7 +490,6 @@ export default function EstatisticasPage() {
                 const byDayMin: Record<string, number> = {};
                 const byMatSec: Record<string, number> = {};
                 const byAssSec: Record<string, number> = {};
-
                 let totalSec = 0;
 
                 for (const session of sessionRows) {
@@ -378,26 +511,7 @@ export default function EstatisticasPage() {
                     }
                 }
 
-                /* ===== QUESTÕES / ACERTOS =====
-                 * Usa question_attempts para que 7/30/90, período personalizado
-                 * e Todo o período afetem realmente as estatísticas das questões.
-                 */
-                let attemptQuery = supabase
-                    .from("question_attempts")
-                    .select("questao_id,resultado,created_at")
-                    .eq("user_id", user.id)
-                    .order("created_at", { ascending: true });
-
-                attemptQuery = applyDateBounds(attemptQuery, "created_at");
-
-                const { data: attemptData, error: attemptError } = await attemptQuery;
-                if (attemptError) {
-                    throw new Error(
-                        `Falha ao carregar tentativas de questões: ${attemptError.message}`
-                    );
-                }
-
-                const attempts = (attemptData ?? []) as AttemptRow[];
+                const attempts = (attemptRes.data ?? []) as AttemptRow[];
                 const questaoIds = Array.from(
                     new Set(attempts.map((a) => a.questao_id).filter(Boolean))
                 );
@@ -433,16 +547,9 @@ export default function EstatisticasPage() {
                     return true;
                 });
 
-                const matAgg: Record<
-                    string,
-                    { total: number; corretas: number }
-                > = {};
-                const assAgg: Record<
-                    string,
-                    { total: number; corretas: number }
-                > = {};
+                const matAgg: Record<string, { total: number; corretas: number }> = {};
+                const assAgg: Record<string, { total: number; corretas: number }> = {};
                 const byDayQ: Record<string, number> = {};
-
                 let corretasTotal = 0;
 
                 for (const attempt of attemptsFiltered) {
@@ -476,12 +583,98 @@ export default function EstatisticasPage() {
                     byDayQ[key] = (byDayQ[key] ?? 0) + 1;
                 }
 
+                /* ------------------------------------------------------------------ */
+                /* Agregação das revisões                                             */
+                /* ------------------------------------------------------------------ */
+
+                const nextReviewTotals: ReviewTotals = {
+                    total: 0,
+                    caderno: 0,
+                    flashcards: 0,
+                    resumos: 0,
+                };
+                const byDayReview: Record<string, number> = {};
+                const exactReviewTimestamps: number[] = [];
+
+                if (reviewEventsRes.error) {
+                    setReviewWarning(
+                        "Não foi possível carregar as estatísticas de revisão. Confira se o SQL da gamificação já foi executado no Supabase."
+                    );
+                } else {
+                    const reviewMetaMap = new Map<string, ReviewProgressMeta>();
+
+                    if (!reviewProgressRes.error) {
+                        for (const row of (reviewProgressRes.data ?? []) as ReviewProgressMeta[]) {
+                            const method = normalizeReviewMethod(row.method);
+                            if (!method) continue;
+                            reviewMetaMap.set(
+                                reviewMapKey(method, String(row.item_id)),
+                                {
+                                    ...row,
+                                    method,
+                                    item_id: String(row.item_id),
+                                }
+                            );
+                        }
+                    } else if (materiaId || assuntoId) {
+                        setReviewWarning(
+                            "As revisões foram carregadas, mas não foi possível aplicar o filtro de matéria/assunto nelas."
+                        );
+                    }
+
+                    for (const event of (reviewEventsRes.data ?? []) as ReviewEventRow[]) {
+                        const sourceId = event.source_id ? String(event.source_id) : "";
+                        const method = normalizeReviewMethod(
+                            metaString(event.metadata, "method")
+                        );
+
+                        if (!sourceId || !method) continue;
+
+                        const reviewMeta = reviewMetaMap.get(
+                            reviewMapKey(method, sourceId)
+                        );
+
+                        if (materiaId || assuntoId) {
+                            if (!reviewMeta) continue;
+                            if (materiaId && reviewMeta.materia_id !== materiaId) continue;
+                            if (assuntoId && reviewMeta.assunto_id !== assuntoId) continue;
+                        }
+
+                        const weight =
+                            event.event_type === "LEGACY_REVIEW_COUNT"
+                                ? Math.max(
+                                    0,
+                                    Math.floor(metaNumber(event.metadata, "count") ?? 0)
+                                )
+                                : 1;
+
+                        if (weight <= 0) continue;
+
+                        nextReviewTotals.total += weight;
+                        if (method === "CADERNO") nextReviewTotals.caderno += weight;
+                        if (method === "FLASHCARD") nextReviewTotals.flashcards += weight;
+                        if (method === "RESUMO") nextReviewTotals.resumos += weight;
+
+                        // LEGACY_REVIEW_COUNT preserva volume histórico, mas não possui
+                        // a data individual de cada revisão. Por isso não entra no gráfico diário.
+                        if (event.event_type === "REVIEW_COMPLETED") {
+                            const d = new Date(event.occurred_at);
+                            if (!Number.isNaN(d.getTime())) {
+                                const key = localDateKey(d);
+                                byDayReview[key] = (byDayReview[key] ?? 0) + 1;
+                                exactReviewTimestamps.push(d.getTime());
+                            }
+                        }
+                    }
+                }
+
                 if (cancelled) return;
 
                 setTempoTotalSeg(totalSec);
                 setSessoes(sessionRows.length);
                 setQuestoesTotal(attemptsFiltered.length);
                 setAcertoTotal(safePct(corretasTotal, attemptsFiltered.length));
+                setReviewTotals(nextReviewTotals);
 
                 setTopMateriasTempo(
                     materiaId
@@ -580,7 +773,6 @@ export default function EstatisticasPage() {
                 setPioresMaterias(matWeak);
                 setPioresAssuntos(assWeak);
 
-                /* ===== SÉRIE ===== */
                 let seriesStart: Date;
                 let seriesEnd: Date;
 
@@ -600,6 +792,8 @@ export default function EstatisticasPage() {
                         if (Number.isFinite(t)) timestamps.push(t);
                     }
 
+                    timestamps.push(...exactReviewTimestamps);
+
                     if (timestamps.length) {
                         seriesStart = startOfLocalDay(Math.min(...timestamps));
                         seriesEnd = startOfLocalDay(Math.max(...timestamps));
@@ -609,7 +803,15 @@ export default function EstatisticasPage() {
                     }
                 }
 
-                setSerie(buildSeries(seriesStart, seriesEnd, byDayMin, byDayQ));
+                setSerie(
+                    buildSeries(
+                        seriesStart,
+                        seriesEnd,
+                        byDayMin,
+                        byDayQ,
+                        byDayReview
+                    )
+                );
             } catch (e: any) {
                 if (!cancelled) {
                     setErro(e?.message || "Falha ao carregar estatísticas.");
@@ -617,6 +819,12 @@ export default function EstatisticasPage() {
                     setSessoes(0);
                     setQuestoesTotal(0);
                     setAcertoTotal(0);
+                    setReviewTotals({
+                        total: 0,
+                        caderno: 0,
+                        flashcards: 0,
+                        resumos: 0,
+                    });
                     setSerie([]);
                     setTopMateriasTempo([]);
                     setTopAssuntosTempo([]);
@@ -643,34 +851,65 @@ export default function EstatisticasPage() {
         assName,
     ]);
 
-    const cards = useMemo(
+    const cards = useMemo<MetricCard[]>(
         () => [
             {
                 label: "Tempo total",
                 value: fmtHMS(tempoTotalSeg),
-                icon: "⏱️",
+                icon: <Clock3 size={20} />,
                 tone: "from-sky-500 to-cyan-500",
             },
             {
                 label: "Sessões",
                 value: sessoes,
-                icon: "⏲️",
+                icon: <Activity size={20} />,
                 tone: "from-violet-500 to-fuchsia-500",
             },
             {
                 label: "Questões",
                 value: questoesTotal,
-                icon: "🧮",
+                icon: <Target size={20} />,
                 tone: "from-emerald-500 to-teal-500",
             },
             {
                 label: "Acerto",
                 value: `${acertoTotal}%`,
-                icon: "✅",
+                icon: <CheckCircle2 size={20} />,
                 tone: "from-amber-500 to-orange-500",
             },
+            {
+                label: "Revisões feitas",
+                value: reviewTotals.total,
+                icon: <RotateCcw size={20} />,
+                tone: "from-indigo-500 to-blue-500",
+                helper: "Caderno + flashcards + resumos",
+            },
+            {
+                label: "Caderno revisado",
+                value: reviewTotals.caderno,
+                icon: <BookOpenText size={20} />,
+                tone: "from-rose-500 to-red-500",
+            },
+            {
+                label: "Flashcards revisados",
+                value: reviewTotals.flashcards,
+                icon: <Brain size={20} />,
+                tone: "from-purple-500 to-violet-500",
+            },
+            {
+                label: "Resumos revisados",
+                value: reviewTotals.resumos,
+                icon: <Layers3 size={20} />,
+                tone: "from-cyan-500 to-sky-500",
+            },
         ],
-        [tempoTotalSeg, sessoes, questoesTotal, acertoTotal]
+        [
+            tempoTotalSeg,
+            sessoes,
+            questoesTotal,
+            acertoTotal,
+            reviewTotals,
+        ]
     );
 
     const assuntosFiltrados = useMemo(
@@ -679,6 +918,33 @@ export default function EstatisticasPage() {
                 ? assuntos.filter((a) => a.materia_id === materiaId)
                 : assuntos,
         [assuntos, materiaId]
+    );
+
+    const reviewDistribution = useMemo(
+        () => [
+            {
+                label: "Caderno de Erros",
+                value: reviewTotals.caderno,
+                pct: reviewTotals.total
+                    ? Math.round((reviewTotals.caderno / reviewTotals.total) * 100)
+                    : 0,
+            },
+            {
+                label: "Flashcards",
+                value: reviewTotals.flashcards,
+                pct: reviewTotals.total
+                    ? Math.round((reviewTotals.flashcards / reviewTotals.total) * 100)
+                    : 0,
+            },
+            {
+                label: "Resumos",
+                value: reviewTotals.resumos,
+                pct: reviewTotals.total
+                    ? Math.round((reviewTotals.resumos / reviewTotals.total) * 100)
+                    : 0,
+            },
+        ],
+        [reviewTotals]
     );
 
     function aplicarPeriodoPersonalizado() {
@@ -708,12 +974,11 @@ export default function EstatisticasPage() {
     }
 
     return (
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-6 space-y-6">
-            {/* HEADER + RANGE */}
+        <div className="mx-auto max-w-6xl space-y-6 px-3 py-6 sm:px-6">
             <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <h1 className="text-2xl font-semibold">Dashboard</h1>
+                        <h1 className="text-2xl font-semibold">Estatísticas</h1>
                         <p className="mt-1 text-xs text-muted-foreground">
                             Período: {periodoAtual}
                         </p>
@@ -725,9 +990,9 @@ export default function EstatisticasPage() {
                                 key={n}
                                 type="button"
                                 onClick={() => selecionarPreset(n)}
-                                className={`px-3 py-1.5 rounded-lg border transition ${periodMode === n
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "bg-card border-border hover:bg-muted"
+                                className={`rounded-lg border px-3 py-1.5 text-sm transition ${periodMode === n
+                                        ? "border-primary bg-primary text-primary-foreground"
+                                        : "border-border bg-card hover:bg-muted"
                                     }`}
                             >
                                 {n} dias
@@ -737,9 +1002,9 @@ export default function EstatisticasPage() {
                         <button
                             type="button"
                             onClick={() => selecionarPreset("all")}
-                            className={`px-3 py-1.5 rounded-lg border transition ${periodMode === "all"
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-card border-border hover:bg-muted"
+                            className={`rounded-lg border px-3 py-1.5 text-sm transition ${periodMode === "all"
+                                    ? "border-primary bg-primary text-primary-foreground"
+                                    : "border-border bg-card hover:bg-muted"
                                 }`}
                         >
                             Todo o período
@@ -747,8 +1012,7 @@ export default function EstatisticasPage() {
                     </div>
                 </div>
 
-                {/* PERÍODO PERSONALIZADO */}
-                <div className="rounded-2xl bg-card border border-border p-4">
+                <div className="rounded-2xl border border-border bg-card p-4">
                     <div className="flex flex-wrap items-end gap-3">
                         <label className="flex flex-col gap-1">
                             <span className="text-xs text-muted-foreground">
@@ -761,7 +1025,7 @@ export default function EstatisticasPage() {
                                     setCustomStartInput(e.target.value);
                                     setPeriodError(null);
                                 }}
-                                className="bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+                                className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground"
                             />
                         </label>
 
@@ -777,7 +1041,7 @@ export default function EstatisticasPage() {
                                     setCustomEndInput(e.target.value);
                                     setPeriodError(null);
                                 }}
-                                className="bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+                                className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground"
                             />
                         </label>
 
@@ -785,8 +1049,8 @@ export default function EstatisticasPage() {
                             type="button"
                             onClick={aplicarPeriodoPersonalizado}
                             className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${periodMode === "custom"
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-muted border-border hover:bg-muted/80"
+                                    ? "border-primary bg-primary text-primary-foreground"
+                                    : "border-border bg-muted hover:bg-muted/80"
                                 }`}
                         >
                             Aplicar período
@@ -801,12 +1065,11 @@ export default function EstatisticasPage() {
                 </div>
             </div>
 
-            {/* FILTROS */}
-            <div className="rounded-2xl bg-card border border-border p-4 flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 rounded-2xl border border-border bg-card p-4">
                 <div className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground">Matéria</span>
                     <select
-                        className="bg-muted border border-border rounded-lg px-3 py-2 text-sm"
+                        className="rounded-lg border border-border bg-muted px-3 py-2 text-sm"
                         value={materiaId}
                         onChange={(e) => {
                             setMateriaId(e.target.value);
@@ -825,7 +1088,7 @@ export default function EstatisticasPage() {
                 <div className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground">Assunto</span>
                     <select
-                        className="bg-muted border border-border rounded-lg px-3 py-2 text-sm"
+                        className="rounded-lg border border-border bg-muted px-3 py-2 text-sm"
                         value={assuntoId}
                         onChange={(e) => setAssuntoId(e.target.value)}
                         disabled={!assuntosFiltrados.length}
@@ -842,7 +1105,7 @@ export default function EstatisticasPage() {
                 {(materiaId || assuntoId) && (
                     <button
                         type="button"
-                        className="ml-auto bg-muted border border-border rounded-lg px-3 py-2 text-sm"
+                        className="ml-auto rounded-lg border border-border bg-muted px-3 py-2 text-sm"
                         onClick={() => {
                             setMateriaId("");
                             setAssuntoId("");
@@ -853,36 +1116,52 @@ export default function EstatisticasPage() {
                 )}
             </div>
 
-            {/* CARDS */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 {cards.map((c) => (
                     <div
                         key={c.label}
-                        className={`rounded-2xl p-4 text-white shadow-sm bg-gradient-to-r ${c.tone}`}
+                        className={`rounded-2xl bg-gradient-to-r p-4 text-white shadow-sm ${c.tone}`}
                     >
                         <div className="text-sm/5 opacity-90">{c.label}</div>
-                        <div className="mt-1 flex items-end justify-between">
+                        <div className="mt-1 flex items-end justify-between gap-3">
                             <div className="text-2xl font-extrabold tracking-tight">
                                 {c.value}
                             </div>
-                            <div className="text-xl/none opacity-90">{c.icon}</div>
+                            <div className="opacity-90">{c.icon}</div>
                         </div>
+                        {c.helper && (
+                            <div className="mt-1 text-[11px] opacity-80">{c.helper}</div>
+                        )}
                     </div>
                 ))}
             </div>
 
-            {/* SÉRIE */}
-            <div className="rounded-2xl bg-card border border-border p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            {reviewWarning && (
+                <div className="rounded-xl border border-amber-300/50 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    {reviewWarning}
+                </div>
+            )}
+
+            {periodMode === "all" && reviewTotals.total > 0 && (
+                <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+                    Em “Todo o período”, revisões anteriores à implantação da gamificação
+                    podem aparecer como volume histórico consolidado. Elas contam no total,
+                    mas não são distribuídas artificialmente no gráfico diário porque o
+                    histórico antigo não preservava a data de cada revisão.
+                </div>
+            )}
+
+            <div className="rounded-2xl border border-border bg-card p-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <h2 className="font-semibold">
-                        Estudo diário {materiaId || assuntoId ? "(filtrado)" : "(geral)"}
+                        Evolução diária {materiaId || assuntoId ? "(filtrado)" : "(geral)"}
                     </h2>
                     <span className="text-xs text-muted-foreground">
-                        Minutos x Questões • {periodoAtual}
+                        Minutos × Questões × Revisões • {periodoAtual}
                     </span>
                 </div>
 
-                <div className="h-64">
+                <div className="h-72">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={serie} margin={{ left: 6, right: 6 }}>
                             <defs>
@@ -890,7 +1169,7 @@ export default function EstatisticasPage() {
                                     <stop
                                         offset="5%"
                                         stopColor="var(--primary)"
-                                        stopOpacity={0.5}
+                                        stopOpacity={0.45}
                                     />
                                     <stop
                                         offset="95%"
@@ -899,16 +1178,12 @@ export default function EstatisticasPage() {
                                     />
                                 </linearGradient>
                                 <linearGradient id="gQst" x1="0" y1="0" x2="0" y2="1">
-                                    <stop
-                                        offset="5%"
-                                        stopColor="#22c55e"
-                                        stopOpacity={0.5}
-                                    />
-                                    <stop
-                                        offset="95%"
-                                        stopColor="#22c55e"
-                                        stopOpacity={0}
-                                    />
+                                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
+                                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                                </linearGradient>
+                                <linearGradient id="gRev" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.35} />
+                                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
 
@@ -946,13 +1221,58 @@ export default function EstatisticasPage() {
                                 fill="url(#gQst)"
                                 strokeWidth={2}
                             />
+                            <Area
+                                type="monotone"
+                                dataKey="revisoes"
+                                name="Revisões"
+                                stroke="#8b5cf6"
+                                fill="url(#gRev)"
+                                strokeWidth={2}
+                            />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
             </div>
 
-            {/* BARRAS COMPACTAS */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <Panel title="Distribuição das revisões">
+                    <div className="space-y-4 py-1">
+                        {reviewDistribution.map((item) => (
+                            <div key={item.label}>
+                                <div className="mb-1.5 flex items-center justify-between gap-3 text-sm">
+                                    <span className="font-medium">{item.label}</span>
+                                    <span className="text-muted-foreground">
+                                        {item.value} • {item.pct}%
+                                    </span>
+                                </div>
+                                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                                    <div
+                                        className="h-full rounded-full bg-primary transition-all"
+                                        style={{ width: `${Math.min(100, item.pct)}%` }}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+
+                        {reviewTotals.total === 0 && (
+                            <div className="py-4 text-sm text-muted-foreground">
+                                Nenhuma revisão registrada no período selecionado.
+                            </div>
+                        )}
+                    </div>
+                </Panel>
+
+                <Panel title="Resumo de revisão">
+                    <div className="grid grid-cols-2 gap-3">
+                        <MiniStat label="Total" value={reviewTotals.total} />
+                        <MiniStat label="Caderno" value={reviewTotals.caderno} />
+                        <MiniStat label="Flashcards" value={reviewTotals.flashcards} />
+                        <MiniStat label="Resumos" value={reviewTotals.resumos} />
+                    </div>
+                </Panel>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {!materiaId && (
                     <Panel title="Top 5 matérias por tempo (min)">
                         <TinyBarH data={topMateriasTempo} />
@@ -967,7 +1287,7 @@ export default function EstatisticasPage() {
                 </Panel>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <Panel
                     title={`Acerto por Matéria ${materiaId ? "(item selecionado)" : "(geral)"
                         }`}
@@ -983,8 +1303,7 @@ export default function EstatisticasPage() {
                 </Panel>
             </div>
 
-            {/* PIORES */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <Panel
                     title={`Onde estou pior — Matérias (acerto < ${WEAK_THRESHOLD}%, min. ${MIN_QTD_FRACO} questões)`}
                 >
@@ -1010,7 +1329,10 @@ export default function EstatisticasPage() {
     );
 }
 
-/* ============== subs ============== */
+/* ========================================================================== */
+/* Componentes auxiliares                                                     */
+/* ========================================================================== */
+
 function Panel({
     title,
     children,
@@ -1019,9 +1341,18 @@ function Panel({
     children: React.ReactNode;
 }) {
     return (
-        <div className="rounded-2xl bg-card border border-border p-4">
-            <h3 className="font-semibold mb-2">{title}</h3>
+        <div className="rounded-2xl border border-border bg-card p-4">
+            <h3 className="mb-2 font-semibold">{title}</h3>
             {children}
+        </div>
+    );
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+    return (
+        <div className="rounded-xl border border-border bg-muted/50 p-4">
+            <div className="text-xs text-muted-foreground">{label}</div>
+            <div className="mt-1 text-2xl font-bold">{value}</div>
         </div>
     );
 }
@@ -1035,7 +1366,7 @@ function TinyBarH({
 }) {
     if (!data.length) {
         return (
-            <div className="text-sm text-muted-foreground py-4">
+            <div className="py-4 text-sm text-muted-foreground">
                 Sem dados para o período selecionado.
             </div>
         );
@@ -1106,8 +1437,8 @@ function WeakList({
                     key={`${it.nome}-${i}`}
                     className="flex items-center justify-between rounded-xl border border-border bg-muted px-3 py-2"
                 >
-                    <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{it.nome}</div>
+                    <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{it.nome}</div>
                         <div className="text-xs text-muted-foreground">
                             Total: {it.total} questões
                         </div>
