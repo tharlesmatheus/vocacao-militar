@@ -6,8 +6,9 @@
  * O que muda:
  * - Header simples: "Olá, {nome}"
  * - Tag (pill) com data + hora (alinhada na mesma largura dos botões no mobile)
- * - 4 botões (cards) em 2 colunas no mobile, estilo “cartões coloridos”
- *   - Questões, Resumos, Revisão, Cronograma
+ * - Meta diária concreta: 50 questões, 10 flashcards e 10 resumos revisados
+ * - Botões (cards) em 2 colunas no mobile, estilo “cartões coloridos”
+ *   - Questões, Resumos, Revisão, Ciclo de Estudos, Cadernos e Tempo de estudo
  * - Abaixo: “Suas Estatísticas” no padrão da imagem (2 colunas), mais compacto/alinhado
  * - Abaixo: Tempo de estudo (gráfico redondo/pizza + lista) EMBUTIDO aqui (substitui o mini gráfico atual)
  *   - Fonte: study_sessions (com ended_at != null) + sessão aberta em tempo real (ended_at null)
@@ -30,11 +31,54 @@ import {
   Timer,
   Flame,
   ArrowUpRight,
+  CheckCircle2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { ResponsiveContainer, PieChart, Pie, Tooltip, Cell } from "recharts";
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
+
+const DAILY_GOALS = {
+  questoes: 50,
+  flashcards: 10,
+  resumos: 10,
+} as const;
+
+type ReviewMethod = "CADERNO" | "FLASHCARD" | "RESUMO";
+
+type ReviewEventRow = {
+  source_id: string | null;
+  metadata: unknown;
+  occurred_at: string;
+};
+
+type ReviewProgressRow = {
+  item_id: string;
+  method: ReviewMethod;
+  last_reviewed_at: string | null;
+  next_review: string;
+};
+
+function clampPct(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function reviewMethodFromMetadata(metadata: unknown): ReviewMethod | null {
+  if (!isRecord(metadata)) return null;
+
+  const raw = String(metadata.method ?? "").toUpperCase();
+
+  if (raw === "CADERNO" || raw === "FLASHCARD" || raw === "RESUMO") {
+    return raw;
+  }
+
+  return null;
+}
 
 /* =========================
  * Helpers básicos
@@ -247,47 +291,72 @@ export default function DashboardHome() {
  * ========================= */
 
   const [questoesHoje, setQuestoesHoje] = useState(0);
+  const [flashcardsHoje, setFlashcardsHoje] = useState(0);
+  const [resumosRevisadosHoje, setResumosRevisadosHoje] = useState(0);
+
   const [totalResumos, setTotalResumos] = useState(0);
-  const [revisoesHoje, setRevisoesHoje] = useState(0);
+  const [revisoesConcluidasHoje, setRevisoesConcluidasHoje] = useState(0);
+  const [revisoesPendentes, setRevisoesPendentes] = useState(0);
   const [totalCadernos, setTotalCadernos] = useState(0);
   const [tempoHojeSeg, setTempoHojeSeg] = useState(0);
 
   useEffect(() => {
     if (!userId) return;
 
+    let active = true;
+
     (async () => {
       const inicioHoje = startOfLocalDay();
+      const fimHoje = new Date(inicioHoje);
+      fimHoje.setDate(fimHoje.getDate() + 1);
+
+      const hojeYmd = ymdLocal(inicioHoje);
 
       const [
         questoes,
         resumos,
-        revisoes,
+        reviewEvents,
+        reviewProgress,
         sessoesHoje,
         cadernos,
       ] = await Promise.all([
+        // Fonte atual das questões respondidas.
         supabase
-          .from("questoes_resolvidas")
-          .select("id", { count: "exact", head: true })
+          .from("question_attempts")
+          .select("questao_id", { count: "exact", head: true })
           .eq("user_id", userId)
-          .gte("created_at", inicioHoje.toISOString()),
+          .gte("created_at", inicioHoje.toISOString())
+          .lt("created_at", fimHoje.toISOString()),
 
         supabase
           .from("resumos")
           .select("id", { count: "exact", head: true })
           .eq("user_id", userId),
 
+        // Quando a gamificação está instalada, este é o histórico mais exato
+        // das revisões concluídas no dia.
         supabase
-          .from("revisoes")
-          .select("id", { count: "exact", head: true })
+          .from("gamification_events")
+          .select("source_id,metadata,occurred_at")
           .eq("user_id", userId)
-          .is("done_at", null)
-          .lte("scheduled_for", new Date().toISOString()),
+          .eq("event_type", "REVIEW_COMPLETED")
+          .gte("occurred_at", inicioHoje.toISOString())
+          .lt("occurred_at", fimHoje.toISOString())
+          .order("occurred_at", { ascending: true }),
+
+        // Também serve para calcular pendências e como fallback caso
+        // gamification_events ainda não esteja disponível.
+        supabase
+          .from("review_progress")
+          .select("item_id,method,last_reviewed_at,next_review")
+          .eq("user_id", userId),
 
         supabase
           .from("study_sessions")
           .select("duration_seconds")
           .eq("user_id", userId)
           .gte("started_at", inicioHoje.toISOString())
+          .lt("started_at", fimHoje.toISOString())
           .not("ended_at", "is", null),
 
         supabase
@@ -296,50 +365,116 @@ export default function DashboardHome() {
           .eq("user_id", userId),
       ]);
 
+      if (!active) return;
+
       setQuestoesHoje(questoes.count ?? 0);
       setTotalResumos(resumos.count ?? 0);
-      setRevisoesHoje(revisoes.count ?? 0);
       setTotalCadernos(cadernos.count ?? 0);
 
+      const progressRows = (reviewProgress.data ?? []) as ReviewProgressRow[];
+
+      setRevisoesPendentes(
+        progressRows.filter((row) => String(row.next_review ?? "") <= hojeYmd).length
+      );
+
+      const methodByItem = new Map<string, ReviewMethod>();
+      for (const row of progressRows) {
+        methodByItem.set(String(row.item_id), row.method);
+      }
+
+      let flashcards = 0;
+      let resumosFeitos = 0;
+      let revisoesFeitas = 0;
+
+      if (!reviewEvents.error) {
+        for (const event of (reviewEvents.data ?? []) as ReviewEventRow[]) {
+          const method =
+            reviewMethodFromMetadata(event.metadata) ||
+            (event.source_id
+              ? methodByItem.get(String(event.source_id)) ?? null
+              : null);
+
+          if (!method) continue;
+
+          revisoesFeitas += 1;
+
+          if (method === "FLASHCARD") flashcards += 1;
+          if (method === "RESUMO") resumosFeitos += 1;
+        }
+      } else {
+        // Fallback sem alterar banco: review_progress guarda a última revisão
+        // de cada item. Para a meta diária isso é suficiente para contar os
+        // itens revisados hoje.
+        for (const row of progressRows) {
+          if (!row.last_reviewed_at) continue;
+
+          const reviewedAt = new Date(row.last_reviewed_at);
+
+          if (
+            Number.isNaN(reviewedAt.getTime()) ||
+            reviewedAt < inicioHoje ||
+            reviewedAt >= fimHoje
+          ) {
+            continue;
+          }
+
+          revisoesFeitas += 1;
+
+          if (row.method === "FLASHCARD") flashcards += 1;
+          if (row.method === "RESUMO") resumosFeitos += 1;
+        }
+      }
+
+      setFlashcardsHoje(flashcards);
+      setResumosRevisadosHoje(resumosFeitos);
+      setRevisoesConcluidasHoje(revisoesFeitas);
+
       const tempo = (sessoesHoje.data ?? []).reduce(
-        (acc: number, s: any) => acc + (s.duration_seconds ?? 0),
+        (acc: number, s: any) => acc + Number(s.duration_seconds ?? 0),
         0
       );
 
-      setTempoHojeSeg(tempo);
+      setTempoHojeSeg(Math.max(0, tempo));
     })();
+
+    return () => {
+      active = false;
+    };
   }, [userId]);
 
   /* =========================
-   * AÇÕES (6 BOTÕES)
+   * AÇÕES PRINCIPAIS
    * ========================= */
 
   const ACTIONS = useMemo(
     () => [
       {
         name: "Resolver Questões",
-        subtitle: `${questoesHoje} hoje`,
+        subtitle: `${Math.min(questoesHoje, DAILY_GOALS.questoes)}/${DAILY_GOALS.questoes} hoje`,
         href: "/questoes",
         icon: Brain,
         bg: "from-indigo-500 to-violet-600",
       },
       {
         name: "Resumos",
-        subtitle: `${totalResumos} resumos`,
+        subtitle: `${Math.min(
+          resumosRevisadosHoje,
+          DAILY_GOALS.resumos
+        )}/${DAILY_GOALS.resumos} hoje • ${totalResumos} salvos`,
         href: "/resumos",
         icon: FileText,
         bg: "from-sky-500 to-blue-600",
       },
       {
         name: "Revisão",
-        subtitle: `${revisoesHoje} pendentes`,
+        subtitle: `${revisoesPendentes} para hoje • ${revisoesConcluidasHoje} feitas`,
         href: "/revisao",
         icon: History,
         bg: "from-orange-500 to-amber-500",
       },
       {
-        name: "Cronograma",
-        subtitle: "Sua rotina",
+        name: "Ciclo de Estudos",
+        subtitle: "Continue de onde parou",
         href: "/cronograma",
         icon: CalendarDays,
         bg: "from-emerald-500 to-teal-600",
@@ -361,8 +496,10 @@ export default function DashboardHome() {
     ],
     [
       questoesHoje,
+      resumosRevisadosHoje,
       totalResumos,
-      revisoesHoje,
+      revisoesPendentes,
+      revisoesConcluidasHoje,
       totalCadernos,
       tempoHojeSeg,
     ]
@@ -527,6 +664,56 @@ export default function DashboardHome() {
     ],
     [questoesTotal, taxaAcerto, tempoMedioSeg, streakDias]
   );
+
+  const questoesGoalPct = clampPct(
+    (questoesHoje / DAILY_GOALS.questoes) * 100
+  );
+
+  const flashcardsGoalPct = clampPct(
+    (flashcardsHoje / DAILY_GOALS.flashcards) * 100
+  );
+
+  const resumosGoalPct = clampPct(
+    (resumosRevisadosHoje / DAILY_GOALS.resumos) * 100
+  );
+
+  const metasConcluidas =
+    Number(questoesHoje >= DAILY_GOALS.questoes) +
+    Number(flashcardsHoje >= DAILY_GOALS.flashcards) +
+    Number(resumosRevisadosHoje >= DAILY_GOALS.resumos);
+
+  const metaDiariaConcluida = metasConcluidas === 3;
+
+  const metaDiariaPct = Math.round(
+    (questoesGoalPct + flashcardsGoalPct + resumosGoalPct) / 3
+  );
+
+  const dailyGoalItems = [
+    {
+      label: "Questões",
+      value: questoesHoje,
+      target: DAILY_GOALS.questoes,
+      progress: questoesGoalPct,
+      href: "/questoes",
+      icon: Brain,
+    },
+    {
+      label: "Flashcards",
+      value: flashcardsHoje,
+      target: DAILY_GOALS.flashcards,
+      progress: flashcardsGoalPct,
+      href: "/revisao",
+      icon: Target,
+    },
+    {
+      label: "Resumos",
+      value: resumosRevisadosHoje,
+      target: DAILY_GOALS.resumos,
+      progress: resumosGoalPct,
+      href: "/revisao",
+      icon: FileText,
+    },
+  ];
 
   const dateTimePillText = useMemo(() => `${fmtDateLong(now)} • ${hmLocal(now)}`, [now]);
 
@@ -772,18 +959,128 @@ export default function DashboardHome() {
           <p className="mt-1 text-sm text-muted-foreground">Continue sua jornada de estudos</p>
         </div>
 
-        {/* PILL (mesma largura dos botões no mobile) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="col-span-2 lg:col-span-4">
-            <div className="w-full rounded-2xl border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground shadow-sm flex items-center justify-center sm:justify-start gap-2">
-              <CalendarIcon className="h-4 w-4 text-primary" />
-              <span className="capitalize">{dateTimePillText}</span>
+        {/* DATA / HORA */}
+        <div className="w-full rounded-2xl border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground shadow-sm flex items-center justify-center sm:justify-start gap-2">
+          <CalendarIcon className="h-4 w-4 text-primary" />
+          <span className="capitalize">{dateTimePillText}</span>
+        </div>
+
+        {/* META DIÁRIA */}
+        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Target className="h-5 w-5 text-primary" />
+                <h2 className="text-base font-extrabold text-foreground">
+                  Meta diária
+                </h2>
+              </div>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                50 questões • 10 flashcards • 10 resumos revisados
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {metaDiariaConcluida ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-600">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Dia concluído
+                </span>
+              ) : (
+                <span className="rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
+                  {metasConcluidas}/3 metas concluídas
+                </span>
+              )}
+
+              <span className="text-sm font-extrabold text-foreground">
+                {metaDiariaPct}%
+              </span>
             </div>
           </div>
 
-          {/* AÇÕES (4 botões) */}
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            {dailyGoalItems.map((goal) => {
+              const Icon = goal.icon;
+              const completed = goal.value >= goal.target;
+
+              return (
+                <Link
+                  key={goal.label}
+                  href={goal.href}
+                  className="rounded-2xl border border-border bg-background p-4 transition hover:bg-muted/40"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${completed
+                            ? "bg-emerald-500/10 text-emerald-600"
+                            : "bg-primary/10 text-primary"
+                          }`}
+                      >
+                        {completed ? (
+                          <CheckCircle2 className="h-5 w-5" />
+                        ) : (
+                          <Icon className="h-5 w-5" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="font-semibold text-foreground">
+                          {goal.label}
+                        </div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {Math.min(goal.value, goal.target)} / {goal.target}
+                          {goal.value > goal.target
+                            ? ` • ${goal.value - goal.target} extras`
+                            : ""}
+                        </div>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`text-sm font-extrabold ${completed ? "text-emerald-600" : "text-foreground"
+                        }`}
+                    >
+                      {Math.round(goal.progress)}%
+                    </span>
+                  </div>
+
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={`h-full rounded-full transition-all ${completed ? "bg-emerald-500" : "bg-primary"
+                        }`}
+                      style={{ width: `${goal.progress}%` }}
+                    />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="mt-4">
+            <div className="mb-1.5 flex items-center justify-between text-xs">
+              <span className="font-medium text-foreground">
+                Progresso geral do dia
+              </span>
+              <span className="text-muted-foreground">{metaDiariaPct}%</span>
+            </div>
+
+            <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className={`h-full rounded-full transition-all ${metaDiariaConcluida ? "bg-emerald-500" : "bg-primary"
+                  }`}
+                style={{ width: `${metaDiariaPct}%` }}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* AÇÕES PRINCIPAIS */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {ACTIONS.map((it) => {
             const Icon = it.icon;
+
             return (
               <Link
                 key={it.href}
@@ -797,8 +1094,12 @@ export default function DashboardHome() {
                 </div>
 
                 <div className="mt-10">
-                  <div className="text-[15px] font-extrabold leading-tight">{it.name}</div>
-                  <div className="mt-1 text-xs text-white/85">{it.subtitle}</div>
+                  <div className="text-[15px] font-extrabold leading-tight">
+                    {it.name}
+                  </div>
+                  <div className="mt-1 text-xs text-white/85">
+                    {it.subtitle}
+                  </div>
                 </div>
               </Link>
             );
