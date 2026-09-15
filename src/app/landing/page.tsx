@@ -113,6 +113,8 @@ Questão:
 `;
 
 type ResultadoTentativa = "ACERTO" | "ERRO";
+type ModoInsercao = "IA" | "MANUAL";
+type ModoFlashcard = "IA" | "MANUAL" | null;
 
 type Edital = {
     id: string;
@@ -145,6 +147,7 @@ type QuestaoProcessada = {
     localId: string;
     numero: number;
     textoOriginal: string;
+    origem: ModoInsercao;
 
     instituicao: string;
     cargo: string;
@@ -165,6 +168,7 @@ type QuestaoProcessada = {
     flashcardErro: string;
     flashcardVersao: number;
     flashcardConfirmado: boolean;
+    flashcardModo: ModoFlashcard;
 };
 
 type FalhaProcessamento = {
@@ -405,6 +409,8 @@ export default function NovaQuestaoGeminiLote() {
     const [novaBanca, setNovaBanca] = useState("");
 
     const [input, setInput] = useState("");
+    const [modoInsercao, setModoInsercao] =
+        useState<ModoInsercao>("IA");
 
     const [loadingInicial, setLoadingInicial] =
         useState(true);
@@ -472,17 +478,40 @@ export default function NovaQuestaoGeminiLote() {
         !processando &&
         !salvando;
 
+    const podeAdicionarManual =
+        !!userId &&
+        !!editalId &&
+        !!materiaId &&
+        !!assuntoId &&
+        sessaoCorrespondeClassificacao &&
+        !processando &&
+        !salvando;
+
     const podeSalvar =
         questoesProcessadas.length > 0 &&
-        questoesProcessadas.every(
-            (q) =>
+        questoesProcessadas.every((q) => {
+            const alternativasPreenchidas = Object.values(
+                q.alternativas
+            ).filter((valor) => String(valor ?? "").trim()).length;
+
+            const conteudoBasicoValido =
+                q.enunciado.trim() &&
+                q.correta.trim() &&
+                alternativasPreenchidas >= 2;
+
+            const flashcardValido =
+                !q.criarFlashcard ||
+                (!q.flashcardGerando &&
+                    q.flashcardFrente.trim() &&
+                    q.flashcardVerso.trim() &&
+                    q.flashcardConfirmado);
+
+            return !!(
+                conteudoBasicoValido &&
                 q.resultado &&
-                (!q.criarFlashcard ||
-                    (!q.flashcardGerando &&
-                        q.flashcardFrente.trim() &&
-                        q.flashcardVerso.trim() &&
-                        q.flashcardConfirmado))
-        ) &&
+                flashcardValido
+            );
+        }) &&
         !processando &&
         !salvando;
 
@@ -1417,6 +1446,81 @@ export default function NovaQuestaoGeminiLote() {
         setResultadoSalvamento([]);
     }
 
+    function proximoNumeroQuestao() {
+        return (
+            questoesProcessadas.reduce(
+                (maior, q) => Math.max(maior, q.numero),
+                0
+            ) + 1
+        );
+    }
+
+    function adicionarQuestaoManual() {
+        setErro("");
+        setMsg("");
+        setResultadoSalvamento([]);
+
+        if (!podeAdicionarManual) {
+            setErro(
+                "Selecione Edital, Disciplina e Assunto antes de inserir manualmente."
+            );
+            return;
+        }
+
+        const novaQuestao: QuestaoProcessada = {
+            localId: criarLocalId(),
+            numero: proximoNumeroQuestao(),
+            textoOriginal: "",
+            origem: "MANUAL",
+
+            instituicao: instituicaoPadrao,
+            cargo: cargoPadrao,
+            modalidade: "Multipla Escolha",
+            banca: bancaPadrao,
+            enunciado: "",
+            alternativas: {
+                A: "",
+                B: "",
+                C: "",
+                D: "",
+                E: "",
+            },
+            correta: "",
+            explicacao: "",
+
+            resultado: "",
+            salvarNoCadernoAcertos: false,
+
+            criarFlashcard: false,
+            flashcardFrente: "",
+            flashcardVerso: "",
+            flashcardGerando: false,
+            flashcardErro: "",
+            flashcardVersao: 0,
+            flashcardConfirmado: false,
+            flashcardModo: null,
+        };
+
+        setQuestoesProcessadas((prev) => [
+            ...prev,
+            novaQuestao,
+        ]);
+
+        setMsg(
+            "Questão manual adicionada. Preencha enunciado, alternativas, gabarito, comentário e informe o resultado."
+        );
+    }
+
+    function prepararFlashcardManual(localId: string) {
+        atualizarQuestao(localId, {
+            criarFlashcard: true,
+            flashcardModo: "MANUAL",
+            flashcardGerando: false,
+            flashcardErro: "",
+            flashcardConfirmado: false,
+        });
+    }
+
     async function chamarGeminiJson(
         prompt: string
     ): Promise<any> {
@@ -1488,6 +1592,7 @@ export default function NovaQuestaoGeminiLote() {
 
         atualizarQuestao(localId, {
             criarFlashcard: true,
+            flashcardModo: "IA",
             flashcardGerando: true,
             flashcardErro: "",
             flashcardConfirmado: false,
@@ -1682,6 +1787,7 @@ Retorne SOMENTE JSON válido:
                 flashcardVersao:
                     questao.flashcardVersao + 1,
                 flashcardConfirmado: false,
+                flashcardModo: "IA",
             });
         } catch (e) {
             atualizarQuestao(localId, {
@@ -1704,6 +1810,7 @@ Retorne SOMENTE JSON válido:
                 flashcardErro: "",
                 flashcardVersao: 0,
                 flashcardConfirmado: false,
+                flashcardModo: null,
             });
             return;
         }
@@ -1712,16 +1819,8 @@ Retorne SOMENTE JSON válido:
             criarFlashcard: true,
             flashcardErro: "",
             flashcardConfirmado: false,
+            flashcardModo: null,
         });
-
-        if (
-            !questao.flashcardFrente.trim() ||
-            !questao.flashcardVerso.trim()
-        ) {
-            await gerarFlashcardComIA(
-                questao.localId
-            );
-        }
     }
 
     async function handleProcessarLote() {
@@ -1741,10 +1840,11 @@ Retorne SOMENTE JSON válido:
             return;
         }
 
+        const numeroInicial = proximoNumeroQuestao();
+
         setProcessando(true);
         setErro("");
         setMsg("");
-        setQuestoesProcessadas([]);
         setFalhasProcessamento([]);
         setResultadoSalvamento([]);
 
@@ -1806,8 +1906,9 @@ Retorne SOMENTE JSON válido:
 
                     prontas.push({
                         localId: criarLocalId(),
-                        numero: i + 1,
+                        numero: numeroInicial + i,
                         textoOriginal: questaoTxt,
+                        origem: "IA",
 
                         instituicao:
                             instituicaoPadrao ||
@@ -1847,6 +1948,7 @@ Retorne SOMENTE JSON válido:
                         flashcardErro: "",
                         flashcardVersao: 0,
                         flashcardConfirmado: false,
+                        flashcardModo: null,
                     });
                 } catch (e) {
                     falhas.push({
@@ -1857,7 +1959,10 @@ Retorne SOMENTE JSON válido:
                 }
             }
 
-            setQuestoesProcessadas(prontas);
+            setQuestoesProcessadas((prev) => [
+                ...prev,
+                ...prontas,
+            ]);
             setFalhasProcessamento(falhas);
 
             /*
@@ -2286,6 +2391,28 @@ Retorne SOMENTE JSON válido:
             return;
         }
 
+        const questoesIncompletas =
+            questoesProcessadas.filter((q) => {
+                const alternativasPreenchidas = Object.values(
+                    q.alternativas
+                ).filter((valor) =>
+                    String(valor ?? "").trim()
+                ).length;
+
+                return (
+                    !q.enunciado.trim() ||
+                    !q.correta.trim() ||
+                    alternativasPreenchidas < 2
+                );
+            });
+
+        if (questoesIncompletas.length) {
+            setErro(
+                "Preencha o enunciado, o gabarito e pelo menos duas alternativas em todas as questões antes de salvar."
+            );
+            return;
+        }
+
         const semResultado =
             questoesProcessadas.filter(
                 (q) => !q.resultado
@@ -2308,7 +2435,7 @@ Retorne SOMENTE JSON válido:
 
         if (flashcardsInvalidos.length) {
             setErro(
-                "Gere e revise Frente e Verso de todos os flashcards marcados."
+                "Preencha Frente e Verso de todos os flashcards marcados, manualmente ou com IA."
             );
             return;
         }
@@ -3018,17 +3145,52 @@ Retorne SOMENTE JSON válido:
 
                 <section className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm">
                     <h2 className="text-base font-semibold">
-                        3. Cole as questões
+                        3. Adicione as questões
                     </h2>
 
                     <p className="mt-1 text-xs text-muted-foreground">
-                        Você pode colar uma questão ou várias
-                        numeradas em sequência.
+                        Escolha se deseja estruturar a questão com IA ou cadastrar tudo manualmente. Os dois caminhos salvam no mesmo banco e usam o mesmo fluxo de estatísticas, cadernos e flashcards.
                     </p>
 
-                    <textarea
-                        className="mt-4 w-full min-h-[240px] resize-y rounded-xl border border-border bg-background p-4 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                        placeholder={`Exemplos de separação:
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setModoInsercao("IA")}
+                            className={`rounded-xl border px-4 py-3 text-left transition ${modoInsercao === "IA"
+                                ? "border-primary bg-primary/10 text-foreground"
+                                : "border-border bg-background hover:bg-muted"
+                                }`}
+                        >
+                            <span className="block text-sm font-semibold">
+                                Inserir com IA
+                            </span>
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                                Cole uma ou várias questões. A IA organiza enunciado, alternativas, gabarito e comentário para você revisar.
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setModoInsercao("MANUAL")}
+                            className={`rounded-xl border px-4 py-3 text-left transition ${modoInsercao === "MANUAL"
+                                ? "border-primary bg-primary/10 text-foreground"
+                                : "border-border bg-background hover:bg-muted"
+                                }`}
+                        >
+                            <span className="block text-sm font-semibold">
+                                Inserir manualmente
+                            </span>
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                                Não depende da IA. Você preenche enunciado, alternativas, gabarito, comentário e, se quiser, o flashcard.
+                            </span>
+                        </button>
+                    </div>
+
+                    {modoInsercao === "IA" ? (
+                        <>
+                            <textarea
+                                className="mt-4 w-full min-h-[240px] resize-y rounded-xl border border-border bg-background p-4 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                                placeholder={`Exemplos de separação:
 1) ...
 2) ...
 
@@ -3037,29 +3199,58 @@ QUESTÃO 4 ...
 
 1. ...
 2. ...`}
-                        value={input}
-                        onChange={(e) =>
-                            setInput(e.target.value)
-                        }
-                    />
+                                value={input}
+                                onChange={(e) =>
+                                    setInput(e.target.value)
+                                }
+                            />
 
-                    <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
-                        <button
-                            type="button"
-                            onClick={handleProcessarLote}
-                            disabled={!podeProcessar}
-                            className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            {processando
-                                ? "Processando com IA..."
-                                : "Processar questões"}
-                        </button>
+                            <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={handleProcessarLote}
+                                    disabled={!podeProcessar}
+                                    className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {processando
+                                        ? "Processando com IA..."
+                                        : "Processar com IA"}
+                                </button>
 
-                        <span className="text-xs text-muted-foreground">
-                            A seleção de Edital, Disciplina e
-                            Assunto fica memorizada nesta sessão.
-                        </span>
-                    </div>
+                                <span className="text-xs text-muted-foreground">
+                                    Se a IA estiver indisponível, troque para Inserir manualmente sem perder a classificação selecionada.
+                                </span>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="mt-4 rounded-2xl border border-border bg-background p-4 sm:p-5">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <div className="text-sm font-semibold text-foreground">
+                                        Cadastro manual
+                                    </div>
+                                    <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+                                        Crie uma ficha vazia e preencha os dados abaixo. Você pode adicionar várias questões manuais ao mesmo lote. Nenhuma chamada à IA é necessária.
+                                    </p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={adicionarQuestaoManual}
+                                    disabled={!podeAdicionarManual}
+                                    className="shrink-0 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    + Adicionar questão manual
+                                </button>
+                            </div>
+
+                            {!podeAdicionarManual && (
+                                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                                    Selecione Edital, Disciplina e Assunto e mantenha a classificação compatível com a sessão de estudo para liberar o cadastro manual.
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </section>
 
                 {falhasProcessamento.length > 0 && (
@@ -3094,13 +3285,11 @@ QUESTÃO 4 ...
                     <section className="space-y-5">
                         <div>
                             <h2 className="text-lg font-semibold">
-                                4. Revise e informe o resultado
+                                4. Preencha, revise e informe o resultado
                             </h2>
 
                             <p className="mt-1 text-sm text-muted-foreground">
-                                Cada questão precisa ser marcada
-                                como Acertei ou Errei antes do
-                                salvamento.
+                                Complete os campos obrigatórios e marque cada questão como Acertei ou Errei antes do salvamento.
                             </p>
                         </div>
 
@@ -3118,9 +3307,17 @@ QUESTÃO 4 ...
                                     >
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
-                                                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                                    Questão{" "}
-                                                    {q.numero}
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                                        Questão{" "}
+                                                        {q.numero}
+                                                    </div>
+                                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${q.origem === "MANUAL"
+                                                        ? "bg-slate-100 text-slate-700"
+                                                        : "bg-primary/10 text-primary"
+                                                        }`}>
+                                                        {q.origem === "MANUAL" ? "Manual" : "IA"}
+                                                    </span>
                                                 </div>
 
                                                 <h3 className="mt-1 font-semibold">
@@ -3457,12 +3654,8 @@ QUESTÃO 4 ...
                                         <label className="mt-4 flex items-start gap-3 rounded-xl border border-border p-4">
                                             <input
                                                 type="checkbox"
-                                                checked={
-                                                    q.criarFlashcard
-                                                }
-                                                onChange={(
-                                                    e
-                                                ) =>
+                                                checked={q.criarFlashcard}
+                                                onChange={(e) =>
                                                     handleToggleFlashcard(
                                                         q,
                                                         e.target.checked
@@ -3473,55 +3666,94 @@ QUESTÃO 4 ...
 
                                             <span>
                                                 <span className="block text-sm font-medium">
-                                                    Criar
-                                                    flashcard
-                                                    desta
-                                                    questão
+                                                    Criar flashcard desta questão
                                                 </span>
 
                                                 <span className="block text-xs text-muted-foreground mt-1">
-                                                    A IA gera Frente e Verso usando esta questão. Você verá a prévia, poderá editar ou gerar outra versão e só depois confirmar.
+                                                    O flashcard pode ser gerado com IA ou preenchido totalmente à mão. Se a IA estiver indisponível, o cadastro manual continua funcionando normalmente.
                                                 </span>
                                             </span>
                                         </label>
 
                                         {q.criarFlashcard && (
                                             <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
-                                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                                    <div>
-                                                        <div className="text-sm font-semibold text-foreground">
-                                                            Pré-visualização do flashcard
-                                                        </div>
-
-                                                        <div className="mt-1 text-xs text-muted-foreground">
-                                                            Revise Frente e Verso. Se gostar, confirme a prévia. Qualquer edição ou nova geração exige uma nova confirmação.
-                                                        </div>
+                                                <div>
+                                                    <div className="text-sm font-semibold text-foreground">
+                                                        Flashcard
                                                     </div>
+                                                    <div className="mt-1 text-xs text-muted-foreground">
+                                                        Escolha como deseja criar Frente e Verso. Em ambos os casos você poderá editar e deverá confirmar antes de salvar.
+                                                    </div>
+                                                </div>
 
+                                                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                     <button
                                                         type="button"
                                                         onClick={() =>
                                                             gerarFlashcardComIA(
                                                                 q.localId,
-                                                                true
+                                                                q.flashcardVersao > 0
                                                             )
                                                         }
-                                                        disabled={
-                                                            q.flashcardGerando
-                                                        }
-                                                        className="shrink-0 rounded-xl border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                                                        disabled={q.flashcardGerando}
+                                                        className={`rounded-xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${q.flashcardModo === "IA"
+                                                            ? "border-primary bg-primary/10"
+                                                            : "border-border bg-background hover:bg-muted"
+                                                            }`}
                                                     >
-                                                        {q.flashcardGerando
-                                                            ? "Gerando..."
-                                                            : q.flashcardVersao > 0
-                                                                ? "Gerar nova versão"
-                                                                : "Gerar flashcard"}
+                                                        <span className="block text-sm font-semibold">
+                                                            {q.flashcardGerando
+                                                                ? "Gerando com IA..."
+                                                                : q.flashcardVersao > 0
+                                                                    ? "Gerar nova versão com IA"
+                                                                    : "Gerar com IA"}
+                                                        </span>
+                                                        <span className="mt-1 block text-xs text-muted-foreground">
+                                                            Usa enunciado, alternativas, gabarito, comentário e seu resultado para sugerir um cartão.
+                                                        </span>
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            prepararFlashcardManual(
+                                                                q.localId
+                                                            )
+                                                        }
+                                                        disabled={q.flashcardGerando}
+                                                        className={`rounded-xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${q.flashcardModo === "MANUAL"
+                                                            ? "border-primary bg-primary/10"
+                                                            : "border-border bg-background hover:bg-muted"
+                                                            }`}
+                                                    >
+                                                        <span className="block text-sm font-semibold">
+                                                            Preencher manualmente
+                                                        </span>
+                                                        <span className="mt-1 block text-xs text-muted-foreground">
+                                                            Não faz chamada à IA. Digite a Frente e o Verso diretamente.
+                                                        </span>
                                                     </button>
                                                 </div>
 
                                                 {q.flashcardErro && (
                                                     <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                                                        {q.flashcardErro}
+                                                        <div className="font-medium">
+                                                            Não foi possível gerar o flashcard com IA.
+                                                        </div>
+                                                        <div className="mt-1 text-xs">
+                                                            {q.flashcardErro}
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                prepararFlashcardManual(
+                                                                    q.localId
+                                                                )
+                                                            }
+                                                            className="mt-3 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                                                        >
+                                                            Preencher manualmente agora
+                                                        </button>
                                                     </div>
                                                 )}
 
@@ -3532,7 +3764,6 @@ QUESTÃO 4 ...
                                                             <div className="mt-6 h-4 w-full rounded bg-muted" />
                                                             <div className="mt-2 h-4 w-4/5 rounded bg-muted" />
                                                         </div>
-
                                                         <div className="min-h-[180px] animate-pulse rounded-2xl border border-border bg-card p-5">
                                                             <div className="h-3 w-16 rounded bg-muted" />
                                                             <div className="mt-6 h-4 w-full rounded bg-muted" />
@@ -3542,44 +3773,50 @@ QUESTÃO 4 ...
                                                 )}
 
                                                 {!q.flashcardGerando &&
-                                                    q.flashcardFrente.trim() &&
-                                                    q.flashcardVerso.trim() && (
+                                                    q.flashcardModo === null &&
+                                                    !q.flashcardFrente.trim() &&
+                                                    !q.flashcardVerso.trim() &&
+                                                    !q.flashcardErro && (
+                                                        <div className="mt-4 rounded-xl border border-dashed border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+                                                            Escolha Gerar com IA ou Preencher manualmente.
+                                                        </div>
+                                                    )}
+
+                                                {!q.flashcardGerando &&
+                                                    (q.flashcardModo === "MANUAL" ||
+                                                        q.flashcardFrente.trim() ||
+                                                        q.flashcardVerso.trim()) && (
                                                         <>
-                                                            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                <div className="min-h-[190px] rounded-2xl border border-border bg-card p-5 shadow-sm">
-                                                                    <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-                                                                        Frente
+                                                            {q.flashcardFrente.trim() &&
+                                                                q.flashcardVerso.trim() && (
+                                                                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                        <div className="min-h-[190px] rounded-2xl border border-border bg-card p-5 shadow-sm">
+                                                                            <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                                                                                Frente
+                                                                            </div>
+                                                                            <div className="mt-6 whitespace-pre-wrap text-base font-semibold leading-relaxed text-foreground">
+                                                                                {q.flashcardFrente}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="min-h-[190px] rounded-2xl border border-border bg-card p-5 shadow-sm">
+                                                                            <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                                                                                Verso
+                                                                            </div>
+                                                                            <div className="mt-6 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                                                                                {q.flashcardVerso}
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
-
-                                                                    <div className="mt-6 whitespace-pre-wrap text-base font-semibold leading-relaxed text-foreground">
-                                                                        {q.flashcardFrente}
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className="min-h-[190px] rounded-2xl border border-border bg-card p-5 shadow-sm">
-                                                                    <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-                                                                        Verso
-                                                                    </div>
-
-                                                                    <div className="mt-6 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                                                                        {q.flashcardVerso}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
+                                                                )}
 
                                                             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                                                                 <label className="space-y-1">
                                                                     <span className="text-xs text-muted-foreground">
-                                                                        Editar frente
+                                                                        Frente
                                                                     </span>
-
                                                                     <textarea
-                                                                        value={
-                                                                            q.flashcardFrente
-                                                                        }
-                                                                        onChange={(
-                                                                            e
-                                                                        ) =>
+                                                                        value={q.flashcardFrente}
+                                                                        onChange={(e) =>
                                                                             atualizarQuestao(
                                                                                 q.localId,
                                                                                 {
@@ -3588,22 +3825,18 @@ QUESTÃO 4 ...
                                                                                 }
                                                                             )
                                                                         }
-                                                                        className="w-full min-h-[100px] rounded-xl border border-border bg-background p-3 text-sm"
+                                                                        placeholder="Digite a pergunta curta que deseja recuperar da memória."
+                                                                        className="w-full min-h-[110px] rounded-xl border border-border bg-background p-3 text-sm"
                                                                     />
                                                                 </label>
 
                                                                 <label className="space-y-1">
                                                                     <span className="text-xs text-muted-foreground">
-                                                                        Editar verso
+                                                                        Verso
                                                                     </span>
-
                                                                     <textarea
-                                                                        value={
-                                                                            q.flashcardVerso
-                                                                        }
-                                                                        onChange={(
-                                                                            e
-                                                                        ) =>
+                                                                        value={q.flashcardVerso}
+                                                                        onChange={(e) =>
                                                                             atualizarQuestao(
                                                                                 q.localId,
                                                                                 {
@@ -3612,7 +3845,8 @@ QUESTÃO 4 ...
                                                                                 }
                                                                             )
                                                                         }
-                                                                        className="w-full min-h-[100px] rounded-xl border border-border bg-background p-3 text-sm"
+                                                                        placeholder="Digite a resposta objetiva e suficiente para revisão."
+                                                                        className="w-full min-h-[110px] rounded-xl border border-border bg-background p-3 text-sm"
                                                                     />
                                                                 </label>
                                                             </div>
@@ -3622,12 +3856,12 @@ QUESTÃO 4 ...
                                                                     <div className="text-sm font-medium">
                                                                         {q.flashcardConfirmado
                                                                             ? "Flashcard confirmado"
-                                                                            : "Confirme esta prévia antes de salvar"}
+                                                                            : "Confirme o flashcard antes de salvar"}
                                                                     </div>
                                                                     <div className="mt-1 text-xs text-muted-foreground">
                                                                         {q.flashcardConfirmado
-                                                                            ? "Esta versão será salva junto com a questão."
-                                                                            : "O botão Salvar todas só será liberado depois da confirmação."}
+                                                                            ? `Esta versão ${q.flashcardModo === "MANUAL" ? "manual" : "gerada com IA"} será salva junto com a questão.`
+                                                                            : "Qualquer edição invalida a confirmação e exige confirmar novamente."}
                                                                     </div>
                                                                 </div>
 
@@ -3652,22 +3886,15 @@ QUESTÃO 4 ...
                                                                         }`}
                                                                 >
                                                                     {q.flashcardConfirmado
-                                                                        ? "Prévia confirmada"
+                                                                        ? "Flashcard confirmado"
                                                                         : "Confirmar flashcard"}
                                                                 </button>
                                                             </div>
                                                         </>
                                                     )}
-
-                                                {!q.flashcardGerando &&
-                                                    !q.flashcardFrente.trim() &&
-                                                    !q.flashcardErro && (
-                                                        <div className="mt-4 rounded-xl border border-dashed border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
-                                                            Aguardando geração da pré-visualização.
-                                                        </div>
-                                                    )}
                                             </div>
                                         )}
+
                                     </article>
                                 );
                             }
@@ -3702,12 +3929,7 @@ QUESTÃO 4 ...
                             {!podeSalvar &&
                                 !salvando && (
                                     <p className="mt-2 text-xs text-muted-foreground">
-                                        Marque Acertei ou
-                                        Errei em todas as
-                                        questões. Se criar
-                                        flashcard, revise a
-                                        pré-visualização e
-                                        clique em Confirmar flashcard.
+                                        Preencha enunciado, gabarito e pelo menos duas alternativas em cada questão, marque Acertei ou Errei e, se criar flashcard, preencha Frente e Verso e confirme o cartão.
                                     </p>
                                 )}
                         </div>
@@ -3747,7 +3969,7 @@ QUESTÃO 4 ...
                 )}
 
                 <footer className="pb-6 text-center text-xs text-muted-foreground">
-                    Gemini API + Supabase
+                    Supabase • cadastro manual disponível • IA opcional via Gemini
                 </footer>
             </div>
         </main>
