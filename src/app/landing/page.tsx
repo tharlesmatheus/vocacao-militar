@@ -9,20 +9,89 @@ import { supabase } from "@/lib/supabaseClient";
  */
 
 const PROMPT_PREFIX = `
-Receba a seguinte questão de concurso e extraia SOMENTE os campos:
+Receba a questão de concurso abaixo e extraia SOMENTE os campos:
 instituicao, cargo, modalidade, banca, enunciado, alternativas, correta, explicacao.
 
-Regras:
-1. NÃO escolha disciplina nem assunto. Esses campos serão definidos pelo usuário no sistema.
-2. Não invente instituição, cargo ou banca. Quando a informação não aparecer, retorne string vazia.
-3. "alternativas" deve ser um objeto JSON, por exemplo:
+REGRAS GERAIS
+1. NÃO escolha disciplina nem assunto. Esses campos serão definidos pelo usuário.
+2. Não invente instituição, cargo, banca, datas, números, leis, artigos, súmulas, precedentes ou referências.
+3. Quando uma informação não estiver presente ou não puder ser determinada com segurança, use string vazia.
+4. Preserve fielmente o sentido do enunciado e das alternativas.
+5. "alternativas" deve ser um objeto JSON:
    { "A": "...", "B": "...", "C": "...", "D": "...", "E": "..." }
-4. "correta" deve conter apenas a identificação da resposta correta, por exemplo "A", "B", "C", "D", "E", "Certo" ou "Errado".
-5. Se a questão já possuir explicação ou comentário, reescreva de forma clara, didática e formal, corrigindo apenas erros evidentes e sem inventar novas informações.
-6. Se não houver explicação, gere uma explicação didática para o gabarito.
-7. Retorne somente JSON válido. Não use markdown, cercas de código, texto antes ou depois.
+6. "correta" deve conter somente a identificação do gabarito:
+   "A", "B", "C", "D", "E", "Certo" ou "Errado".
+7. Retorne SOMENTE JSON válido.
+8. Não use markdown, cercas de código ou texto fora do JSON.
 
-Formato:
+REGRAS PARA O GABARITO
+9. Se a questão trouxer um gabarito explícito, trate-o como a resposta oficial da questão.
+10. Nunca altere silenciosamente um gabarito explícito com base apenas em conhecimento próprio.
+11. Se houver aparente inconsistência entre o gabarito e o conteúdo da questão/comentário, mantenha o gabarito informado e mencione a inconsistência de forma breve na explicação.
+12. Não invente um gabarito quando ele não puder ser determinado com segurança.
+
+REGRAS PARA A EXPLICAÇÃO
+13. A explicação deve ser tecnicamente correta, objetiva, didática e voltada para estudo de concurso.
+
+14. Use esta ordem de prioridade como fonte:
+    a) gabarito explícito fornecido;
+    b) comentário, resolução ou justificativa fornecida junto da questão;
+    c) enunciado e alternativas;
+    d) conhecimento consolidado necessário apenas para tornar a explicação compreensível.
+
+15. Se houver comentário ou resolução fornecida:
+    - preserve o conteúdo técnico relevante;
+    - reescreva em linguagem clara, organizada e didática;
+    - não mude a conclusão;
+    - não acrescente fundamentos específicos que não possam ser sustentados com segurança;
+    - corrija somente erros materiais ou de redação evidentes que não alterem o sentido.
+
+16. Se NÃO houver comentário:
+    - explique por que o gabarito está correto;
+    - destaque a regra, conceito ou raciocínio central cobrado;
+    - explique alternativas incorretas somente quando isso for útil para compreender a questão;
+    - não invente justificativas específicas.
+
+17. A explicação deve preferencialmente seguir esta estrutura textual:
+    - resposta correta;
+    - fundamento ou regra central;
+    - aplicação dessa regra ao enunciado;
+    - pegadinha ou ponto de atenção, se realmente existir.
+
+18. Evite explicações genéricas como:
+    "A alternativa está correta porque está de acordo com a legislação."
+    Diga QUAL é a regra e COMO ela se aplica, somente quando houver base segura para isso.
+
+REGRAS DE EXATIDÃO E ATUALIZAÇÃO
+19. Não declare que uma informação está "atualizada", "vigente" ou representa o "entendimento atual" se isso não puder ser confirmado a partir do material fornecido ou de uma fonte externa confiável.
+
+20. Em temas sujeitos a alteração, especialmente:
+    - legislação;
+    - jurisprudência;
+    - súmulas;
+    - entendimento de tribunais;
+    - normas administrativas;
+    - dados estatísticos;
+    - prazos ou regras que possam ter mudado;
+
+    não invente atualização.
+
+21. Se o material fornecido indicar expressamente uma lei, artigo, decisão, súmula, data ou entendimento, utilize essa informação respeitando exatamente o que foi fornecido.
+
+22. Se houver indício de que a questão ou comentário pode estar desatualizado e não for possível confirmar a situação atual, acrescente ao final da explicação, de forma curta:
+    "Atenção: este ponto pode depender da legislação ou jurisprudência vigente à época da questão."
+
+23. Nunca crie número de artigo, inciso, súmula, tema, precedente ou processo por aproximação.
+
+24. Não confunda:
+    - regra geral com exceção;
+    - texto legal com interpretação jurisprudencial;
+    - entendimento majoritário com regra absoluta;
+    - situação vigente hoje com situação vigente na data da prova.
+
+25. A explicação deve ser suficiente para que o estudante entenda o motivo do gabarito sem precisar reler uma resposta excessivamente longa.
+
+Formato obrigatório:
 {
   "instituicao": "",
   "cargo": "",
@@ -1425,26 +1494,147 @@ export default function NovaQuestaoGeminiLote() {
         });
 
         const prompt = `
-Crie UM flashcard de estudo a partir da questão de concurso abaixo.
+Crie UM flashcard de estudo para concurso a partir da questão abaixo.
 
-Objetivo:
-- testar uma única informação importante;
-- priorizar conceito, regra, requisito, exceção, prazo, distinção ou fórmula;
-- evitar copiar a questão inteira;
-- evitar pergunta longa;
-- manter a frente curta e clara;
-- manter o verso objetivo, suficiente para revisão;
-- não inventar informação que não esteja sustentada pela questão, gabarito ou explicação.
+OBJETIVO
+O flashcard deve ajudar o estudante a recuperar ativamente da memória
+UMA informação realmente importante cobrada pela questão.
+
+PRINCÍPIOS
+1. Crie apenas UM flashcard.
+2. Teste apenas UMA ideia principal.
+3. A frente deve permitir uma resposta objetiva e não ambígua.
+4. O verso deve ser curto, preciso e suficiente para revisar.
+5. Não copie a questão inteira.
+6. Não transforme todas as alternativas em uma pergunta.
+7. Não crie perguntas excessivamente longas.
+8. Não use informações irrelevantes apenas para preencher o cartão.
+
+FONTES E CONFIABILIDADE
+9. Use esta ordem de prioridade:
+   a) gabarito explícito da questão;
+   b) comentário/explicação fornecido;
+   c) enunciado e alternativas;
+   d) conhecimento consolidado apenas quando necessário para compreender
+      aquilo que já está sustentado pelo material.
+
+10. O conteúdo do flashcard deve ser coerente com o gabarito e com a
+    explicação fornecida.
+
+11. NÃO altere silenciosamente o gabarito da questão.
+
+12. NÃO invente:
+    - artigos;
+    - incisos;
+    - parágrafos;
+    - súmulas;
+    - temas;
+    - precedentes;
+    - números;
+    - prazos;
+    - exceções;
+    - conceitos;
+    - requisitos;
+    quando essas informações não puderem ser sustentadas com segurança.
+
+13. Nunca cite um dispositivo legal por aproximação.
+    Se tiver segurança sobre a regra, mas não sobre o número do dispositivo,
+    apresente a regra sem inventar a referência.
+
+ATUALIZAÇÃO
+14. Não diga que uma regra é "atual", "vigente" ou representa o
+    "entendimento atual" se isso não puder ser confirmado pelo material fornecido.
+
+15. Se a questão tratar de legislação, jurisprudência ou regra sujeita a mudança
+    e houver indicação de possível desatualização na explicação, NÃO transforme
+    uma regra histórica em verdade atual.
+
+16. Quando necessário, preserve o contexto temporal no próprio cartão.
+    Exemplo:
+    "Segundo o entendimento considerado nesta questão..."
+    ou
+    "De acordo com a regra cobrada pela banca nesta questão..."
+
+ESCOLHA DO CONTEÚDO
+17. Dê preferência ao ponto com maior valor de memorização, como:
+    - regra;
+    - conceito;
+    - requisito;
+    - exceção;
+    - prazo;
+    - competência;
+    - vedação;
+    - distinção entre institutos;
+    - fórmula;
+    - hipótese de cabimento;
+    - consequência jurídica;
+    - erro conceitual explorado pela banca.
+
+18. Quando a questão explorar uma confusão clássica entre dois conceitos,
+    prefira criar um cartão que teste essa distinção.
+
+19. Se o estudante ERROU a questão, priorize o conhecimento que impediria
+    a repetição daquele erro.
+
+20. Se o estudante ACERTOU a questão, priorize a regra central ou uma
+    pegadinha realmente relevante, evitando criar cartão trivial.
+
+QUALIDADE DA FRENTE
+21. A frente deve:
+    - ser curta;
+    - ser específica;
+    - exigir recuperação ativa;
+    - ter resposta identificável;
+    - evitar pistas óbvias da resposta.
+
+22. Evite perguntas como:
+    "O que você sabe sobre..."
+    "Explique tudo sobre..."
+    "Fale sobre..."
+
+23. Prefira formatos como:
+    "Qual é...?"
+    "Quando...?"
+    "Em que hipótese...?"
+    "Qual a diferença entre X e Y?"
+    "X pode ocorrer quando...?"
+    "Qual é a consequência de...?"
+
+QUALIDADE DO VERSO
+24. Comece pela resposta direta.
+
+25. Depois, se necessário, acrescente uma explicação curta que ajude
+    a evitar confusão futura.
+
+26. Não transforme o verso em um resumo ou aula extensa.
+
+27. Quando houver uma exceção essencial para não memorizar a regra de forma
+    errada, inclua-a de maneira curta.
+
+28. Se houver uma pegadinha importante da banca sustentada pela questão,
+    ela pode aparecer no final do verso em uma frase curta.
 
 ${forcarNovaVersao || questao.flashcardVersao > 0
-                ? `Gere uma NOVA versão, diferente da sugestão anterior.
+                ? `
+Gere uma NOVA versão, pedagogicamente diferente da anterior.
+
+Não faça apenas uma paráfrase.
+
 Sugestão anterior:
 Frente: ${questao.flashcardFrente || "(vazia)"}
-Verso: ${questao.flashcardVerso || "(vazio)"}`
-                : ""}
+Verso: ${questao.flashcardVerso || "(vazio)"}
+`
+                : ""
+            }
 
-Disciplina: ${materiaSelecionada?.nome ?? ""}
-Assunto: ${assuntoSelecionado?.nome ?? ""}
+Disciplina:
+${materiaSelecionada?.nome ?? ""}
+
+Assunto:
+${assuntoSelecionado?.nome ?? ""}
+
+Resultado do estudante:
+${questao.resultado || "não informado"}
 
 Enunciado:
 ${questao.enunciado}
@@ -1457,10 +1647,10 @@ ${Object.entries(questao.alternativas)
 Gabarito:
 ${questao.correta}
 
-Explicação:
+Explicação / comentário:
 ${questao.explicacao}
 
-Retorne somente JSON válido:
+Retorne SOMENTE JSON válido:
 {
   "frente": "...",
   "verso": "..."
@@ -3221,8 +3411,8 @@ QUESTÃO 4 ...
                                             "ACERTO" && (
                                                 <label
                                                     className={`mt-4 flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${q.salvarNoCadernoAcertos
-                                                            ? "border-green-300 bg-green-50/70"
-                                                            : "border-border bg-background hover:bg-muted/40"
+                                                        ? "border-green-300 bg-green-50/70"
+                                                        : "border-border bg-background hover:bg-muted/40"
                                                         }`}
                                                 >
                                                     <input
