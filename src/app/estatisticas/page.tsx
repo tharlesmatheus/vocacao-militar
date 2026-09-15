@@ -726,8 +726,8 @@ export default function EstatisticasPage() {
                                 type="button"
                                 onClick={() => selecionarPreset(n)}
                                 className={`px-3 py-1.5 rounded-lg border transition ${periodMode === n
-                                        ? "bg-primary text-primary-foreground border-primary"
-                                        : "bg-card border-border hover:bg-muted"
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-card border-border hover:bg-muted"
                                     }`}
                             >
                                 {n} dias
@@ -738,8 +738,8 @@ export default function EstatisticasPage() {
                             type="button"
                             onClick={() => selecionarPreset("all")}
                             className={`px-3 py-1.5 rounded-lg border transition ${periodMode === "all"
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "bg-card border-border hover:bg-muted"
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-card border-border hover:bg-muted"
                                 }`}
                         >
                             Todo o período
@@ -785,8 +785,8 @@ export default function EstatisticasPage() {
                             type="button"
                             onClick={aplicarPeriodoPersonalizado}
                             className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${periodMode === "custom"
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "bg-muted border-border hover:bg-muted/80"
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-muted border-border hover:bg-muted/80"
                                 }`}
                         >
                             Aplicar período

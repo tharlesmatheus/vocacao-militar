@@ -17,6 +17,7 @@ import {
     XCircle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { recordReviewResultForGamification } from "@/lib/gamification";
 
 type ReviewMethod = "CADERNO" | "FLASHCARD" | "RESUMO";
 type ReviewResult = "ACERTO" | "ERRO" | "CONCLUIDO";
@@ -915,6 +916,33 @@ export default function RevisaoPage() {
 
             if (error) throw error;
 
+            // A revisão base já gera XP no banco através do trigger de review_progress.
+            // Esta chamada apenas registra bônus ligados ao resultado (ex.: erro recuperado).
+            // Uma falha de gamificação nunca deve desfazer uma revisão já concluída.
+            try {
+                const reward = await recordReviewResultForGamification({
+                    method: currentItem.method,
+                    itemId: currentItem.itemId,
+                    result,
+                });
+
+                if (reward.bonusXp > 0) {
+                    if (currentItem.method === "CADERNO" && result === "ACERTO") {
+                        setMsg(`Erro recuperado! +${reward.bonusXp} XP de bônus.`);
+                    } else if (
+                        currentItem.method === "FLASHCARD" &&
+                        result === "ACERTO"
+                    ) {
+                        setMsg(`Flashcard lembrado! +${reward.bonusXp} XP de bônus.`);
+                    }
+                }
+            } catch (gamificationError) {
+                console.error(
+                    "Revisão concluída, mas o bônus de gamificação não pôde ser confirmado:",
+                    gamificationError
+                );
+            }
+
             const returned = Array.isArray(data)
                 ? data[0]
                 : data;
@@ -1730,8 +1758,8 @@ function MethodCard({
 
                 <div
                     className={`rounded-full px-3 py-1 text-xs font-semibold ${due
-                            ? "bg-amber-100 text-amber-700"
-                            : "bg-green-100 text-green-700"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-green-100 text-green-700"
                         }`}
                 >
                     {due} para hoje
@@ -2050,12 +2078,12 @@ function CadernoActivity({
                                 setSelectedAnswer(letra)
                             }
                             className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition ${isCorrect
-                                    ? "border-green-400 bg-green-50"
-                                    : isWrongSelected
-                                        ? "border-red-400 bg-red-50"
-                                        : isSelected
-                                            ? "border-primary bg-primary/5"
-                                            : "border-border hover:bg-muted"
+                                ? "border-green-400 bg-green-50"
+                                : isWrongSelected
+                                    ? "border-red-400 bg-red-50"
+                                    : isSelected
+                                        ? "border-primary bg-primary/5"
+                                        : "border-border hover:bg-muted"
                                 }`}
                         >
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-bold">
@@ -2073,14 +2101,14 @@ function CadernoActivity({
             {respondeu && (
                 <div
                     className={`mt-6 rounded-2xl border p-5 ${acertou
-                            ? "border-green-200 bg-green-50"
-                            : "border-red-200 bg-red-50"
+                        ? "border-green-200 bg-green-50"
+                        : "border-red-200 bg-red-50"
                         }`}
                 >
                     <div
                         className={`font-semibold ${acertou
-                                ? "text-green-700"
-                                : "text-red-700"
+                            ? "text-green-700"
+                            : "text-red-700"
                             }`}
                     >
                         {acertou

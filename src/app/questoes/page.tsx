@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabaseClient";
@@ -14,8 +14,6 @@ type Filters = Parameters<
 export default function QuestoesPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
-
-    // ✅ state com tipo inferido do próprio QuestionFilters
     const [filters, setFilters] = useState<Filters>(() => ({} as Filters));
 
     useEffect(() => {
@@ -59,7 +57,6 @@ export default function QuestoesPage() {
                 </div>
 
                 <section className="card">
-                    {/* ✅ wrapper resolve o conflito do Dispatch */}
                     <QuestionFilters onFiltrar={(f) => setFilters(f)} />
                 </section>
 

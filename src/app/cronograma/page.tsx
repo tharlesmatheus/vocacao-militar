@@ -494,8 +494,8 @@ export default function CronogramaSemanalPage() {
             {msg && (
                 <div
                     className={`text-center mt-2 ${msg.toLowerCase().includes("erro")
-                            ? "text-red-600"
-                            : "text-green-600"
+                        ? "text-red-600"
+                        : "text-green-600"
                         }`}
                 >
                     {msg}

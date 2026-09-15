@@ -499,8 +499,8 @@ export default function TempoDeEstudoPage() {
                             key={k}
                             onClick={() => setRange(k)}
                             className={`px-3 py-1.5 rounded-lg border ${range === k
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "bg-card border-border"
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-card border-border"
                                 }`}
                             disabled={loading}
                         >
