@@ -2203,6 +2203,9 @@ Retorne somente JSON válido:
                         );
                     }
 
+                    // Toda questão acertada já foi salva em `questoes` e em
+                    // `question_attempts`. O Caderno de Acertos é opcional: só
+                    // recebe a questão quando o usuário marcar explicitamente.
                     if (
                         q.resultado === "ACERTO" &&
                         q.salvarNoCadernoAcertos
@@ -3216,7 +3219,12 @@ QUESTÃO 4 ...
 
                                         {q.resultado ===
                                             "ACERTO" && (
-                                                <label className="mt-4 flex items-start gap-3 rounded-xl border border-border p-4">
+                                                <label
+                                                    className={`mt-4 flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${q.salvarNoCadernoAcertos
+                                                            ? "border-green-300 bg-green-50/70"
+                                                            : "border-border bg-background hover:bg-muted/40"
+                                                        }`}
+                                                >
                                                     <input
                                                         type="checkbox"
                                                         checked={
@@ -3235,26 +3243,23 @@ QUESTÃO 4 ...
                                                                 }
                                                             )
                                                         }
-                                                        className="mt-0.5"
+                                                        className="mt-1 h-4 w-4 accent-green-600"
                                                     />
 
-                                                    <span>
-                                                        <span className="block text-sm font-medium">
-                                                            Salvar
-                                                            também no
-                                                            Caderno
-                                                            de Acertos
+                                                    <span className="min-w-0">
+                                                        <span className="block text-sm font-semibold text-foreground">
+                                                            Guardar esta questão no Caderno de Acertos
                                                         </span>
 
-                                                        <span className="block text-xs text-muted-foreground mt-1">
-                                                            Use para
-                                                            questões
-                                                            boas,
-                                                            clássicas,
-                                                            difíceis
-                                                            ou
-                                                            importantes.
+                                                        <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                                                            Opcional. O acerto já será salvo no banco de questões e contabilizado nas estatísticas mesmo se você não marcar esta opção. Marque somente as questões boas, clássicas, difíceis ou importantes que deseja revisar novamente no futuro.
                                                         </span>
+
+                                                        {q.salvarNoCadernoAcertos && (
+                                                            <span className="mt-2 block text-xs font-semibold text-green-700">
+                                                                ✓ Esta questão também será adicionada ao Caderno de Acertos.
+                                                            </span>
+                                                        )}
                                                     </span>
                                                 </label>
                                             )}
