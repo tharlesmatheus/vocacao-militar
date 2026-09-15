@@ -10,6 +10,8 @@ import {
     Layers3,
     RotateCcw,
     Target,
+    XCircle,
+    Percent,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -286,6 +288,8 @@ export default function EstatisticasPage() {
     const [tempoTotalSeg, setTempoTotalSeg] = useState(0);
     const [sessoes, setSessoes] = useState(0);
     const [questoesTotal, setQuestoesTotal] = useState(0);
+    const [questoesCertas, setQuestoesCertas] = useState(0);
+    const [questoesErradas, setQuestoesErradas] = useState(0);
     const [acertoTotal, setAcertoTotal] = useState(0);
     const [reviewTotals, setReviewTotals] = useState<ReviewTotals>({
         total: 0,
@@ -672,7 +676,14 @@ export default function EstatisticasPage() {
 
                 setTempoTotalSeg(totalSec);
                 setSessoes(sessionRows.length);
+                const erradasTotal = Math.max(
+                    0,
+                    attemptsFiltered.length - corretasTotal
+                );
+
                 setQuestoesTotal(attemptsFiltered.length);
+                setQuestoesCertas(corretasTotal);
+                setQuestoesErradas(erradasTotal);
                 setAcertoTotal(safePct(corretasTotal, attemptsFiltered.length));
                 setReviewTotals(nextReviewTotals);
 
@@ -818,6 +829,8 @@ export default function EstatisticasPage() {
                     setTempoTotalSeg(0);
                     setSessoes(0);
                     setQuestoesTotal(0);
+                    setQuestoesCertas(0);
+                    setQuestoesErradas(0);
                     setAcertoTotal(0);
                     setReviewTotals({
                         total: 0,
@@ -869,13 +882,41 @@ export default function EstatisticasPage() {
                 label: "Questões",
                 value: questoesTotal,
                 icon: <Target size={20} />,
-                tone: "from-emerald-500 to-teal-500",
+                tone: "from-blue-500 to-indigo-500",
+                helper:
+                    questoesTotal > 0
+                        ? `${questoesCertas} certas • ${questoesErradas} erradas`
+                        : "Nenhuma questão no período",
             },
             {
-                label: "Acerto",
-                value: `${acertoTotal}%`,
+                label: "Acertos",
+                value: questoesCertas,
                 icon: <CheckCircle2 size={20} />,
+                tone: "from-emerald-500 to-teal-500",
+                helper:
+                    questoesTotal > 0
+                        ? `${acertoTotal}% das questões`
+                        : "0% das questões",
+            },
+            {
+                label: "Erros",
+                value: questoesErradas,
+                icon: <XCircle size={20} />,
+                tone: "from-rose-500 to-red-500",
+                helper:
+                    questoesTotal > 0
+                        ? `${100 - acertoTotal}% das questões`
+                        : "0% das questões",
+            },
+            {
+                label: "Aproveitamento",
+                value: `${acertoTotal}%`,
+                icon: <Percent size={20} />,
                 tone: "from-amber-500 to-orange-500",
+                helper:
+                    questoesTotal > 0
+                        ? `${questoesCertas}/${questoesTotal} acertos`
+                        : "Sem questões no período",
             },
             {
                 label: "Revisões feitas",
@@ -907,6 +948,8 @@ export default function EstatisticasPage() {
             tempoTotalSeg,
             sessoes,
             questoesTotal,
+            questoesCertas,
+            questoesErradas,
             acertoTotal,
             reviewTotals,
         ]
@@ -991,8 +1034,8 @@ export default function EstatisticasPage() {
                                 type="button"
                                 onClick={() => selecionarPreset(n)}
                                 className={`rounded-lg border px-3 py-1.5 text-sm transition ${periodMode === n
-                                        ? "border-primary bg-primary text-primary-foreground"
-                                        : "border-border bg-card hover:bg-muted"
+                                    ? "border-primary bg-primary text-primary-foreground"
+                                    : "border-border bg-card hover:bg-muted"
                                     }`}
                             >
                                 {n} dias
@@ -1003,8 +1046,8 @@ export default function EstatisticasPage() {
                             type="button"
                             onClick={() => selecionarPreset("all")}
                             className={`rounded-lg border px-3 py-1.5 text-sm transition ${periodMode === "all"
-                                    ? "border-primary bg-primary text-primary-foreground"
-                                    : "border-border bg-card hover:bg-muted"
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-card hover:bg-muted"
                                 }`}
                         >
                             Todo o período
@@ -1049,8 +1092,8 @@ export default function EstatisticasPage() {
                             type="button"
                             onClick={aplicarPeriodoPersonalizado}
                             className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${periodMode === "custom"
-                                    ? "border-primary bg-primary text-primary-foreground"
-                                    : "border-border bg-muted hover:bg-muted/80"
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-muted hover:bg-muted/80"
                                 }`}
                         >
                             Aplicar período
@@ -1116,7 +1159,7 @@ export default function EstatisticasPage() {
                 )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
                 {cards.map((c) => (
                     <div
                         key={c.label}

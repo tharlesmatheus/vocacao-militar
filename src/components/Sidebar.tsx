@@ -4,6 +4,8 @@
  * NOTAS DO REVISOR:
  * - Adicionado item de menu: "Novas Questões" apontando para /landing
  * - Adicionado item de menu: "Flash Cards" apontando para /flashcards
+ * - Adicionado item de menu: "Conquistas" apontando para /conquistas
+ *   logo após "Estatísticas"
  * - Mantido o item "Tempo de estudo" apontando para /tempo-de-estudo
  * - Mantida a estrutura do componente e o comportamento existente
  *   (desktop/mobile, colapso, logout).
@@ -30,6 +32,7 @@ import {
     Clock,
     PlusCircle,
     Layers3,
+    Trophy,
 } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
@@ -40,6 +43,7 @@ const MENU = [
         items: [
             { name: "Dashboard", href: "/", icon: Home },
             { name: "Estatísticas", href: "/estatisticas", icon: BarChart2 },
+            { name: "Conquistas", href: "/conquistas", icon: Trophy },
         ],
     },
     {
@@ -144,7 +148,10 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
                 </button>
 
                 {/* HEADER */}
-                <div className={`pt-7 pb-4 flex items-center gap-3 ${collapsed ? "px-4" : "px-5"}`}>
+                <div
+                    className={`pt-7 pb-4 flex items-center gap-3 ${collapsed ? "px-4" : "px-5"
+                        }`}
+                >
                     <div className="w-10 h-10 shrink-0 rounded-full bg-sidebar-primary flex items-center justify-center font-bold text-sidebar-primary-foreground">
                         TM
                     </div>
@@ -154,6 +161,7 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
                             <p className="text-[10px] uppercase text-muted-foreground">
                                 Gratuito
                             </p>
+
                             <p className="text-[14px] font-semibold text-sidebar-foreground truncate">
                                 Tharles Matheus
                             </p>
@@ -161,10 +169,16 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
                     )}
                 </div>
 
-                <div className={`border-b border-sidebar-border ${collapsed ? "mx-4" : "mx-5"}`} />
+                <div
+                    className={`border-b border-sidebar-border ${collapsed ? "mx-4" : "mx-5"
+                        }`}
+                />
 
                 {/* MENU */}
-                <nav className={`${collapsed ? "px-2" : "px-3"} py-4 space-y-5 flex-1 overflow-y-auto`}>
+                <nav
+                    className={`${collapsed ? "px-2" : "px-3"
+                        } py-4 space-y-5 flex-1 overflow-y-auto`}
+                >
                     {MENU.map((group) => (
                         <div key={group.category}>
                             {!collapsed && (
@@ -185,13 +199,16 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
                                             onClick={() => setOpen(false)}
                                             title={collapsed ? item.name : undefined}
                                             aria-current={active ? "page" : undefined}
-                                            className={`flex items-center rounded-lg transition ${collapsed ? "justify-center py-2" : "gap-3 px-4 py-2"
+                                            className={`flex items-center rounded-lg transition ${collapsed
+                                                    ? "justify-center py-2"
+                                                    : "gap-3 px-4 py-2"
                                                 } ${active
                                                     ? "bg-muted text-sidebar-foreground font-semibold"
                                                     : "text-muted-foreground hover:bg-muted hover:text-sidebar-foreground"
                                                 }`}
                                         >
                                             <Icon size={18} className="shrink-0" />
+
                                             {!collapsed && (
                                                 <span className="text-[14px] truncate">
                                                     {item.name}
@@ -219,7 +236,9 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
                         title={collapsed ? "Ajuda" : undefined}
                     >
                         <HelpCircle size={18} className="shrink-0" />
-                        {!collapsed && <span className="text-[14px]">Ajuda</span>}
+                        {!collapsed && (
+                            <span className="text-[14px]">Ajuda</span>
+                        )}
                     </button>
 
                     <button
@@ -230,7 +249,9 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
                         title={collapsed ? "Sair da Conta" : undefined}
                     >
                         <LogOut size={18} className="shrink-0" />
-                        {!collapsed && <span className="text-[14px]">Sair da Conta</span>}
+                        {!collapsed && (
+                            <span className="text-[14px]">Sair da Conta</span>
+                        )}
                     </button>
                 </div>
             </aside>
