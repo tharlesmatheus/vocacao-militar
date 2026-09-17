@@ -25,17 +25,204 @@ type Assunto = {
     importance_level: number;
 };
 
+
+type CatalogDisciplina = {
+    id: string;
+    nome: string;
+    ativo: boolean;
+};
+
+type CatalogAssunto = {
+    id: string;
+    disciplina_id: string;
+    nome: string;
+    ativo: boolean;
+};
+
+type AssuntoEstrutura = {
+    id: string;
+    materia_id: string;
+    nome: string;
+};
+
+function normalizarNomeCatalogo(valor: string) {
+    return valor
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLocaleLowerCase("pt-BR")
+        .replace(/[^a-z0-9]+/g, "");
+}
+
+function mensagemErro(error: unknown) {
+    if (
+        error &&
+        typeof error === "object" &&
+        "message" in error
+    ) {
+        return String((error as { message?: unknown }).message ?? "Erro inesperado.");
+    }
+
+    if (error instanceof Error) return error.message;
+
+    return "Erro inesperado.";
+}
+
+async function garantirDisciplinaCanonica(
+    uid: string,
+    nome: string
+): Promise<CatalogDisciplina> {
+    const nomeLimpo = nome.trim();
+
+    if (!nomeLimpo) {
+        throw new Error("Informe o nome da disciplina.");
+    }
+
+    const chave = normalizarNomeCatalogo(nomeLimpo);
+
+    const { data: existente, error: erroLeitura } = await supabase
+        .from("questao_disciplinas")
+        .select("id,nome,ativo")
+        .eq("user_id", uid)
+        .eq("nome_normalizado", chave)
+        .maybeSingle();
+
+    if (erroLeitura) throw erroLeitura;
+
+    if (existente) {
+        if (!existente.ativo) {
+            const { data: reativada, error: erroReativar } = await supabase
+                .from("questao_disciplinas")
+                .update({ ativo: true })
+                .eq("id", existente.id)
+                .eq("user_id", uid)
+                .select("id,nome,ativo")
+                .single();
+
+            if (erroReativar) throw erroReativar;
+            return reativada as CatalogDisciplina;
+        }
+
+        return existente as CatalogDisciplina;
+    }
+
+    const { data, error } = await supabase
+        .from("questao_disciplinas")
+        .insert({
+            user_id: uid,
+            nome: nomeLimpo,
+            ativo: true,
+        })
+        .select("id,nome,ativo")
+        .single();
+
+    if (!error && data) {
+        return data as CatalogDisciplina;
+    }
+
+    // Proteção para uma eventual corrida de duas inserções simultâneas.
+    if ((error as { code?: string } | null)?.code === "23505") {
+        const { data: concorrente, error: erroConcorrente } = await supabase
+            .from("questao_disciplinas")
+            .select("id,nome,ativo")
+            .eq("user_id", uid)
+            .eq("nome_normalizado", chave)
+            .single();
+
+        if (erroConcorrente) throw erroConcorrente;
+        return concorrente as CatalogDisciplina;
+    }
+
+    throw error ?? new Error("Não foi possível criar a disciplina.");
+}
+
+async function garantirAssuntoCanonico(
+    uid: string,
+    disciplinaId: string,
+    nome: string
+): Promise<CatalogAssunto> {
+    const nomeLimpo = nome.trim();
+
+    if (!disciplinaId) {
+        throw new Error("Selecione a disciplina do assunto.");
+    }
+
+    if (!nomeLimpo) {
+        throw new Error("Informe o nome do assunto.");
+    }
+
+    const chave = normalizarNomeCatalogo(nomeLimpo);
+
+    const { data: existente, error: erroLeitura } = await supabase
+        .from("questao_assuntos")
+        .select("id,disciplina_id,nome,ativo")
+        .eq("user_id", uid)
+        .eq("disciplina_id", disciplinaId)
+        .eq("nome_normalizado", chave)
+        .maybeSingle();
+
+    if (erroLeitura) throw erroLeitura;
+
+    if (existente) {
+        if (!existente.ativo) {
+            const { data: reativado, error: erroReativar } = await supabase
+                .from("questao_assuntos")
+                .update({ ativo: true })
+                .eq("id", existente.id)
+                .eq("user_id", uid)
+                .select("id,disciplina_id,nome,ativo")
+                .single();
+
+            if (erroReativar) throw erroReativar;
+            return reativado as CatalogAssunto;
+        }
+
+        return existente as CatalogAssunto;
+    }
+
+    const { data, error } = await supabase
+        .from("questao_assuntos")
+        .insert({
+            user_id: uid,
+            disciplina_id: disciplinaId,
+            nome: nomeLimpo,
+            ativo: true,
+        })
+        .select("id,disciplina_id,nome,ativo")
+        .single();
+
+    if (!error && data) {
+        return data as CatalogAssunto;
+    }
+
+    if ((error as { code?: string } | null)?.code === "23505") {
+        const { data: concorrente, error: erroConcorrente } = await supabase
+            .from("questao_assuntos")
+            .select("id,disciplina_id,nome,ativo")
+            .eq("user_id", uid)
+            .eq("disciplina_id", disciplinaId)
+            .eq("nome_normalizado", chave)
+            .single();
+
+        if (erroConcorrente) throw erroConcorrente;
+        return concorrente as CatalogAssunto;
+    }
+
+    throw error ?? new Error("Não foi possível criar o assunto.");
+}
+
 /** Modal baseado em tokens (sem dark:) */
 function TokenModal({
     open,
     title,
     onClose,
     children,
+    wide = false,
 }: {
     open: boolean;
     title?: string;
     onClose: () => void;
     children: React.ReactNode;
+    wide?: boolean;
 }) {
     if (!open) return null;
     return (
@@ -51,7 +238,10 @@ function TokenModal({
                 aria-hidden="true"
             />
             {/* painel */}
-            <div className="relative z-[101] w-full max-w-2xl rounded-2xl bg-card text-foreground border border-border shadow-xl">
+            <div
+                className={`relative z-[101] w-full ${wide ? "max-w-5xl" : "max-w-2xl"
+                    } max-h-[90vh] overflow-hidden rounded-2xl bg-card text-foreground border border-border shadow-xl`}
+            >
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border rounded-t-2xl">
                     <h2 className="text-lg font-semibold">{title}</h2>
                     <button
@@ -62,7 +252,9 @@ function TokenModal({
                         ✕
                     </button>
                 </div>
-                <div className="p-5">{children}</div>
+                <div className="max-h-[calc(90vh-72px)] overflow-y-auto p-5">
+                    {children}
+                </div>
             </div>
         </div>
     );
@@ -614,6 +806,7 @@ export default function EditalPage() {
                 open={openNovo}
                 onClose={() => setOpenNovo(false)}
                 title="Novo Edital"
+                wide
             >
                 <NovoEdital
                     onCreated={async (id) => {
@@ -635,11 +828,11 @@ export default function EditalPage() {
                 open={openEditar}
                 onClose={() => setOpenEditar(false)}
                 title="Editar matérias e assuntos"
+                wide
             >
                 <EditarEstrutura
                     editalId={selEdital}
                     onChanged={async () => {
-                        setOpenEditar(false);
                         if (selEdital) await refreshTudo(selEdital);
                     }}
                 />
@@ -700,52 +893,686 @@ export default function EditalPage() {
     );
 }
 
-/** Form "Novo Edital" – tokens */
+/** Form "Novo Edital" – usa o catálogo canônico */
 function NovoEdital({ onCreated }: { onCreated: (id: string) => void }) {
     const [nome, setNome] = useState("");
     const [loading, setLoading] = useState(false);
+    const [loadingCatalogo, setLoadingCatalogo] = useState(true);
+    const [erro, setErro] = useState("");
+
+    const [disciplinasCatalogo, setDisciplinasCatalogo] = useState<
+        CatalogDisciplina[]
+    >([]);
+    const [assuntosCatalogo, setAssuntosCatalogo] = useState<CatalogAssunto[]>(
+        []
+    );
+
+    const [disciplinasSelecionadas, setDisciplinasSelecionadas] = useState<
+        string[]
+    >([]);
+    const [assuntosSelecionados, setAssuntosSelecionados] = useState<
+        Record<string, string[]>
+    >({});
+
+    const [novaDisciplina, setNovaDisciplina] = useState("");
+    const [disciplinaNovoAssunto, setDisciplinaNovoAssunto] = useState("");
+    const [novoAssunto, setNovoAssunto] = useState("");
+    const [criandoCatalogo, setCriandoCatalogo] = useState(false);
 
     const inputBase =
         "w-full rounded border border-border p-2 bg-input text-foreground placeholder:text-muted-foreground " +
         "focus:outline-none focus:ring-2 focus:ring-primary/20";
 
-    return (
-        <form
-            className="space-y-3"
-            onSubmit={async (e) => {
-                e.preventDefault();
-                setLoading(true);
+    const selectBase =
+        "w-full rounded border border-border p-2 bg-input text-foreground appearance-none " +
+        "focus:outline-none focus:ring-2 focus:ring-primary/20";
+
+    const carregarCatalogo = async (uid: string) => {
+        const [disciplinasReq, assuntosReq] = await Promise.all([
+            supabase
+                .from("questao_disciplinas")
+                .select("id,nome,ativo")
+                .eq("user_id", uid)
+                .eq("ativo", true)
+                .order("nome"),
+            supabase
+                .from("questao_assuntos")
+                .select("id,disciplina_id,nome,ativo")
+                .eq("user_id", uid)
+                .eq("ativo", true)
+                .order("nome"),
+        ]);
+
+        const firstError = disciplinasReq.error || assuntosReq.error;
+        if (firstError) throw firstError;
+
+        const disciplinas =
+            (disciplinasReq.data ?? []) as CatalogDisciplina[];
+        const assuntos = (assuntosReq.data ?? []) as CatalogAssunto[];
+
+        setDisciplinasCatalogo(disciplinas);
+        setAssuntosCatalogo(assuntos);
+
+        setDisciplinaNovoAssunto((atual) => {
+            if (
+                atual &&
+                disciplinas.some((disciplina) => disciplina.id === atual)
+            ) {
+                return atual;
+            }
+
+            return disciplinas[0]?.id ?? "";
+        });
+    };
+
+    useEffect(() => {
+        let cancelled = false;
+
+        (async () => {
+            setLoadingCatalogo(true);
+            setErro("");
+
+            try {
                 const uid = (await supabase.auth.getUser()).data.user?.id;
-                if (!uid) return;
-                const { data, error } = await supabase
+
+                if (!uid) {
+                    throw new Error("Usuário não autenticado.");
+                }
+
+                if (cancelled) return;
+                await carregarCatalogo(uid);
+            } catch (e) {
+                if (!cancelled) setErro(mensagemErro(e));
+            } finally {
+                if (!cancelled) setLoadingCatalogo(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const assuntosDaDisciplina = (disciplinaId: string) =>
+        assuntosCatalogo
+            .filter(
+                (assunto) =>
+                    assunto.ativo &&
+                    assunto.disciplina_id === disciplinaId
+            )
+            .sort((a, b) =>
+                a.nome.localeCompare(b.nome, "pt-BR", {
+                    sensitivity: "base",
+                })
+            );
+
+    const selecionarDisciplina = (disciplinaId: string) => {
+        const marcada = disciplinasSelecionadas.includes(disciplinaId);
+
+        if (marcada) {
+            setDisciplinasSelecionadas((prev) =>
+                prev.filter((id) => id !== disciplinaId)
+            );
+
+            setAssuntosSelecionados((prev) => {
+                const next = { ...prev };
+                delete next[disciplinaId];
+                return next;
+            });
+
+            return;
+        }
+
+        const idsAssuntos = assuntosDaDisciplina(disciplinaId).map(
+            (assunto) => assunto.id
+        );
+
+        setDisciplinasSelecionadas((prev) => [
+            ...prev,
+            disciplinaId,
+        ]);
+        setAssuntosSelecionados((prev) => ({
+            ...prev,
+            [disciplinaId]: idsAssuntos,
+        }));
+    };
+
+    const alternarAssunto = (
+        disciplinaId: string,
+        assuntoId: string
+    ) => {
+        if (!disciplinasSelecionadas.includes(disciplinaId)) {
+            setDisciplinasSelecionadas((prev) => [
+                ...prev,
+                disciplinaId,
+            ]);
+        }
+
+        setAssuntosSelecionados((prev) => {
+            const atuais = prev[disciplinaId] ?? [];
+            const marcado = atuais.includes(assuntoId);
+
+            return {
+                ...prev,
+                [disciplinaId]: marcado
+                    ? atuais.filter((id) => id !== assuntoId)
+                    : [...atuais, assuntoId],
+            };
+        });
+    };
+
+    const selecionarTodosAssuntos = (disciplinaId: string) => {
+        const ids = assuntosDaDisciplina(disciplinaId).map(
+            (assunto) => assunto.id
+        );
+
+        if (!disciplinasSelecionadas.includes(disciplinaId)) {
+            setDisciplinasSelecionadas((prev) => [
+                ...prev,
+                disciplinaId,
+            ]);
+        }
+
+        setAssuntosSelecionados((prev) => ({
+            ...prev,
+            [disciplinaId]: ids,
+        }));
+    };
+
+    const limparAssuntos = (disciplinaId: string) => {
+        setAssuntosSelecionados((prev) => ({
+            ...prev,
+            [disciplinaId]: [],
+        }));
+    };
+
+    const criarDisciplina = async () => {
+        const nomeLimpo = novaDisciplina.trim();
+        if (!nomeLimpo || criandoCatalogo) return;
+
+        setCriandoCatalogo(true);
+        setErro("");
+
+        try {
+            const uid = (await supabase.auth.getUser()).data.user?.id;
+            if (!uid) throw new Error("Usuário não autenticado.");
+
+            const criada = await garantirDisciplinaCanonica(
+                uid,
+                nomeLimpo
+            );
+
+            await carregarCatalogo(uid);
+
+            setDisciplinasSelecionadas((prev) =>
+                prev.includes(criada.id)
+                    ? prev
+                    : [...prev, criada.id]
+            );
+            setAssuntosSelecionados((prev) => ({
+                ...prev,
+                [criada.id]: prev[criada.id] ?? [],
+            }));
+            setDisciplinaNovoAssunto(criada.id);
+            setNovaDisciplina("");
+        } catch (e) {
+            setErro(mensagemErro(e));
+        } finally {
+            setCriandoCatalogo(false);
+        }
+    };
+
+    const criarAssunto = async () => {
+        const nomeLimpo = novoAssunto.trim();
+
+        if (
+            !disciplinaNovoAssunto ||
+            !nomeLimpo ||
+            criandoCatalogo
+        ) {
+            return;
+        }
+
+        setCriandoCatalogo(true);
+        setErro("");
+
+        try {
+            const uid = (await supabase.auth.getUser()).data.user?.id;
+            if (!uid) throw new Error("Usuário não autenticado.");
+
+            const criado = await garantirAssuntoCanonico(
+                uid,
+                disciplinaNovoAssunto,
+                nomeLimpo
+            );
+
+            await carregarCatalogo(uid);
+
+            setDisciplinasSelecionadas((prev) =>
+                prev.includes(disciplinaNovoAssunto)
+                    ? prev
+                    : [...prev, disciplinaNovoAssunto]
+            );
+
+            setAssuntosSelecionados((prev) => {
+                const atuais = prev[disciplinaNovoAssunto] ?? [];
+
+                return {
+                    ...prev,
+                    [disciplinaNovoAssunto]: atuais.includes(criado.id)
+                        ? atuais
+                        : [...atuais, criado.id],
+                };
+            });
+
+            setNovoAssunto("");
+        } catch (e) {
+            setErro(mensagemErro(e));
+        } finally {
+            setCriandoCatalogo(false);
+        }
+    };
+
+    const criarEdital = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (loading) return;
+
+        const nomeLimpo = nome.trim();
+
+        if (!nomeLimpo) {
+            setErro("Informe o nome do edital.");
+            return;
+        }
+
+        setLoading(true);
+        setErro("");
+
+        let editalCriadoId = "";
+
+        try {
+            const uid = (await supabase.auth.getUser()).data.user?.id;
+            if (!uid) throw new Error("Usuário não autenticado.");
+
+            const { data: editalCriado, error: erroEdital } =
+                await supabase
                     .from("editais")
-                    .insert({ nome, user_id: uid })
+                    .insert({
+                        nome: nomeLimpo,
+                        user_id: uid,
+                    })
                     .select("id")
                     .single();
-                setLoading(false);
-                if (!error && data) onCreated(data.id);
-            }}
-        >
-            <input
-                className={inputBase}
-                placeholder="Nome do edital"
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                required
-            />
-            <div className="text-right">
+
+            if (erroEdital || !editalCriado?.id) {
+                throw erroEdital ?? new Error("Falha ao criar o edital.");
+            }
+
+            editalCriadoId = editalCriado.id;
+
+            for (const disciplinaId of disciplinasSelecionadas) {
+                const disciplina = disciplinasCatalogo.find(
+                    (item) => item.id === disciplinaId
+                );
+
+                if (!disciplina) continue;
+
+                const { data: materiaCriada, error: erroMateria } =
+                    await supabase
+                        .from("materias")
+                        .insert({
+                            edital_id: editalCriadoId,
+                            nome: disciplina.nome.trim(),
+                            user_id: uid,
+                        })
+                        .select("id")
+                        .single();
+
+                if (erroMateria || !materiaCriada?.id) {
+                    throw (
+                        erroMateria ??
+                        new Error(
+                            `Falha ao adicionar a disciplina "${disciplina.nome}".`
+                        )
+                    );
+                }
+
+                const idsAssuntos =
+                    assuntosSelecionados[disciplinaId] ?? [];
+
+                const assuntosEscolhidos = assuntosCatalogo.filter(
+                    (assunto) =>
+                        assunto.disciplina_id === disciplinaId &&
+                        idsAssuntos.includes(assunto.id)
+                );
+
+                if (assuntosEscolhidos.length > 0) {
+                    const { error: erroAssuntos } = await supabase
+                        .from("assuntos")
+                        .insert(
+                            assuntosEscolhidos.map((assunto) => ({
+                                materia_id: materiaCriada.id,
+                                edital_id: editalCriadoId,
+                                nome: assunto.nome.trim(),
+                                user_id: uid,
+                                importance_level: 0,
+                            }))
+                        );
+
+                    if (erroAssuntos) throw erroAssuntos;
+                }
+            }
+
+            onCreated(editalCriadoId);
+        } catch (e) {
+            /*
+             * Como o fluxo é feito pelo client, fazemos uma compensação
+             * caso alguma etapa falhe depois da criação do edital.
+             */
+            if (editalCriadoId) {
+                await supabase
+                    .from("assuntos")
+                    .delete()
+                    .eq("edital_id", editalCriadoId);
+
+                await supabase
+                    .from("materias")
+                    .delete()
+                    .eq("edital_id", editalCriadoId);
+
+                await supabase
+                    .from("editais")
+                    .delete()
+                    .eq("id", editalCriadoId);
+            }
+
+            setErro(mensagemErro(e));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <form className="space-y-5" onSubmit={criarEdital}>
+            <div>
+                <label className="mb-1 block text-sm font-medium">
+                    Nome do edital
+                </label>
+                <input
+                    className={inputBase}
+                    placeholder="Ex.: PMBA 2027"
+                    value={nome}
+                    onChange={(e) => setNome(e.target.value)}
+                    required
+                />
+            </div>
+
+            {erro && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {erro}
+                </div>
+            )}
+
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <h3 className="font-semibold">
+                            Estrutura do edital
+                        </h3>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                            As disciplinas e assuntos abaixo vêm do catálogo
+                            canônico. Marque somente o que faz parte deste
+                            edital. Ao selecionar uma disciplina, todos os
+                            assuntos dela são marcados inicialmente.
+                        </p>
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                        {disciplinasSelecionadas.length} disciplina(s)
+                        selecionada(s)
+                    </div>
+                </div>
+
+                {loadingCatalogo ? (
+                    <div className="py-8 text-center text-sm text-muted-foreground">
+                        Carregando catálogo...
+                    </div>
+                ) : disciplinasCatalogo.length === 0 ? (
+                    <div className="mt-4 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                        Ainda não há disciplinas no catálogo. Crie a primeira
+                        disciplina abaixo.
+                    </div>
+                ) : (
+                    <div className="mt-4 space-y-3">
+                        {disciplinasCatalogo.map((disciplina) => {
+                            const selecionada =
+                                disciplinasSelecionadas.includes(
+                                    disciplina.id
+                                );
+                            const assuntosDisciplina =
+                                assuntosDaDisciplina(disciplina.id);
+                            const idsSelecionados =
+                                assuntosSelecionados[disciplina.id] ?? [];
+
+                            return (
+                                <div
+                                    key={disciplina.id}
+                                    className={`rounded-xl border p-3 ${selecionada
+                                            ? "border-primary/40 bg-primary/5"
+                                            : "border-border bg-card"
+                                        }`}
+                                >
+                                    <label className="flex cursor-pointer items-start gap-3">
+                                        <input
+                                            type="checkbox"
+                                            className="mt-1 h-4 w-4 accent-primary"
+                                            checked={selecionada}
+                                            onChange={() =>
+                                                selecionarDisciplina(
+                                                    disciplina.id
+                                                )
+                                            }
+                                        />
+
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block font-medium">
+                                                {disciplina.nome}
+                                            </span>
+                                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                                                {assuntosDisciplina.length} assunto(s)
+                                                no catálogo
+                                            </span>
+                                        </span>
+                                    </label>
+
+                                    {selecionada && (
+                                        <div className="mt-3 border-t border-border pt-3">
+                                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                                <span className="text-xs font-medium text-muted-foreground">
+                                                    Assuntos deste edital
+                                                </span>
+
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs text-primary hover:underline"
+                                                        onClick={() =>
+                                                            selecionarTodosAssuntos(
+                                                                disciplina.id
+                                                            )
+                                                        }
+                                                    >
+                                                        Marcar todos
+                                                    </button>
+
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs text-muted-foreground hover:underline"
+                                                        onClick={() =>
+                                                            limparAssuntos(
+                                                                disciplina.id
+                                                            )
+                                                        }
+                                                    >
+                                                        Desmarcar todos
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {assuntosDisciplina.length === 0 ? (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Nenhum assunto cadastrado
+                                                    nesta disciplina.
+                                                </p>
+                                            ) : (
+                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                    {assuntosDisciplina.map(
+                                                        (assunto) => (
+                                                            <label
+                                                                key={assunto.id}
+                                                                className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                                                            >
+                                                                <input
+                                                                    type="checkbox"
+                                                                    className="mt-0.5 h-4 w-4 accent-primary"
+                                                                    checked={idsSelecionados.includes(
+                                                                        assunto.id
+                                                                    )}
+                                                                    onChange={() =>
+                                                                        alternarAssunto(
+                                                                            disciplina.id,
+                                                                            assunto.id
+                                                                        )
+                                                                    }
+                                                                />
+                                                                <span>
+                                                                    {assunto.nome}
+                                                                </span>
+                                                            </label>
+                                                        )
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className="rounded-xl border border-border bg-card p-4">
+                    <h3 className="font-medium">
+                        Nova disciplina canônica
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Se não existir no catálogo, cadastre aqui. Ela ficará
+                        disponível também para questões e próximos editais.
+                    </p>
+
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                        <input
+                            className={`flex-1 ${inputBase}`}
+                            placeholder="Ex.: Direito Penal"
+                            value={novaDisciplina}
+                            onChange={(e) =>
+                                setNovaDisciplina(e.target.value)
+                            }
+                        />
+
+                        <button
+                            type="button"
+                            onClick={() => void criarDisciplina()}
+                            disabled={
+                                criandoCatalogo ||
+                                !novaDisciplina.trim()
+                            }
+                            className="rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
+                        >
+                            Adicionar
+                        </button>
+                    </div>
+                </div>
+
+                <div className="rounded-xl border border-border bg-card p-4">
+                    <h3 className="font-medium">
+                        Novo assunto canônico
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        O assunto será cadastrado dentro de uma disciplina do
+                        catálogo e já ficará marcado para este novo edital.
+                    </p>
+
+                    <div className="mt-3 space-y-2">
+                        <select
+                            className={selectBase}
+                            value={disciplinaNovoAssunto}
+                            onChange={(e) =>
+                                setDisciplinaNovoAssunto(e.target.value)
+                            }
+                        >
+                            <option value="">
+                                Selecione a disciplina
+                            </option>
+                            {disciplinasCatalogo.map((disciplina) => (
+                                <option
+                                    key={disciplina.id}
+                                    value={disciplina.id}
+                                >
+                                    {disciplina.nome}
+                                </option>
+                            ))}
+                        </select>
+
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <input
+                                className={`flex-1 ${inputBase}`}
+                                placeholder="Ex.: Crimes contra a vida"
+                                value={novoAssunto}
+                                onChange={(e) =>
+                                    setNovoAssunto(e.target.value)
+                                }
+                            />
+
+                            <button
+                                type="button"
+                                onClick={() => void criarAssunto()}
+                                disabled={
+                                    criandoCatalogo ||
+                                    !disciplinaNovoAssunto ||
+                                    !novoAssunto.trim()
+                                }
+                                className="rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
+                            >
+                                Adicionar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                    O catálogo continua único. O edital recebe uma cópia da
+                    estrutura selecionada para preservar o funcionamento de
+                    revisões, flashcards, cronograma e progresso atuais.
+                </p>
+
                 <button
-                    disabled={loading}
-                    className="rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
+                    type="submit"
+                    disabled={loading || loadingCatalogo}
+                    className="shrink-0 rounded bg-green-600 px-4 py-2 text-white disabled:opacity-50"
                 >
-                    {loading ? "Salvando..." : "Salvar"}
+                    {loading ? "Criando edital..." : "Criar edital"}
                 </button>
             </div>
         </form>
     );
 }
 
-/** Modal de edição/adição de matérias e assuntos – tokens */
+/** Modal de edição: seleciona do catálogo e permite criar novos itens canônicos */
 function EditarEstrutura({
     editalId,
     onChanged,
@@ -753,276 +1580,770 @@ function EditarEstrutura({
     editalId: string;
     onChanged: () => void;
 }) {
-    const [materiaNome, setMateriaNome] = useState("");
     const [materias, setMaterias] = useState<Materia[]>([]);
+    const [assuntosEstrutura, setAssuntosEstrutura] = useState<
+        AssuntoEstrutura[]
+    >([]);
+
+    const [disciplinasCatalogo, setDisciplinasCatalogo] = useState<
+        CatalogDisciplina[]
+    >([]);
+    const [assuntosCatalogo, setAssuntosCatalogo] = useState<CatalogAssunto[]>(
+        []
+    );
+
+    const [disciplinaCatalogoId, setDisciplinaCatalogoId] = useState("");
+    const [incluirTodosAssuntos, setIncluirTodosAssuntos] = useState(true);
+    const [novaDisciplina, setNovaDisciplina] = useState("");
+
     const [selMateria, setSelMateria] = useState("");
+    const [assuntosMarcados, setAssuntosMarcados] = useState<string[]>([]);
+    const [novoAssunto, setNovoAssunto] = useState("");
 
-    // NOVO: lote de assuntos
-    type AssuntoLote = { nome: string; importance_level: number };
-    const [assuntosLote, setAssuntosLote] = useState<AssuntoLote[]>([
-        { nome: "", importance_level: 0 },
-    ]);
-    const [savingLote, setSavingLote] = useState(false);
-    const [erroLote, setErroLote] = useState<string | null>(null);
-
-    useEffect(() => {
-        (async () => {
-            if (!editalId) {
-                setMaterias([]);
-                return;
-            }
-            const uid = (await supabase.auth.getUser()).data.user?.id;
-            const { data } = await supabase
-                .from("materias")
-                .select("id,nome")
-                .eq("user_id", uid)
-                .eq("edital_id", editalId)
-                .order("nome");
-            setMaterias(data || []);
-        })();
-    }, [editalId]);
-
-    const getUid = async () => (await supabase.auth.getUser()).data.user?.id;
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [erro, setErro] = useState("");
+    const [msg, setMsg] = useState("");
 
     const inputBase =
-        "rounded border border-border p-2 bg-input text-foreground placeholder:text-muted-foreground " +
+        "w-full rounded border border-border p-2 bg-input text-foreground placeholder:text-muted-foreground " +
         "focus:outline-none focus:ring-2 focus:ring-primary/20";
+
     const selectBase =
-        "rounded border border-border p-2 bg-input text-foreground appearance-none " +
+        "w-full rounded border border-border p-2 bg-input text-foreground appearance-none " +
         "focus:outline-none focus:ring-2 focus:ring-primary/20";
 
-    // helpers de lote
-    const addLinha = () =>
-        setAssuntosLote((prev) => [...prev, { nome: "", importance_level: 0 }]);
+    const getUid = async () =>
+        (await supabase.auth.getUser()).data.user?.id;
 
-    const removeLinha = (idx: number) =>
-        setAssuntosLote((prev) => prev.filter((_, i) => i !== idx));
+    const carregarTudo = async () => {
+        if (!editalId) {
+            setMaterias([]);
+            setAssuntosEstrutura([]);
+            return;
+        }
 
-    const atualizarLinha = (idx: number, patch: Partial<AssuntoLote>) =>
-        setAssuntosLote((prev) =>
-            prev.map((row, i) => (i === idx ? { ...row, ...patch } : row))
-        );
+        setLoading(true);
+        setErro("");
 
-    const limparLote = () => setAssuntosLote([{ nome: "", importance_level: 0 }]);
+        try {
+            const uid = await getUid();
+            if (!uid) throw new Error("Usuário não autenticado.");
 
-    const linhasValidas = () => {
-        const nomes = new Set<string>();
-        return assuntosLote
-            .map((r) => ({ ...r, nome: r.nome.trim() }))
-            .filter((r) => r.nome.length > 0)
-            .filter((r) => {
-                const key = r.nome.toLowerCase();
-                if (nomes.has(key)) return false; // evita duplicados na tela
-                nomes.add(key);
-                return true;
-            });
+            const [
+                materiasReq,
+                assuntosEditalReq,
+                disciplinasReq,
+                assuntosCatalogoReq,
+            ] = await Promise.all([
+                supabase
+                    .from("materias")
+                    .select("id,nome")
+                    .eq("user_id", uid)
+                    .eq("edital_id", editalId)
+                    .order("nome"),
+                supabase
+                    .from("assuntos")
+                    .select("id,materia_id,nome")
+                    .eq("user_id", uid)
+                    .eq("edital_id", editalId)
+                    .order("nome"),
+                supabase
+                    .from("questao_disciplinas")
+                    .select("id,nome,ativo")
+                    .eq("user_id", uid)
+                    .eq("ativo", true)
+                    .order("nome"),
+                supabase
+                    .from("questao_assuntos")
+                    .select("id,disciplina_id,nome,ativo")
+                    .eq("user_id", uid)
+                    .eq("ativo", true)
+                    .order("nome"),
+            ]);
+
+            const firstError =
+                materiasReq.error ||
+                assuntosEditalReq.error ||
+                disciplinasReq.error ||
+                assuntosCatalogoReq.error;
+
+            if (firstError) throw firstError;
+
+            const listaMaterias = (materiasReq.data ?? []) as Materia[];
+
+            setMaterias(listaMaterias);
+            setAssuntosEstrutura(
+                (assuntosEditalReq.data ?? []) as AssuntoEstrutura[]
+            );
+            setDisciplinasCatalogo(
+                (disciplinasReq.data ?? []) as CatalogDisciplina[]
+            );
+            setAssuntosCatalogo(
+                (assuntosCatalogoReq.data ?? []) as CatalogAssunto[]
+            );
+
+            setSelMateria((atual) =>
+                listaMaterias.some((materia) => materia.id === atual)
+                    ? atual
+                    : listaMaterias[0]?.id ?? ""
+            );
+        } catch (e) {
+            setErro(mensagemErro(e));
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const podeSalvar = !!selMateria && linhasValidas().length > 0 && !savingLote;
+    useEffect(() => {
+        void carregarTudo();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editalId]);
+
+    const chavesMateriasAtuais = new Set(
+        materias.map((materia) => normalizarNomeCatalogo(materia.nome))
+    );
+
+    const disciplinasDisponiveis = disciplinasCatalogo.filter(
+        (disciplina) =>
+            !chavesMateriasAtuais.has(
+                normalizarNomeCatalogo(disciplina.nome)
+            )
+    );
+
+    const materiaSelecionada =
+        materias.find((materia) => materia.id === selMateria) ?? null;
+
+    const disciplinaCanonicaDaMateria = materiaSelecionada
+        ? disciplinasCatalogo.find(
+            (disciplina) =>
+                normalizarNomeCatalogo(disciplina.nome) ===
+                normalizarNomeCatalogo(materiaSelecionada.nome)
+        ) ?? null
+        : null;
+
+    const chavesAssuntosAtuais = new Set(
+        assuntosEstrutura
+            .filter((assunto) => assunto.materia_id === selMateria)
+            .map((assunto) => normalizarNomeCatalogo(assunto.nome))
+    );
+
+    const assuntosDisponiveis = disciplinaCanonicaDaMateria
+        ? assuntosCatalogo.filter(
+            (assunto) =>
+                assunto.disciplina_id ===
+                disciplinaCanonicaDaMateria.id &&
+                !chavesAssuntosAtuais.has(
+                    normalizarNomeCatalogo(assunto.nome)
+                )
+        )
+        : [];
+
+    const adicionarDisciplinaAoEdital = async (
+        disciplina: CatalogDisciplina
+    ) => {
+        if (!editalId) return;
+
+        setSaving(true);
+        setErro("");
+        setMsg("");
+
+        try {
+            const uid = await getUid();
+            if (!uid) throw new Error("Usuário não autenticado.");
+
+            const jaExiste = materias.some(
+                (materia) =>
+                    normalizarNomeCatalogo(materia.nome) ===
+                    normalizarNomeCatalogo(disciplina.nome)
+            );
+
+            if (jaExiste) {
+                throw new Error(
+                    "Essa disciplina já existe neste edital."
+                );
+            }
+
+            const { data: materiaCriada, error: erroMateria } =
+                await supabase
+                    .from("materias")
+                    .insert({
+                        edital_id: editalId,
+                        nome: disciplina.nome.trim(),
+                        user_id: uid,
+                    })
+                    .select("id")
+                    .single();
+
+            if (erroMateria || !materiaCriada?.id) {
+                throw (
+                    erroMateria ??
+                    new Error("Não foi possível adicionar a disciplina.")
+                );
+            }
+
+            if (incluirTodosAssuntos) {
+                const assuntosDaDisciplina = assuntosCatalogo.filter(
+                    (assunto) =>
+                        assunto.disciplina_id === disciplina.id
+                );
+
+                if (assuntosDaDisciplina.length > 0) {
+                    const { error: erroAssuntos } = await supabase
+                        .from("assuntos")
+                        .insert(
+                            assuntosDaDisciplina.map((assunto) => ({
+                                materia_id: materiaCriada.id,
+                                edital_id: editalId,
+                                nome: assunto.nome.trim(),
+                                user_id: uid,
+                                importance_level: 0,
+                            }))
+                        );
+
+                    if (erroAssuntos) {
+                        await supabase
+                            .from("materias")
+                            .delete()
+                            .eq("id", materiaCriada.id);
+
+                        throw erroAssuntos;
+                    }
+                }
+            }
+
+            setDisciplinaCatalogoId("");
+            setMsg(
+                incluirTodosAssuntos
+                    ? "Disciplina e assuntos adicionados ao edital."
+                    : "Disciplina adicionada ao edital."
+            );
+
+            await carregarTudo();
+            await onChanged();
+        } catch (e) {
+            setErro(mensagemErro(e));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const criarNovaDisciplina = async () => {
+        if (!novaDisciplina.trim() || saving) return;
+
+        setSaving(true);
+        setErro("");
+        setMsg("");
+
+        try {
+            const uid = await getUid();
+            if (!uid) throw new Error("Usuário não autenticado.");
+
+            const disciplina = await garantirDisciplinaCanonica(
+                uid,
+                novaDisciplina
+            );
+
+            setNovaDisciplina("");
+
+            /*
+             * A disciplina recém-criada entra no edital. Como ainda não
+             * possui assuntos novos obrigatoriamente, a função usa o
+             * catálogo atualizado depois.
+             */
+            const { data: assuntosData, error: assuntosError } =
+                await supabase
+                    .from("questao_assuntos")
+                    .select("id,disciplina_id,nome,ativo")
+                    .eq("user_id", uid)
+                    .eq("ativo", true)
+                    .order("nome");
+
+            if (assuntosError) throw assuntosError;
+
+            setAssuntosCatalogo(
+                (assuntosData ?? []) as CatalogAssunto[]
+            );
+
+            await adicionarDisciplinaAoEdital(disciplina);
+        } catch (e) {
+            setErro(mensagemErro(e));
+            setSaving(false);
+        }
+    };
+
+    const adicionarAssuntosSelecionados = async () => {
+        if (!selMateria || assuntosMarcados.length === 0 || saving) {
+            return;
+        }
+
+        setSaving(true);
+        setErro("");
+        setMsg("");
+
+        try {
+            const uid = await getUid();
+            if (!uid) throw new Error("Usuário não autenticado.");
+
+            const escolhidos = assuntosDisponiveis.filter((assunto) =>
+                assuntosMarcados.includes(assunto.id)
+            );
+
+            if (escolhidos.length === 0) {
+                throw new Error("Selecione ao menos um assunto.");
+            }
+
+            const { error } = await supabase
+                .from("assuntos")
+                .insert(
+                    escolhidos.map((assunto) => ({
+                        materia_id: selMateria,
+                        edital_id: editalId,
+                        nome: assunto.nome.trim(),
+                        user_id: uid,
+                        importance_level: 0,
+                    }))
+                );
+
+            if (error) throw error;
+
+            setAssuntosMarcados([]);
+            setMsg(
+                `${escolhidos.length} assunto(s) adicionado(s) ao edital.`
+            );
+
+            await carregarTudo();
+            await onChanged();
+        } catch (e) {
+            setErro(mensagemErro(e));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const criarNovoAssunto = async () => {
+        if (!selMateria || !novoAssunto.trim() || saving) return;
+
+        setSaving(true);
+        setErro("");
+        setMsg("");
+
+        try {
+            const uid = await getUid();
+            if (!uid) throw new Error("Usuário não autenticado.");
+
+            if (!materiaSelecionada) {
+                throw new Error("Selecione uma disciplina do edital.");
+            }
+
+            let disciplinaCanonica = disciplinaCanonicaDaMateria;
+
+            if (!disciplinaCanonica) {
+                disciplinaCanonica = await garantirDisciplinaCanonica(
+                    uid,
+                    materiaSelecionada.nome
+                );
+            }
+
+            const assuntoCanonico = await garantirAssuntoCanonico(
+                uid,
+                disciplinaCanonica.id,
+                novoAssunto
+            );
+
+            const jaExisteNoEdital = assuntosEstrutura.some(
+                (assunto) =>
+                    assunto.materia_id === selMateria &&
+                    normalizarNomeCatalogo(assunto.nome) ===
+                    normalizarNomeCatalogo(assuntoCanonico.nome)
+            );
+
+            if (jaExisteNoEdital) {
+                throw new Error(
+                    "Esse assunto já existe nessa disciplina do edital."
+                );
+            }
+
+            const { error } = await supabase.from("assuntos").insert({
+                materia_id: selMateria,
+                edital_id: editalId,
+                nome: assuntoCanonico.nome.trim(),
+                user_id: uid,
+                importance_level: 0,
+            });
+
+            if (error) throw error;
+
+            setNovoAssunto("");
+            setMsg(
+                "Assunto criado no catálogo e adicionado ao edital."
+            );
+
+            await carregarTudo();
+            await onChanged();
+        } catch (e) {
+            setErro(mensagemErro(e));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (!editalId) {
+        return (
+            <p className="text-sm text-muted-foreground">
+                Selecione um edital na tela principal.
+            </p>
+        );
+    }
 
     return (
-        <div className="space-y-4">
-            {!editalId && (
-                <p className="text-sm text-muted-foreground">
-                    Selecione um edital na tela principal.
-                </p>
+        <div className="space-y-5">
+            {erro && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {erro}
+                </div>
             )}
 
-            {/* Adicionar Matéria */}
-            <div className="rounded border border-border p-3 bg-card">
-                <div className="mb-2 font-medium">Adicionar Matéria</div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                    <input
-                        className={`flex-1 ${inputBase}`}
-                        placeholder="Nome da matéria"
-                        value={materiaNome}
-                        onChange={(e) => setMateriaNome(e.target.value)}
-                    />
-                    <button
-                        className="rounded bg-primary px-3 py-2 text-primary-foreground"
-                        onClick={async () => {
-                            if (!editalId || !materiaNome.trim()) return;
-                            await supabase.from("materias").insert({
-                                edital_id: editalId,
-                                nome: materiaNome.trim(),
-                                user_id: await getUid(),
-                            });
-                            setMateriaNome("");
-                            // recarrega lista
-                            const uid = await getUid();
-                            const { data } = await supabase
-                                .from("materias")
-                                .select("id,nome")
-                                .eq("user_id", uid)
-                                .eq("edital_id", editalId)
-                                .order("nome");
-                            setMaterias(data || []);
-                        }}
-                    >
-                        Adicionar
-                    </button>
+            {msg && (
+                <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+                    {msg}
                 </div>
-            </div>
+            )}
 
-            {/* Adicionar Assuntos (LOTE) */}
-            <div className="rounded border border-border p-3 bg-card">
-                <div className="mb-2 font-medium flex items-center justify-between">
-                    <span>Adicionar Assuntos (vários de uma vez)</span>
-                    <span className="text-xs text-muted-foreground">
-                        Linhas válidas: {linhasValidas().length}/{assuntosLote.length}
-                    </span>
+            {loading ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                    Carregando estrutura...
                 </div>
+            ) : (
+                <>
+                    <div className="rounded-xl border border-border bg-card p-4">
+                        <div className="mb-3">
+                            <h3 className="font-medium">
+                                Adicionar disciplina existente
+                            </h3>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                Selecione uma disciplina do catálogo canônico.
+                                Ela não será cadastrada novamente.
+                            </p>
+                        </div>
 
-                <div className="mb-2">
-                    <select
-                        className={`w-full ${selectBase}`}
-                        value={selMateria}
-                        onChange={(e) => setSelMateria(e.target.value)}
-                    >
-                        <option value="">Selecione a matéria</option>
-                        {materias.map((m) => (
-                            <option key={m.id} value={m.id}>
-                                {m.nome}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Tabela simples de linhas */}
-                <div className="space-y-2">
-                    {assuntosLote.map((row, idx) => (
-                        <div
-                            key={idx}
-                            className="flex flex-col gap-2 sm:flex-row sm:items-center"
-                        >
-                            <input
-                                className={`flex-1 ${inputBase}`}
-                                placeholder={`Assunto ${idx + 1}`}
-                                value={row.nome}
-                                onChange={(e) =>
-                                    atualizarLinha(idx, { nome: e.target.value })
-                                }
-                            />
+                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
                             <select
                                 className={selectBase}
-                                value={row.importance_level}
+                                value={disciplinaCatalogoId}
                                 onChange={(e) =>
-                                    atualizarLinha(idx, {
-                                        importance_level: Number(e.target.value),
-                                    })
+                                    setDisciplinaCatalogoId(
+                                        e.target.value
+                                    )
                                 }
-                                title="Grau de importância"
                             >
-                                <option value={0}>⚪ Normal</option>
-                                <option value={1}>⚠️ Relevante</option>
-                                <option value={2}>🚨 Importante</option>
-                                <option value={3}>🔥 Cai sempre</option>
+                                <option value="">
+                                    Selecione a disciplina
+                                </option>
+                                {disciplinasDisponiveis.map(
+                                    (disciplina) => (
+                                        <option
+                                            key={disciplina.id}
+                                            value={disciplina.id}
+                                        >
+                                            {disciplina.nome}
+                                        </option>
+                                    )
+                                )}
                             </select>
-                            <div className="flex gap-2">
+
+                            <button
+                                type="button"
+                                disabled={
+                                    saving || !disciplinaCatalogoId
+                                }
+                                className="rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
+                                onClick={() => {
+                                    const disciplina =
+                                        disciplinasCatalogo.find(
+                                            (item) =>
+                                                item.id ===
+                                                disciplinaCatalogoId
+                                        );
+
+                                    if (disciplina) {
+                                        void adicionarDisciplinaAoEdital(
+                                            disciplina
+                                        );
+                                    }
+                                }}
+                            >
+                                Adicionar ao edital
+                            </button>
+                        </div>
+
+                        <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm">
+                            <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-primary"
+                                checked={incluirTodosAssuntos}
+                                onChange={(e) =>
+                                    setIncluirTodosAssuntos(
+                                        e.target.checked
+                                    )
+                                }
+                            />
+                            Incluir automaticamente todos os assuntos já
+                            cadastrados nessa disciplina
+                        </label>
+
+                        {disciplinasDisponiveis.length === 0 && (
+                            <p className="mt-3 text-xs text-muted-foreground">
+                                Todas as disciplinas do catálogo já estão
+                                neste edital.
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-card p-4">
+                        <h3 className="font-medium">
+                            Nova disciplina canônica
+                        </h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            Cria no catálogo e adiciona ao edital atual.
+                        </p>
+
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                            <input
+                                className={`flex-1 ${inputBase}`}
+                                placeholder="Nome da nova disciplina"
+                                value={novaDisciplina}
+                                onChange={(e) =>
+                                    setNovaDisciplina(e.target.value)
+                                }
+                            />
+
+                            <button
+                                type="button"
+                                disabled={
+                                    saving || !novaDisciplina.trim()
+                                }
+                                onClick={() =>
+                                    void criarNovaDisciplina()
+                                }
+                                className="rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
+                            >
+                                Criar e adicionar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-card p-4">
+                        <div className="mb-3">
+                            <h3 className="font-medium">
+                                Adicionar assuntos
+                            </h3>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                Escolha uma disciplina já presente no edital.
+                                Os assuntos disponíveis vêm do catálogo
+                                canônico.
+                            </p>
+                        </div>
+
+                        <select
+                            className={selectBase}
+                            value={selMateria}
+                            onChange={(e) => {
+                                setSelMateria(e.target.value);
+                                setAssuntosMarcados([]);
+                                setErro("");
+                                setMsg("");
+                            }}
+                        >
+                            <option value="">
+                                Selecione a disciplina do edital
+                            </option>
+                            {materias.map((materia) => (
+                                <option
+                                    key={materia.id}
+                                    value={materia.id}
+                                >
+                                    {materia.nome}
+                                </option>
+                            ))}
+                        </select>
+
+                        {selMateria && !disciplinaCanonicaDaMateria && (
+                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                Essa disciplina existia no edital antes do
+                                catálogo canônico. Ao criar um novo assunto,
+                                ela será automaticamente cadastrada no
+                                catálogo.
+                            </div>
+                        )}
+
+                        {disciplinaCanonicaDaMateria && (
+                            <div className="mt-4">
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                    <span className="text-sm font-medium">
+                                        Assuntos disponíveis
+                                    </span>
+
+                                    <span className="text-xs text-muted-foreground">
+                                        {assuntosDisponiveis.length} disponível(is)
+                                    </span>
+                                </div>
+
+                                {assuntosDisponiveis.length === 0 ? (
+                                    <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+                                        Não há outros assuntos do catálogo
+                                        para adicionar nessa disciplina.
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                        {assuntosDisponiveis.map(
+                                            (assunto) => (
+                                                <label
+                                                    key={assunto.id}
+                                                    className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        className="mt-0.5 h-4 w-4 accent-primary"
+                                                        checked={assuntosMarcados.includes(
+                                                            assunto.id
+                                                        )}
+                                                        onChange={() =>
+                                                            setAssuntosMarcados(
+                                                                (prev) =>
+                                                                    prev.includes(
+                                                                        assunto.id
+                                                                    )
+                                                                        ? prev.filter(
+                                                                            (
+                                                                                id
+                                                                            ) =>
+                                                                                id !==
+                                                                                assunto.id
+                                                                        )
+                                                                        : [
+                                                                            ...prev,
+                                                                            assunto.id,
+                                                                        ]
+                                                            )
+                                                        }
+                                                    />
+                                                    <span>
+                                                        {assunto.nome}
+                                                    </span>
+                                                </label>
+                                            )
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="mt-3 text-right">
+                                    <button
+                                        type="button"
+                                        disabled={
+                                            saving ||
+                                            assuntosMarcados.length === 0
+                                        }
+                                        onClick={() =>
+                                            void adicionarAssuntosSelecionados()
+                                        }
+                                        className="rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
+                                    >
+                                        Adicionar selecionados
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mt-5 border-t border-border pt-4">
+                            <h4 className="text-sm font-medium">
+                                Novo assunto canônico
+                            </h4>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                Cria o assunto no catálogo e adiciona na
+                                disciplina selecionada do edital.
+                            </p>
+
+                            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                                <input
+                                    className={`flex-1 ${inputBase}`}
+                                    placeholder="Nome do novo assunto"
+                                    value={novoAssunto}
+                                    onChange={(e) =>
+                                        setNovoAssunto(e.target.value)
+                                    }
+                                    disabled={!selMateria}
+                                />
+
                                 <button
                                     type="button"
-                                    className="rounded px-3 py-2 bg-transparent text-foreground border border-border"
-                                    onClick={() => removeLinha(idx)}
-                                    title="Remover esta linha"
-                                    disabled={assuntosLote.length === 1}
+                                    disabled={
+                                        saving ||
+                                        !selMateria ||
+                                        !novoAssunto.trim()
+                                    }
+                                    onClick={() =>
+                                        void criarNovoAssunto()
+                                    }
+                                    className="rounded bg-green-600 px-3 py-2 text-white disabled:opacity-50"
                                 >
-                                    Remover
+                                    Criar e adicionar
                                 </button>
                             </div>
                         </div>
-                    ))}
-                </div>
-
-                {/* Ações de lote */}
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        className="rounded px-3 py-2 bg-transparent text-foreground border border-border"
-                        onClick={addLinha}
-                        title="Adicionar nova linha"
-                    >
-                        + Adicionar linha
-                    </button>
-                    <button
-                        type="button"
-                        className="rounded px-3 py-2 bg-transparent text-foreground border border-border"
-                        onClick={limparLote}
-                        title="Limpar todos os campos"
-                        disabled={assuntosLote.length === 1 && !assuntosLote[0].nome}
-                    >
-                        Limpar
-                    </button>
-
-                    <div className="ml-auto flex items-center gap-2">
-                        {erroLote && <span className="text-sm text-red-600">{erroLote}</span>}
-                        <button
-                            className="rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
-                            disabled={!podeSalvar}
-                            onClick={async () => {
-                                setErroLote(null);
-                                if (!selMateria) {
-                                    setErroLote("Selecione a matéria.");
-                                    return;
-                                }
-                                const uid = await getUid();
-                                if (!uid) {
-                                    setErroLote("Usuário não autenticado.");
-                                    return;
-                                }
-
-                                const linhas = linhasValidas();
-                                if (linhas.length === 0) {
-                                    setErroLote("Preencha ao menos um assunto válido.");
-                                    return;
-                                }
-
-                                setSavingLote(true);
-                                try {
-                                    // pegar edital_id da matéria selecionada
-                                    const { data: mat } = await supabase
-                                        .from("materias")
-                                        .select("edital_id")
-                                        .eq("id", selMateria)
-                                        .single();
-
-                                    const payload = linhas.map((r) => ({
-                                        materia_id: selMateria,
-                                        edital_id: mat?.edital_id,
-                                        nome: r.nome.trim(),
-                                        user_id: uid,
-                                        importance_level: r.importance_level ?? 0,
-                                    }));
-
-                                    const { error } = await supabase
-                                        .from("assuntos")
-                                        .insert(payload);
-
-                                    if (error) {
-                                        setErroLote(error.message);
-                                    } else {
-                                        // sucesso
-                                        limparLote();
-                                        setErroLote(null);
-                                        onChanged();
-                                    }
-                                } catch (e: any) {
-                                    setErroLote(e?.message || "Erro ao salvar os assuntos.");
-                                } finally {
-                                    setSavingLote(false);
-                                }
-                            }}
-                        >
-                            {savingLote ? "Salvando..." : "Salvar todos"}
-                        </button>
                     </div>
-                </div>
 
-                <p className="mt-2 text-xs text-muted-foreground">
-                    Dica: você pode preencher vários nomes e escolher importâncias
-                    diferentes por linha. Linhas em branco são ignoradas e nomes duplicados
-                    (na própria lista) são filtrados automaticamente.
-                </p>
-            </div>
+                    <div className="rounded-xl border border-border bg-muted/20 p-4">
+                        <h3 className="font-medium">
+                            Estrutura atual
+                        </h3>
+
+                        <div className="mt-3 space-y-3">
+                            {materias.map((materia) => {
+                                const lista = assuntosEstrutura.filter(
+                                    (assunto) =>
+                                        assunto.materia_id ===
+                                        materia.id
+                                );
+
+                                return (
+                                    <div
+                                        key={materia.id}
+                                        className="rounded-lg border border-border bg-card p-3"
+                                    >
+                                        <div className="font-medium">
+                                            {materia.nome}
+                                        </div>
+
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            {lista.map((assunto) => (
+                                                <span
+                                                    key={assunto.id}
+                                                    className="rounded-full bg-muted px-2.5 py-1 text-xs"
+                                                >
+                                                    {assunto.nome}
+                                                </span>
+                                            ))}
+
+                                            {lista.length === 0 && (
+                                                <span className="text-xs text-muted-foreground">
+                                                    Sem assuntos.
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            {materias.length === 0 && (
+                                <p className="text-sm text-muted-foreground">
+                                    Este edital ainda não possui disciplinas.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 }
