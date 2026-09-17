@@ -22,12 +22,23 @@ import { recordReviewResultForGamification } from "@/lib/gamification";
 type ReviewMethod = "CADERNO" | "FLASHCARD" | "RESUMO";
 type ReviewResult = "ACERTO" | "ERRO" | "CONCLUIDO";
 
-type Materia = {
+type CatalogDisciplina = {
     id: string;
     nome: string;
 };
 
-type Assunto = {
+type CatalogAssunto = {
+    id: string;
+    nome: string;
+    disciplina_id: string;
+};
+
+type LegacyMateria = {
+    id: string;
+    nome: string;
+};
+
+type LegacyAssunto = {
     id: string;
     nome: string;
     materia_id: string | null;
@@ -40,8 +51,14 @@ type ReviewProgress = {
     user_id: string;
     method: ReviewMethod;
     item_id: string;
-    materia_id: string | null;
-    assunto_id: string | null;
+
+    /*
+     * Campos legados mantidos no banco por compatibilidade.
+     * A página não usa esses IDs para classificar revisões.
+     */
+    materia_id?: string | null;
+    assunto_id?: string | null;
+
     etapa: number;
     review_count: number;
     next_review: string;
@@ -50,8 +67,10 @@ type ReviewProgress = {
 
 type FlashcardRow = {
     id: string;
-    materia_id: string | null;
-    assunto_id: string | null;
+    disciplina_catalogo_id: string | null;
+    assunto_catalogo_id: string | null;
+    materia_id?: string | null;
+    assunto_id?: string | null;
     frente: string;
     verso: string;
     active: boolean;
@@ -65,6 +84,8 @@ type CadernoItemRow = {
 
 type QuestaoRow = {
     id: string;
+    questao_disciplina_id?: string | null;
+    questao_assunto_id?: string | null;
     materia_id?: string | null;
     assunto_id?: string | null;
     disciplina?: string | null;
@@ -84,18 +105,27 @@ type ResumoRow = {
     id: string;
     titulo: string;
     conteudo: string | null;
-    materia_id: string | null;
-    assunto_id: string | null;
+    disciplina_catalogo_id: string | null;
+    assunto_catalogo_id: string | null;
+    materia_id?: string | null;
+    assunto_id?: string | null;
     created_at: string;
 };
 
 type BaseReviewItem = {
     method: ReviewMethod;
     itemId: string;
-    materiaId: string | null;
+
+    // Sempre IDs do catálogo canônico.
+    disciplinaId: string | null;
     assuntoId: string | null;
-    materiaNome: string;
+    disciplinaNome: string;
     assuntoNome: string;
+
+    // Somente para compatibilidade do review_progress antigo.
+    legacyMateriaId: string | null;
+    legacyAssuntoId: string | null;
+
     createdAt: string;
     progress: ReviewProgress;
 };
@@ -123,7 +153,7 @@ type ReviewItem =
 type Screen =
     | "HOME"
     | "CADERNO_MODO"
-    | "CADERNO_MATERIAS"
+    | "CADERNO_DISCIPLINAS"
     | "CADERNO_ASSUNTOS"
     | "ATIVIDADE";
 
@@ -195,6 +225,14 @@ function normalizeAnswer(value: string) {
         .replace(/[.)]/g, "");
 }
 
+function normalizeCatalogName(value: string | null | undefined) {
+    return String(value ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLocaleLowerCase("pt-BR")
+        .replace(/[^a-z0-9]+/g, "");
+}
+
 function methodLabel(method: ReviewMethod) {
     if (method === "CADERNO") return "Caderno de Erros";
     if (method === "FLASHCARD") return "Flashcards";
@@ -221,9 +259,6 @@ export default function RevisaoPage() {
 
     const [userId, setUserId] = useState<string | null>(null);
 
-    const [materias, setMaterias] = useState<Materia[]>([]);
-    const [assuntos, setAssuntos] = useState<Assunto[]>([]);
-
     const [settings, setSettings] =
         useState<MethodSettings>(DEFAULT_SETTINGS);
 
@@ -236,7 +271,7 @@ export default function RevisaoPage() {
 
     const [screen, setScreen] = useState<Screen>("HOME");
 
-    const [cadernoMateriaId, setCadernoMateriaId] =
+    const [cadernoDisciplinaId, setCadernoDisciplinaId] =
         useState<string | null>(null);
 
     const [activeMethod, setActiveMethod] =
@@ -335,8 +370,8 @@ export default function RevisaoPage() {
         sourceItems: Array<{
             method: ReviewMethod;
             itemId: string;
-            materiaId: string | null;
-            assuntoId: string | null;
+            legacyMateriaId: string | null;
+            legacyAssuntoId: string | null;
             createdAt: string;
         }>,
         currentSettings: MethodSettings
@@ -365,8 +400,15 @@ export default function RevisaoPage() {
                 user_id: uid,
                 method: item.method,
                 item_id: item.itemId,
-                materia_id: item.materiaId,
-                assunto_id: item.assuntoId,
+
+                /*
+                 * A classificação canônica não é duplicada em review_progress.
+                 * Esses campos antigos só são preservados quando o item-fonte
+                 * ainda possui vínculo legado.
+                 */
+                materia_id: item.legacyMateriaId,
+                assunto_id: item.legacyAssuntoId,
+
                 etapa: 1,
                 review_count: 0,
                 next_review: addDaysISO(
@@ -403,28 +445,43 @@ export default function RevisaoPage() {
             setUserId(uid);
 
             const [
-                materiasReq,
+                disciplinasReq,
                 assuntosReq,
+                legacyMateriasReq,
+                legacyAssuntosReq,
                 flashcardsReq,
                 cadernoReq,
                 resumosReq,
             ] = await Promise.all([
                 supabase
-                    .from("materias")
+                    .from("questao_disciplinas")
                     .select("id,nome")
                     .eq("user_id", uid)
+                    .eq("ativo", true)
                     .order("nome"),
+
+                supabase
+                    .from("questao_assuntos")
+                    .select("id,nome,disciplina_id")
+                    .eq("user_id", uid)
+                    .eq("ativo", true)
+                    .order("nome"),
+
+                // Apenas fallback para registros antigos.
+                supabase
+                    .from("materias")
+                    .select("id,nome")
+                    .eq("user_id", uid),
 
                 supabase
                     .from("assuntos")
                     .select("id,nome,materia_id")
-                    .eq("user_id", uid)
-                    .order("nome"),
+                    .eq("user_id", uid),
 
                 supabase
                     .from("flashcards")
                     .select(
-                        "id,materia_id,assunto_id,frente,verso,active,created_at"
+                        "id,disciplina_catalogo_id,assunto_catalogo_id,materia_id,assunto_id,frente,verso,active,created_at"
                     )
                     .eq("user_id", uid)
                     .eq("active", true)
@@ -444,7 +501,7 @@ export default function RevisaoPage() {
                 supabase
                     .from("resumos")
                     .select(
-                        "id,titulo,conteudo,materia_id,assunto_id,created_at"
+                        "id,titulo,conteudo,disciplina_catalogo_id,assunto_catalogo_id,materia_id,assunto_id,created_at"
                     )
                     .eq("user_id", uid)
                     .order("created_at", {
@@ -452,53 +509,158 @@ export default function RevisaoPage() {
                     }),
             ]);
 
-            if (materiasReq.error) throw materiasReq.error;
+            if (disciplinasReq.error) throw disciplinasReq.error;
             if (assuntosReq.error) throw assuntosReq.error;
+            if (legacyMateriasReq.error) throw legacyMateriasReq.error;
+            if (legacyAssuntosReq.error) throw legacyAssuntosReq.error;
             if (flashcardsReq.error) throw flashcardsReq.error;
             if (cadernoReq.error) throw cadernoReq.error;
             if (resumosReq.error) throw resumosReq.error;
 
-            const mats =
-                (materiasReq.data ?? []) as Materia[];
-            const asss =
-                (assuntosReq.data ?? []) as Assunto[];
+            const catalogDisciplinas =
+                (disciplinasReq.data ?? []) as CatalogDisciplina[];
 
-            setMaterias(mats);
-            setAssuntos(asss);
+            const catalogAssuntos =
+                (assuntosReq.data ?? []) as CatalogAssunto[];
 
-            const localMateriaMap: Record<string, string> = {};
-            const localAssuntoMap: Record<string, string> = {};
+            const legacyMaterias =
+                (legacyMateriasReq.data ?? []) as LegacyMateria[];
 
-            const localMateriaName = new Map<string, Materia[]>();
-            const localAssuntoName = new Map<string, Assunto[]>();
+            const legacyAssuntos =
+                (legacyAssuntosReq.data ?? []) as LegacyAssunto[];
 
-            for (const materia of mats) {
-                localMateriaMap[materia.id] = materia.nome;
+            const disciplinaNomeMap: Record<string, string> = {};
+            const assuntoNomeMap: Record<string, string> = {};
 
-                const key = materia.nome
-                    .trim()
-                    .toLocaleLowerCase("pt-BR");
+            const canonicalDiscByNorm = new Map<string, string>();
+            const canonicalAssByKey = new Map<string, string>();
 
-                localMateriaName.set(key, [
-                    ...(localMateriaName.get(key) ?? []),
-                    materia,
-                ]);
+            for (const disciplina of catalogDisciplinas) {
+                disciplinaNomeMap[disciplina.id] = disciplina.nome;
+
+                canonicalDiscByNorm.set(
+                    normalizeCatalogName(disciplina.nome),
+                    disciplina.id
+                );
             }
 
-            for (const assunto of asss) {
-                localAssuntoMap[assunto.id] = assunto.nome;
+            for (const assunto of catalogAssuntos) {
+                assuntoNomeMap[assunto.id] = assunto.nome;
 
-                const key = assunto.nome
-                    .trim()
-                    .toLocaleLowerCase("pt-BR");
-
-                localAssuntoName.set(key, [
-                    ...(localAssuntoName.get(key) ?? []),
-                    assunto,
-                ]);
+                canonicalAssByKey.set(
+                    `${assunto.disciplina_id}:${normalizeCatalogName(
+                        assunto.nome
+                    )}`,
+                    assunto.id
+                );
             }
 
-            const currentSettings = await ensureSettings(uid);
+            const legacyMateriaToCanonical: Record<string, string> = {};
+            const legacyAssuntoToCanonical: Record<string, string> = {};
+
+            for (const materia of legacyMaterias) {
+                const canonicalId =
+                    canonicalDiscByNorm.get(
+                        normalizeCatalogName(materia.nome)
+                    ) ?? "";
+
+                if (canonicalId) {
+                    legacyMateriaToCanonical[materia.id] =
+                        canonicalId;
+                }
+            }
+
+            for (const assunto of legacyAssuntos) {
+                const canonicalDisciplinaId =
+                    assunto.materia_id
+                        ? legacyMateriaToCanonical[
+                        assunto.materia_id
+                        ]
+                        : "";
+
+                if (!canonicalDisciplinaId) continue;
+
+                const canonicalAssuntoId =
+                    canonicalAssByKey.get(
+                        `${canonicalDisciplinaId}:${normalizeCatalogName(
+                            assunto.nome
+                        )}`
+                    ) ?? "";
+
+                if (canonicalAssuntoId) {
+                    legacyAssuntoToCanonical[assunto.id] =
+                        canonicalAssuntoId;
+                }
+            }
+
+            function resolveCanonical(
+                canonicalDisciplinaId?: string | null,
+                canonicalAssuntoId?: string | null,
+                legacyMateriaId?: string | null,
+                legacyAssuntoId?: string | null,
+                disciplinaTexto?: string | null,
+                assuntoTexto?: string | null
+            ) {
+                const disciplinaId =
+                    canonicalDisciplinaId ||
+                    (legacyMateriaId
+                        ? legacyMateriaToCanonical[
+                        legacyMateriaId
+                        ]
+                        : "") ||
+                    (disciplinaTexto
+                        ? canonicalDiscByNorm.get(
+                            normalizeCatalogName(
+                                disciplinaTexto
+                            )
+                        ) ?? ""
+                        : "") ||
+                    null;
+
+                let assuntoId =
+                    canonicalAssuntoId ||
+                    (legacyAssuntoId
+                        ? legacyAssuntoToCanonical[
+                        legacyAssuntoId
+                        ]
+                        : "") ||
+                    null;
+
+                if (
+                    !assuntoId &&
+                    disciplinaId &&
+                    assuntoTexto
+                ) {
+                    assuntoId =
+                        canonicalAssByKey.get(
+                            `${disciplinaId}:${normalizeCatalogName(
+                                assuntoTexto
+                            )}`
+                        ) ?? null;
+                }
+
+                if (assuntoId) {
+                    const assunto = catalogAssuntos.find(
+                        (item) => item.id === assuntoId
+                    );
+
+                    if (
+                        !assunto ||
+                        !disciplinaId ||
+                        assunto.disciplina_id !== disciplinaId
+                    ) {
+                        assuntoId = null;
+                    }
+                }
+
+                return {
+                    disciplinaId,
+                    assuntoId,
+                };
+            }
+
+            const currentSettings =
+                await ensureSettings(uid);
 
             const cadernoRows =
                 (cadernoReq.data ?? []) as CadernoItemRow[];
@@ -519,10 +681,14 @@ export default function RevisaoPage() {
                 i += 400
             ) {
                 const lote = questaoIds.slice(i, i + 400);
+                if (!lote.length) continue;
 
                 const { data, error } = await supabase
                     .from("questoes")
-                    .select("*")
+                    .select(
+                        "id,questao_disciplina_id,questao_assunto_id,materia_id,assunto_id,disciplina,assunto,instituicao,cargo,banca,modalidade,enunciado,alternativas,correta,explicacao,created_at"
+                    )
+                    .eq("user_id", uid)
                     .in("id", lote);
 
                 if (error) throw error;
@@ -543,8 +709,10 @@ export default function RevisaoPage() {
             const source: Array<{
                 method: ReviewMethod;
                 itemId: string;
-                materiaId: string | null;
+                disciplinaId: string | null;
                 assuntoId: string | null;
+                legacyMateriaId: string | null;
+                legacyAssuntoId: string | null;
                 createdAt: string;
                 raw:
                 | FlashcardRow
@@ -554,11 +722,22 @@ export default function RevisaoPage() {
 
             for (const card of
                 (flashcardsReq.data ?? []) as FlashcardRow[]) {
+                const pair = resolveCanonical(
+                    card.disciplina_catalogo_id,
+                    card.assunto_catalogo_id,
+                    card.materia_id ?? null,
+                    card.assunto_id ?? null
+                );
+
                 source.push({
                     method: "FLASHCARD",
                     itemId: card.id,
-                    materiaId: card.materia_id,
-                    assuntoId: card.assunto_id,
+                    disciplinaId: pair.disciplinaId,
+                    assuntoId: pair.assuntoId,
+                    legacyMateriaId:
+                        card.materia_id ?? null,
+                    legacyAssuntoId:
+                        card.assunto_id ?? null,
                     createdAt:
                         card.created_at ??
                         new Date().toISOString(),
@@ -567,52 +746,28 @@ export default function RevisaoPage() {
             }
 
             for (const questao of questoes) {
-                let materiaId =
-                    questao.materia_id ?? null;
-                let assuntoId =
-                    questao.assunto_id ?? null;
-
-                if (!materiaId && questao.disciplina) {
-                    const options =
-                        localMateriaName.get(
-                            questao.disciplina
-                                .trim()
-                                .toLocaleLowerCase("pt-BR")
-                        ) ?? [];
-
-                    if (options.length === 1) {
-                        materiaId = options[0].id;
-                    }
-                }
-
-                if (!assuntoId && questao.assunto) {
-                    const options =
-                        localAssuntoName.get(
-                            questao.assunto
-                                .trim()
-                                .toLocaleLowerCase("pt-BR")
-                        ) ?? [];
-
-                    const filtered = materiaId
-                        ? options.filter(
-                            (item) =>
-                                item.materia_id ===
-                                materiaId
-                        )
-                        : options;
-
-                    if (filtered.length === 1) {
-                        assuntoId = filtered[0].id;
-                    }
-                }
+                const pair = resolveCanonical(
+                    questao.questao_disciplina_id,
+                    questao.questao_assunto_id,
+                    questao.materia_id ?? null,
+                    questao.assunto_id ?? null,
+                    questao.disciplina ?? null,
+                    questao.assunto ?? null
+                );
 
                 source.push({
                     method: "CADERNO",
                     itemId: questao.id,
-                    materiaId,
-                    assuntoId,
+                    disciplinaId: pair.disciplinaId,
+                    assuntoId: pair.assuntoId,
+                    legacyMateriaId:
+                        questao.materia_id ?? null,
+                    legacyAssuntoId:
+                        questao.assunto_id ?? null,
                     createdAt:
-                        cadernoCreatedAt.get(questao.id) ??
+                        cadernoCreatedAt.get(
+                            questao.id
+                        ) ??
                         questao.created_at ??
                         new Date().toISOString(),
                     raw: questao,
@@ -621,11 +776,22 @@ export default function RevisaoPage() {
 
             for (const resumo of
                 (resumosReq.data ?? []) as ResumoRow[]) {
+                const pair = resolveCanonical(
+                    resumo.disciplina_catalogo_id,
+                    resumo.assunto_catalogo_id,
+                    resumo.materia_id ?? null,
+                    resumo.assunto_id ?? null
+                );
+
                 source.push({
                     method: "RESUMO",
                     itemId: resumo.id,
-                    materiaId: resumo.materia_id,
-                    assuntoId: resumo.assunto_id,
+                    disciplinaId: pair.disciplinaId,
+                    assuntoId: pair.assuntoId,
+                    legacyMateriaId:
+                        resumo.materia_id ?? null,
+                    legacyAssuntoId:
+                        resumo.assunto_id ?? null,
                     createdAt:
                         resumo.created_at ??
                         new Date().toISOString(),
@@ -647,24 +813,29 @@ export default function RevisaoPage() {
                 sourceUnique.map((item) => ({
                     method: item.method,
                     itemId: item.itemId,
-                    materiaId: item.materiaId,
-                    assuntoId: item.assuntoId,
+                    legacyMateriaId:
+                        item.legacyMateriaId,
+                    legacyAssuntoId:
+                        item.legacyAssuntoId,
                     createdAt: item.createdAt,
                 })),
                 currentSettings
             );
 
-            const { data: progressData, error: progressError } =
-                await supabase
-                    .from("review_progress")
-                    .select(
-                        "id,user_id,method,item_id,materia_id,assunto_id,etapa,review_count,next_review,last_reviewed_at"
-                    )
-                    .eq("user_id", uid);
+            const {
+                data: progressData,
+                error: progressError,
+            } = await supabase
+                .from("review_progress")
+                .select(
+                    "id,user_id,method,item_id,materia_id,assunto_id,etapa,review_count,next_review,last_reviewed_at"
+                )
+                .eq("user_id", uid);
 
             if (progressError) throw progressError;
 
-            const progressMap = new Map<string, ReviewProgress>();
+            const progressMap =
+                new Map<string, ReviewProgress>();
 
             for (const row of
                 (progressData ?? []) as ReviewProgress[]) {
@@ -683,23 +854,32 @@ export default function RevisaoPage() {
 
                 if (!progress) continue;
 
-                const materiaNome = item.materiaId
-                    ? localMateriaMap[item.materiaId] ??
-                    "Sem matéria"
-                    : "Sem matéria";
+                const disciplinaNome =
+                    item.disciplinaId
+                        ? disciplinaNomeMap[
+                        item.disciplinaId
+                        ] ?? "Sem disciplina"
+                        : "Sem disciplina";
 
-                const assuntoNome = item.assuntoId
-                    ? localAssuntoMap[item.assuntoId] ??
-                    "Sem assunto"
-                    : "Sem assunto";
+                const assuntoNome =
+                    item.assuntoId
+                        ? assuntoNomeMap[
+                        item.assuntoId
+                        ] ?? "Sem assunto"
+                        : "Sem assunto";
 
                 const base: BaseReviewItem = {
                     method: item.method,
                     itemId: item.itemId,
-                    materiaId: item.materiaId,
+                    disciplinaId:
+                        item.disciplinaId,
                     assuntoId: item.assuntoId,
-                    materiaNome,
+                    disciplinaNome,
                     assuntoNome,
+                    legacyMateriaId:
+                        item.legacyMateriaId,
+                    legacyAssuntoId:
+                        item.legacyAssuntoId,
                     createdAt: item.createdAt,
                     progress,
                 };
@@ -708,19 +888,24 @@ export default function RevisaoPage() {
                     normalized.push({
                         ...base,
                         method: "CADERNO",
-                        questao: item.raw as QuestaoRow,
+                        questao:
+                            item.raw as QuestaoRow,
                     });
-                } else if (item.method === "FLASHCARD") {
+                } else if (
+                    item.method === "FLASHCARD"
+                ) {
                     normalized.push({
                         ...base,
                         method: "FLASHCARD",
-                        flashcard: item.raw as FlashcardRow,
+                        flashcard:
+                            item.raw as FlashcardRow,
                     });
                 } else {
                     normalized.push({
                         ...base,
                         method: "RESUMO",
-                        resumo: item.raw as ResumoRow,
+                        resumo:
+                            item.raw as ResumoRow,
                     });
                 }
             }
@@ -793,15 +978,18 @@ export default function RevisaoPage() {
         return duration;
     }
 
-    async function startStudySession(item: ReviewItem) {
-        if (!userId || !item.materiaId) {
+    async function startStudySession(
+        item: ReviewItem
+    ) {
+        if (!userId || !item.disciplinaId) {
             studySessionIdRef.current = null;
             studyStartedAtRef.current = Date.now();
             return;
         }
 
         try {
-            const access_token = await getAccessToken();
+            const access_token =
+                await getAccessToken();
 
             const { data: abertas } = await supabase
                 .from("study_sessions")
@@ -814,33 +1002,46 @@ export default function RevisaoPage() {
                 .limit(1);
 
             if (abertas?.[0]?.id) {
-                await fetch("/api/study-sessions", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        action: "stop",
-                        access_token,
-                        session_id: abertas[0].id,
-                    }),
-                });
+                await fetch(
+                    "/api/study-sessions",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json",
+                        },
+                        body: JSON.stringify({
+                            action: "stop",
+                            access_token,
+                            session_id:
+                                abertas[0].id,
+                        }),
+                    }
+                );
             }
 
-            const res = await fetch("/api/study-sessions", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    action: "start",
-                    access_token,
-                    materia_id: item.materiaId,
-                    assunto_id: item.assuntoId || null,
-                }),
-            });
+            const res = await fetch(
+                "/api/study-sessions",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+                    },
+                    body: JSON.stringify({
+                        action: "start",
+                        access_token,
+                        disciplina_catalogo_id:
+                            item.disciplinaId,
+                        assunto_catalogo_id:
+                            item.assuntoId || null,
+                    }),
+                }
+            );
 
-            const out = await res.json().catch(() => null);
+            const out = await res
+                .json()
+                .catch(() => null);
 
             if (!res.ok) {
                 throw new Error(
@@ -852,10 +1053,13 @@ export default function RevisaoPage() {
             studySessionIdRef.current =
                 out?.session?.id ?? null;
 
-            studyStartedAtRef.current = Date.now();
+            studyStartedAtRef.current =
+                Date.now();
         } catch {
+            // A revisão continua mesmo se apenas o contador falhar.
             studySessionIdRef.current = null;
-            studyStartedAtRef.current = Date.now();
+            studyStartedAtRef.current =
+                Date.now();
         }
     }
 
@@ -1145,7 +1349,7 @@ export default function RevisaoPage() {
         });
     }
 
-    const cadernoMaterias = useMemo(() => {
+    const cadernoDisciplinas = useMemo(() => {
         const map = new Map<
             string,
             {
@@ -1156,15 +1360,15 @@ export default function RevisaoPage() {
         >();
 
         for (const item of dueByMethod.CADERNO) {
-            const key = item.materiaId ?? "SEM_MATERIA";
+            const key = item.disciplinaId ?? "SEM_DISCIPLINA";
             const current = map.get(key);
 
             if (current) {
                 current.total += 1;
             } else {
                 map.set(key, {
-                    id: item.materiaId,
-                    nome: item.materiaNome,
+                    id: item.disciplinaId,
+                    nome: item.disciplinaNome,
                     total: 1,
                 });
             }
@@ -1186,7 +1390,7 @@ export default function RevisaoPage() {
         >();
 
         for (const item of dueByMethod.CADERNO) {
-            if (item.materiaId !== cadernoMateriaId) {
+            if (item.disciplinaId !== cadernoDisciplinaId) {
                 continue;
             }
 
@@ -1209,7 +1413,7 @@ export default function RevisaoPage() {
         );
     }, [
         dueByMethod.CADERNO,
-        cadernoMateriaId,
+        cadernoDisciplinaId,
     ]);
 
     async function iniciarCadernoAssunto(
@@ -1218,7 +1422,7 @@ export default function RevisaoPage() {
         const selected = dueByMethod.CADERNO
             .filter(
                 (item) =>
-                    item.materiaId === cadernoMateriaId &&
+                    item.disciplinaId === cadernoDisciplinaId &&
                     item.assuntoId === assuntoId
             )
             .sort(sortByDue);
@@ -1228,16 +1432,16 @@ export default function RevisaoPage() {
 
     function voltar() {
         if (screen === "CADERNO_ASSUNTOS") {
-            setScreen("CADERNO_MATERIAS");
+            setScreen("CADERNO_DISCIPLINAS");
             return;
         }
 
         if (
-            screen === "CADERNO_MATERIAS" ||
+            screen === "CADERNO_DISCIPLINAS" ||
             screen === "CADERNO_MODO"
         ) {
             setScreen("HOME");
-            setCadernoMateriaId(null);
+            setCadernoDisciplinaId(null);
             return;
         }
 
@@ -1267,7 +1471,7 @@ export default function RevisaoPage() {
                             Revise Cadernos de Erros, Flashcards e Resumos
                             com revisão espaçada. O tempo gasto em cada item
                             entra automaticamente no tempo de estudo da
-                            matéria e do assunto.
+                            disciplina e do assunto.
                         </p>
                     </div>
 
@@ -1416,9 +1620,9 @@ export default function RevisaoPage() {
                         <button
                             type="button"
                             onClick={() => {
-                                setCadernoMateriaId(null);
+                                setCadernoDisciplinaId(null);
                                 setScreen(
-                                    "CADERNO_MATERIAS"
+                                    "CADERNO_DISCIPLINAS"
                                 );
                             }}
                             className="rounded-2xl border border-border bg-card p-6 text-left transition hover:bg-muted/40"
@@ -1428,10 +1632,10 @@ export default function RevisaoPage() {
                                 className="text-primary"
                             />
                             <h2 className="mt-4 text-lg font-semibold">
-                                Revisar por matéria
+                                Revisar por disciplina
                             </h2>
                             <p className="mt-2 text-sm text-muted-foreground">
-                                Escolha a matéria e depois o assunto.
+                                Escolha a disciplina e depois o assunto.
                                 As questões aparecem de forma ordenada.
                             </p>
                         </button>
@@ -1463,24 +1667,24 @@ export default function RevisaoPage() {
                     </section>
                 )}
 
-                {screen === "CADERNO_MATERIAS" && (
+                {screen === "CADERNO_DISCIPLINAS" && (
                     <section>
                         <h2 className="text-lg font-semibold">
-                            Escolha a matéria
+                            Escolha a disciplina
                         </h2>
 
                         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                            {cadernoMaterias.map(
-                                (materia) => (
+                            {cadernoDisciplinas.map(
+                                (disciplina) => (
                                     <button
                                         key={
-                                            materia.id ??
-                                            "SEM_MATERIA"
+                                            disciplina.id ??
+                                            "SEM_DISCIPLINA"
                                         }
                                         type="button"
                                         onClick={() => {
-                                            setCadernoMateriaId(
-                                                materia.id
+                                            setCadernoDisciplinaId(
+                                                disciplina.id
                                             );
                                             setScreen(
                                                 "CADERNO_ASSUNTOS"
@@ -1489,10 +1693,10 @@ export default function RevisaoPage() {
                                         className="rounded-2xl border border-border bg-card p-5 text-left hover:bg-muted/40"
                                     >
                                         <div className="font-semibold">
-                                            {materia.nome}
+                                            {disciplina.nome}
                                         </div>
                                         <div className="mt-1 text-sm text-muted-foreground">
-                                            {materia.total} questão(ões)
+                                            {disciplina.total} questão(ões)
                                             vencida(s)
                                         </div>
                                     </button>
@@ -1500,7 +1704,7 @@ export default function RevisaoPage() {
                             )}
                         </div>
 
-                        {!cadernoMaterias.length && (
+                        {!cadernoDisciplinas.length && (
                             <EmptyState text="Não há questões do Caderno de Erros vencidas hoje." />
                         )}
                     </section>
@@ -1540,7 +1744,7 @@ export default function RevisaoPage() {
                         </div>
 
                         {!cadernoAssuntos.length && (
-                            <EmptyState text="Não há assuntos vencidos nesta matéria." />
+                            <EmptyState text="Não há assuntos vencidos nesta disciplina." />
                         )}
                     </section>
                 )}
@@ -1883,7 +2087,7 @@ function ActivityArea({
 
             <div className="mb-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <span className="rounded-full border border-border bg-card px-3 py-1">
-                    {item.materiaNome}
+                    {item.disciplinaNome}
                 </span>
                 <span className="rounded-full border border-border bg-card px-3 py-1">
                     {item.assuntoNome}
