@@ -45,8 +45,10 @@ type ReviewMethod = "CADERNO" | "FLASHCARD" | "RESUMO";
 type SessionRow = {
     duration_seconds: number | null;
     started_at: string;
-    materia_id: string | null;
-    assunto_id: string | null;
+    disciplina_catalogo_id?: string | null;
+    assunto_catalogo_id?: string | null;
+    materia_id?: string | null;
+    assunto_id?: string | null;
 };
 
 type AttemptRow = {
@@ -57,8 +59,10 @@ type AttemptRow = {
 
 type QuestaoMeta = {
     id: string;
-    materia_id: string | null;
-    assunto_id: string | null;
+    questao_disciplina_id: string | null;
+    questao_assunto_id: string | null;
+    materia_id?: string | null;
+    assunto_id?: string | null;
 };
 
 type ReviewProgressMeta = {
@@ -200,6 +204,14 @@ function safePct(corretas: number, total: number) {
     return total > 0 ? Math.round((corretas / total) * 100) : 0;
 }
 
+function normalizeCatalogName(value: string | null | undefined) {
+    return String(value ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLocaleLowerCase("pt-BR")
+        .replace(/[^a-z0-9]+/g, "");
+}
+
 function buildSeries(
     start: Date,
     endInclusive: Date,
@@ -277,7 +289,7 @@ export default function EstatisticasPage() {
 
     const [materias, setMaterias] = useState<Array<{ id: string; nome: string }>>([]);
     const [assuntos, setAssuntos] = useState<
-        Array<{ id: string; nome: string; materia_id?: string | null }>
+        Array<{ id: string; nome: string; disciplina_id: string }>
     >([]);
     const [materiaId, setMateriaId] = useState("");
     const [assuntoId, setAssuntoId] = useState("");
@@ -312,6 +324,10 @@ export default function EstatisticasPage() {
         [periodMode, customStartApplied, customEndApplied]
     );
 
+    /*
+     * Catálogo global/canônico.
+     * A UI inteira usa questao_disciplinas + questao_assuntos.
+     */
     useEffect(() => {
         let cancelled = false;
 
@@ -320,32 +336,50 @@ export default function EstatisticasPage() {
             const user = auth?.user;
             if (!user?.id || cancelled) return;
 
-            const [mats, asss] = await Promise.all([
+            const [disciplinasReq, assuntosReq] = await Promise.all([
                 supabase
-                    .from("materias")
+                    .from("questao_disciplinas")
                     .select("id,nome")
-                    .eq("user_id", user.id),
+                    .eq("user_id", user.id)
+                    .eq("ativo", true)
+                    .order("nome"),
                 supabase
-                    .from("assuntos")
-                    .select("id,nome,materia_id")
-                    .eq("user_id", user.id),
+                    .from("questao_assuntos")
+                    .select("id,nome,disciplina_id")
+                    .eq("user_id", user.id)
+                    .eq("ativo", true)
+                    .order("nome"),
             ]);
 
             if (cancelled) return;
 
-            const mList = (mats.data ?? []) as Array<{ id: string; nome: string }>;
-            const aList = (asss.data ?? []) as Array<{
+            if (disciplinasReq.error) {
+                setErro(disciplinasReq.error.message);
+                return;
+            }
+
+            if (assuntosReq.error) {
+                setErro(assuntosReq.error.message);
+                return;
+            }
+
+            const dList = (disciplinasReq.data ?? []) as Array<{
                 id: string;
                 nome: string;
-                materia_id?: string | null;
             }>;
 
-            setMaterias(mList);
+            const aList = (assuntosReq.data ?? []) as Array<{
+                id: string;
+                nome: string;
+                disciplina_id: string;
+            }>;
+
+            setMaterias(dList);
             setAssuntos(aList);
 
-            const mMap: Record<string, string> = {};
-            mList.forEach((m) => (mMap[m.id] = m.nome));
-            setMatName(mMap);
+            const dMap: Record<string, string> = {};
+            dList.forEach((d) => (dMap[d.id] = d.nome));
+            setMatName(dMap);
 
             const aMap: Record<string, string> = {};
             aList.forEach((a) => (aMap[a.id] = a.nome));
@@ -368,7 +402,15 @@ export default function EstatisticasPage() {
             try {
                 const { data: auth } = await supabase.auth.getUser();
                 const user = auth?.user;
-                if (!user?.id) throw new Error("Sem usuário autenticado.");
+
+                if (!user?.id) {
+                    throw new Error("Sem usuário autenticado.");
+                }
+
+                // Capture o ID após o guard. Isso evita o TS18047 dentro
+                // das funções assíncronas internas, onde o TypeScript não
+                // mantém o narrowing do objeto `user`.
+                const userId = user.id;
 
                 const bounds = resolveBounds(
                     periodMode,
@@ -378,79 +420,210 @@ export default function EstatisticasPage() {
 
                 const applyDateBounds = <T,>(query: T, column: string): T => {
                     let q: any = query;
+
                     if (bounds.start) {
                         q = q.gte(column, bounds.start.toISOString());
                     }
+
                     if (bounds.endExclusive) {
                         q = q.lt(column, bounds.endExclusive.toISOString());
                     }
+
                     return q as T;
                 };
 
-                /* ------------------------------------------------------------------ */
-                /* Tempo de estudo                                                    */
-                /* ------------------------------------------------------------------ */
+                /*
+                 * Mapas canônicos por nome.
+                 * Servem apenas para compatibilidade com registros antigos de
+                 * materias/assuntos e pomodoro. Dados novos usam IDs canônicos.
+                 */
+                const canonicalDiscByNorm = new Map<string, string>();
+                for (const d of materias) {
+                    canonicalDiscByNorm.set(
+                        normalizeCatalogName(d.nome),
+                        d.id
+                    );
+                }
+
+                const canonicalAssByKey = new Map<string, string>();
+                for (const a of assuntos) {
+                    canonicalAssByKey.set(
+                        `${a.disciplina_id}:${normalizeCatalogName(a.nome)}`,
+                        a.id
+                    );
+                }
+
+                const [legacyMateriasReq, legacyAssuntosReq] =
+                    await Promise.all([
+                        supabase
+                            .from("materias")
+                            .select("id,nome")
+                            .eq("user_id", userId),
+                        supabase
+                            .from("assuntos")
+                            .select("id,nome,materia_id")
+                            .eq("user_id", userId),
+                    ]);
+
+                const legacyMateriaToCanonical: Record<string, string> = {};
+                const legacyMateriaName: Record<string, string> = {};
+
+                for (const row of legacyMateriasReq.data ?? []) {
+                    const id = String(row.id);
+                    const nome = String(row.nome ?? "");
+                    legacyMateriaName[id] = nome;
+
+                    const canonicalId =
+                        canonicalDiscByNorm.get(
+                            normalizeCatalogName(nome)
+                        ) ?? "";
+
+                    if (canonicalId) {
+                        legacyMateriaToCanonical[id] = canonicalId;
+                    }
+                }
+
+                const legacyAssuntoToCanonical: Record<string, string> = {};
+
+                for (const row of legacyAssuntosReq.data ?? []) {
+                    const legacyMateriaId = String(
+                        row.materia_id ?? ""
+                    );
+
+                    const canonicalDiscId =
+                        legacyMateriaToCanonical[legacyMateriaId];
+
+                    if (!canonicalDiscId) continue;
+
+                    const key =
+                        `${canonicalDiscId}:${normalizeCatalogName(
+                            String(row.nome ?? "")
+                        )}`;
+
+                    const canonicalAssId =
+                        canonicalAssByKey.get(key) ?? "";
+
+                    if (canonicalAssId) {
+                        legacyAssuntoToCanonical[String(row.id)] =
+                            canonicalAssId;
+                    }
+                }
+
+                const resolvePair = (
+                    canonicalDisciplinaId?: string | null,
+                    canonicalAssuntoId?: string | null,
+                    legacyMateriaId?: string | null,
+                    legacyAssuntoId?: string | null
+                ) => {
+                    const disciplinaId =
+                        canonicalDisciplinaId ||
+                        (legacyMateriaId
+                            ? legacyMateriaToCanonical[
+                            legacyMateriaId
+                            ]
+                            : "") ||
+                        null;
+
+                    let assuntoId =
+                        canonicalAssuntoId ||
+                        (legacyAssuntoId
+                            ? legacyAssuntoToCanonical[
+                            legacyAssuntoId
+                            ]
+                            : "") ||
+                        null;
+
+                    if (assuntoId) {
+                        const assunto = assuntos.find(
+                            (a) => a.id === assuntoId
+                        );
+
+                        if (
+                            disciplinaId &&
+                            assunto &&
+                            assunto.disciplina_id !== disciplinaId
+                        ) {
+                            assuntoId = null;
+                        }
+                    }
+
+                    return {
+                        disciplinaId,
+                        assuntoId,
+                    };
+                };
+
+                /* -------------------------------------------------------------- */
+                /* Tempo de estudo                                                */
+                /* -------------------------------------------------------------- */
 
                 let pomodoroQuery = supabase
                     .from("pomodoro_sessions")
-                    .select("duration_seconds,started_at,materia_id,assunto_id")
-                    .eq("user_id", user.id)
+                    .select(
+                        "duration_seconds,started_at,materia_id,assunto_id"
+                    )
+                    .eq("user_id", userId)
                     .eq("phase", "study")
                     .not("duration_seconds", "is", null)
                     .order("started_at", { ascending: true });
 
                 let studyQuery = supabase
                     .from("study_sessions")
-                    .select("duration_seconds,started_at,materia_id,assunto_id")
-                    .eq("user_id", user.id)
+                    .select(
+                        "duration_seconds,started_at,disciplina_catalogo_id,assunto_catalogo_id,materia_id,assunto_id"
+                    )
+                    .eq("user_id", userId)
                     .not("duration_seconds", "is", null)
                     .order("started_at", { ascending: true });
 
-                pomodoroQuery = applyDateBounds(pomodoroQuery, "started_at");
-                studyQuery = applyDateBounds(studyQuery, "started_at");
+                pomodoroQuery = applyDateBounds(
+                    pomodoroQuery,
+                    "started_at"
+                );
 
-                if (materiaId) {
-                    pomodoroQuery = pomodoroQuery.eq("materia_id", materiaId);
-                    studyQuery = studyQuery.eq("materia_id", materiaId);
-                }
+                studyQuery = applyDateBounds(
+                    studyQuery,
+                    "started_at"
+                );
 
-                if (assuntoId) {
-                    pomodoroQuery = pomodoroQuery.eq("assunto_id", assuntoId);
-                    studyQuery = studyQuery.eq("assunto_id", assuntoId);
-                }
-
-                /* ------------------------------------------------------------------ */
-                /* Questões                                                           */
-                /* ------------------------------------------------------------------ */
+                /* -------------------------------------------------------------- */
+                /* Questões                                                       */
+                /* -------------------------------------------------------------- */
 
                 let attemptQuery = supabase
                     .from("question_attempts")
                     .select("questao_id,resultado,created_at")
-                    .eq("user_id", user.id)
+                    .eq("user_id", userId)
                     .order("created_at", { ascending: true });
 
-                attemptQuery = applyDateBounds(attemptQuery, "created_at");
+                attemptQuery = applyDateBounds(
+                    attemptQuery,
+                    "created_at"
+                );
 
-                /* ------------------------------------------------------------------ */
-                /* Revisões                                                           */
-                /* ------------------------------------------------------------------ */
+                /* -------------------------------------------------------------- */
+                /* Revisões                                                       */
+                /* -------------------------------------------------------------- */
 
                 let reviewEventQuery = supabase
                     .from("gamification_events")
-                    .select("event_type,source_id,metadata,occurred_at")
-                    .eq("user_id", user.id)
+                    .select(
+                        "event_type,source_id,metadata,occurred_at"
+                    )
+                    .eq("user_id", userId)
                     .order("occurred_at", { ascending: true });
 
                 if (periodMode === "all") {
-                    reviewEventQuery = reviewEventQuery.in("event_type", [
-                        "REVIEW_COMPLETED",
-                        "LEGACY_REVIEW_COUNT",
-                    ]);
+                    reviewEventQuery = reviewEventQuery.in(
+                        "event_type",
+                        ["REVIEW_COMPLETED", "LEGACY_REVIEW_COUNT"]
+                    );
                 } else {
                     reviewEventQuery = reviewEventQuery.eq(
                         "event_type",
                         "REVIEW_COMPLETED"
                     );
+
                     reviewEventQuery = applyDateBounds(
                         reviewEventQuery,
                         "occurred_at"
@@ -461,22 +634,20 @@ export default function EstatisticasPage() {
                     pomodoroRes,
                     studyRes,
                     attemptRes,
-                    reviewProgressRes,
                     reviewEventsRes,
                 ] = await Promise.all([
                     pomodoroQuery,
                     studyQuery,
                     attemptQuery,
-                    supabase
-                        .from("review_progress")
-                        .select("item_id,method,materia_id,assunto_id")
-                        .eq("user_id", user.id),
                     reviewEventQuery,
                 ]);
 
                 if (pomodoroRes.error && studyRes.error) {
                     throw new Error(
-                        `Falha ao carregar tempo de estudo: ${pomodoroRes.error.message}`
+                        `Falha ao carregar tempo de estudo: ${studyRes.error?.message ||
+                        pomodoroRes.error?.message ||
+                        "erro desconhecido"
+                        }`
                     );
                 }
 
@@ -486,10 +657,49 @@ export default function EstatisticasPage() {
                     );
                 }
 
-                const sessionRows: SessionRow[] = [
-                    ...((pomodoroRes.error ? [] : pomodoroRes.data ?? []) as SessionRow[]),
-                    ...((studyRes.error ? [] : studyRes.data ?? []) as SessionRow[]),
+                const rawSessionRows: SessionRow[] = [
+                    ...((pomodoroRes.error
+                        ? []
+                        : pomodoroRes.data ?? []) as SessionRow[]),
+                    ...((studyRes.error
+                        ? []
+                        : studyRes.data ?? []) as SessionRow[]),
                 ];
+
+                const sessionRows = rawSessionRows
+                    .map((session) => {
+                        const pair = resolvePair(
+                            session.disciplina_catalogo_id,
+                            session.assunto_catalogo_id,
+                            session.materia_id,
+                            session.assunto_id
+                        );
+
+                        return {
+                            ...session,
+                            canonicalDisciplinaId:
+                                pair.disciplinaId,
+                            canonicalAssuntoId: pair.assuntoId,
+                        };
+                    })
+                    .filter((session) => {
+                        if (
+                            materiaId &&
+                            session.canonicalDisciplinaId !==
+                            materiaId
+                        ) {
+                            return false;
+                        }
+
+                        if (
+                            assuntoId &&
+                            session.canonicalAssuntoId !== assuntoId
+                        ) {
+                            return false;
+                        }
+
+                        return true;
+                    });
 
                 const byDayMin: Record<string, number> = {};
                 const byMatSec: Record<string, number> = {};
@@ -497,40 +707,80 @@ export default function EstatisticasPage() {
                 let totalSec = 0;
 
                 for (const session of sessionRows) {
-                    const dur = Math.max(0, Number(session.duration_seconds ?? 0));
+                    const dur = Math.max(
+                        0,
+                        Number(session.duration_seconds ?? 0)
+                    );
+
                     totalSec += dur;
 
                     const d = new Date(session.started_at);
-                    const key = localDateKey(d);
-                    byDayMin[key] = (byDayMin[key] ?? 0) + Math.round(dur / 60);
-
-                    if (session.materia_id) {
-                        byMatSec[session.materia_id] =
-                            (byMatSec[session.materia_id] ?? 0) + dur;
+                    if (!Number.isNaN(d.getTime())) {
+                        const key = localDateKey(d);
+                        byDayMin[key] =
+                            (byDayMin[key] ?? 0) +
+                            Math.round(dur / 60);
                     }
 
-                    if (session.assunto_id) {
-                        byAssSec[session.assunto_id] =
-                            (byAssSec[session.assunto_id] ?? 0) + dur;
+                    if (session.canonicalDisciplinaId) {
+                        byMatSec[
+                            session.canonicalDisciplinaId
+                        ] =
+                            (byMatSec[
+                                session.canonicalDisciplinaId
+                            ] ?? 0) + dur;
+                    }
+
+                    if (session.canonicalAssuntoId) {
+                        byAssSec[
+                            session.canonicalAssuntoId
+                        ] =
+                            (byAssSec[
+                                session.canonicalAssuntoId
+                            ] ?? 0) + dur;
                     }
                 }
 
-                const attempts = (attemptRes.data ?? []) as AttemptRow[];
+                /* -------------------------------------------------------------- */
+                /* Desempenho das questões                                        */
+                /* -------------------------------------------------------------- */
+
+                const attempts =
+                    (attemptRes.data ?? []) as AttemptRow[];
+
                 const questaoIds = Array.from(
-                    new Set(attempts.map((a) => a.questao_id).filter(Boolean))
+                    new Set(
+                        attempts
+                            .map((a) => a.questao_id)
+                            .filter(Boolean)
+                    )
                 );
 
-                const questaoMap = new Map<string, QuestaoMeta>();
+                const questaoMap = new Map<
+                    string,
+                    {
+                        id: string;
+                        disciplinaId: string | null;
+                        assuntoId: string | null;
+                    }
+                >();
 
-                for (let i = 0; i < questaoIds.length; i += 500) {
+                for (
+                    let i = 0;
+                    i < questaoIds.length;
+                    i += 500
+                ) {
                     const lote = questaoIds.slice(i, i + 500);
                     if (!lote.length) continue;
 
-                    const { data: qs, error: qsError } = await supabase
-                        .from("questoes")
-                        .select("id,materia_id,assunto_id")
-                        .eq("user_id", user.id)
-                        .in("id", lote);
+                    const { data: qs, error: qsError } =
+                        await supabase
+                            .from("questoes")
+                            .select(
+                                "id,questao_disciplina_id,questao_assunto_id,materia_id,assunto_id"
+                            )
+                            .eq("user_id", userId)
+                            .in("id", lote);
 
                     if (qsError) {
                         throw new Error(
@@ -539,57 +789,109 @@ export default function EstatisticasPage() {
                     }
 
                     for (const q of (qs ?? []) as QuestaoMeta[]) {
-                        questaoMap.set(q.id, q);
+                        const pair = resolvePair(
+                            q.questao_disciplina_id,
+                            q.questao_assunto_id,
+                            q.materia_id,
+                            q.assunto_id
+                        );
+
+                        questaoMap.set(String(q.id), {
+                            id: String(q.id),
+                            disciplinaId: pair.disciplinaId,
+                            assuntoId: pair.assuntoId,
+                        });
                     }
                 }
 
-                const attemptsFiltered = attempts.filter((attempt) => {
-                    const meta = questaoMap.get(attempt.questao_id);
-                    if (!meta) return false;
-                    if (materiaId && meta.materia_id !== materiaId) return false;
-                    if (assuntoId && meta.assunto_id !== assuntoId) return false;
-                    return true;
-                });
+                const attemptsFiltered = attempts.filter(
+                    (attempt) => {
+                        const meta = questaoMap.get(
+                            attempt.questao_id
+                        );
 
-                const matAgg: Record<string, { total: number; corretas: number }> = {};
-                const assAgg: Record<string, { total: number; corretas: number }> = {};
+                        if (!meta) return false;
+
+                        if (
+                            materiaId &&
+                            meta.disciplinaId !== materiaId
+                        ) {
+                            return false;
+                        }
+
+                        if (
+                            assuntoId &&
+                            meta.assuntoId !== assuntoId
+                        ) {
+                            return false;
+                        }
+
+                        return true;
+                    }
+                );
+
+                const matAgg: Record<
+                    string,
+                    { total: number; corretas: number }
+                > = {};
+
+                const assAgg: Record<
+                    string,
+                    { total: number; corretas: number }
+                > = {};
+
                 const byDayQ: Record<string, number> = {};
                 let corretasTotal = 0;
 
                 for (const attempt of attemptsFiltered) {
-                    const meta = questaoMap.get(attempt.questao_id);
+                    const meta = questaoMap.get(
+                        attempt.questao_id
+                    );
+
                     if (!meta) continue;
 
-                    const acertou = attempt.resultado === "ACERTO";
+                    const acertou =
+                        attempt.resultado === "ACERTO";
+
                     if (acertou) corretasTotal += 1;
 
-                    if (meta.materia_id) {
-                        const row = matAgg[meta.materia_id] ?? {
-                            total: 0,
-                            corretas: 0,
-                        };
+                    if (meta.disciplinaId) {
+                        const row =
+                            matAgg[meta.disciplinaId] ?? {
+                                total: 0,
+                                corretas: 0,
+                            };
+
                         row.total += 1;
                         if (acertou) row.corretas += 1;
-                        matAgg[meta.materia_id] = row;
+                        matAgg[meta.disciplinaId] = row;
                     }
 
-                    if (meta.assunto_id) {
-                        const row = assAgg[meta.assunto_id] ?? {
-                            total: 0,
-                            corretas: 0,
-                        };
+                    if (meta.assuntoId) {
+                        const row =
+                            assAgg[meta.assuntoId] ?? {
+                                total: 0,
+                                corretas: 0,
+                            };
+
                         row.total += 1;
                         if (acertou) row.corretas += 1;
-                        assAgg[meta.assunto_id] = row;
+                        assAgg[meta.assuntoId] = row;
                     }
 
-                    const key = localDateKey(new Date(attempt.created_at));
-                    byDayQ[key] = (byDayQ[key] ?? 0) + 1;
+                    const attemptDate = new Date(
+                        attempt.created_at
+                    );
+
+                    if (!Number.isNaN(attemptDate.getTime())) {
+                        const key = localDateKey(attemptDate);
+                        byDayQ[key] = (byDayQ[key] ?? 0) + 1;
+                    }
                 }
 
-                /* ------------------------------------------------------------------ */
-                /* Agregação das revisões                                             */
-                /* ------------------------------------------------------------------ */
+                /* -------------------------------------------------------------- */
+                /* Revisões: classificação resolvida pelo item-fonte canônico     */
+                /* -------------------------------------------------------------- */
 
                 const nextReviewTotals: ReviewTotals = {
                     total: 0,
@@ -597,76 +899,247 @@ export default function EstatisticasPage() {
                     flashcards: 0,
                     resumos: 0,
                 };
+
                 const byDayReview: Record<string, number> = {};
                 const exactReviewTimestamps: number[] = [];
 
                 if (reviewEventsRes.error) {
                     setReviewWarning(
-                        "Não foi possível carregar as estatísticas de revisão. Confira se o SQL da gamificação já foi executado no Supabase."
+                        "Não foi possível carregar as estatísticas de revisão."
                     );
                 } else {
-                    const reviewMetaMap = new Map<string, ReviewProgressMeta>();
+                    const events =
+                        (reviewEventsRes.data ??
+                            []) as ReviewEventRow[];
 
-                    if (!reviewProgressRes.error) {
-                        for (const row of (reviewProgressRes.data ?? []) as ReviewProgressMeta[]) {
-                            const method = normalizeReviewMethod(row.method);
-                            if (!method) continue;
-                            reviewMetaMap.set(
-                                reviewMapKey(method, String(row.item_id)),
-                                {
-                                    ...row,
-                                    method,
-                                    item_id: String(row.item_id),
-                                }
-                            );
-                        }
-                    } else if (materiaId || assuntoId) {
-                        setReviewWarning(
-                            "As revisões foram carregadas, mas não foi possível aplicar o filtro de matéria/assunto nelas."
+                    const idsByMethod: Record<
+                        ReviewMethod,
+                        string[]
+                    > = {
+                        CADERNO: [],
+                        FLASHCARD: [],
+                        RESUMO: [],
+                    };
+
+                    for (const event of events) {
+                        const sourceId = event.source_id
+                            ? String(event.source_id)
+                            : "";
+
+                        const method = normalizeReviewMethod(
+                            metaString(
+                                event.metadata,
+                                "method"
+                            )
+                        );
+
+                        if (!sourceId || !method) continue;
+                        idsByMethod[method].push(sourceId);
+                    }
+
+                    for (const method of Object.keys(
+                        idsByMethod
+                    ) as ReviewMethod[]) {
+                        idsByMethod[method] = Array.from(
+                            new Set(idsByMethod[method])
                         );
                     }
 
-                    for (const event of (reviewEventsRes.data ?? []) as ReviewEventRow[]) {
-                        const sourceId = event.source_id ? String(event.source_id) : "";
+                    const reviewMetaMap = new Map<
+                        string,
+                        {
+                            disciplinaId: string | null;
+                            assuntoId: string | null;
+                        }
+                    >();
+
+                    async function carregarMetaEmLotes(
+                        method: ReviewMethod,
+                        ids: string[]
+                    ) {
+                        for (
+                            let i = 0;
+                            i < ids.length;
+                            i += 500
+                        ) {
+                            const lote = ids.slice(i, i + 500);
+                            if (!lote.length) continue;
+
+                            if (method === "CADERNO") {
+                                const { data, error } =
+                                    await supabase
+                                        .from("questoes")
+                                        .select(
+                                            "id,questao_disciplina_id,questao_assunto_id,materia_id,assunto_id"
+                                        )
+                                        .eq("user_id", userId)
+                                        .in("id", lote);
+
+                                if (error) throw error;
+
+                                for (const row of data ?? []) {
+                                    const pair = resolvePair(
+                                        row.questao_disciplina_id,
+                                        row.questao_assunto_id,
+                                        row.materia_id,
+                                        row.assunto_id
+                                    );
+
+                                    reviewMetaMap.set(
+                                        reviewMapKey(
+                                            method,
+                                            String(row.id)
+                                        ),
+                                        pair
+                                    );
+                                }
+
+                                continue;
+                            }
+
+                            const table =
+                                method === "FLASHCARD"
+                                    ? "flashcards"
+                                    : "resumos";
+
+                            const { data, error } =
+                                await supabase
+                                    .from(table)
+                                    .select(
+                                        "id,disciplina_catalogo_id,assunto_catalogo_id,materia_id,assunto_id"
+                                    )
+                                    .eq("user_id", userId)
+                                    .in("id", lote);
+
+                            if (error) throw error;
+
+                            for (const row of data ?? []) {
+                                const pair = resolvePair(
+                                    row.disciplina_catalogo_id,
+                                    row.assunto_catalogo_id,
+                                    row.materia_id,
+                                    row.assunto_id
+                                );
+
+                                reviewMetaMap.set(
+                                    reviewMapKey(
+                                        method,
+                                        String(row.id)
+                                    ),
+                                    pair
+                                );
+                            }
+                        }
+                    }
+
+                    try {
+                        await Promise.all([
+                            carregarMetaEmLotes(
+                                "CADERNO",
+                                idsByMethod.CADERNO
+                            ),
+                            carregarMetaEmLotes(
+                                "FLASHCARD",
+                                idsByMethod.FLASHCARD
+                            ),
+                            carregarMetaEmLotes(
+                                "RESUMO",
+                                idsByMethod.RESUMO
+                            ),
+                        ]);
+                    } catch {
+                        if (materiaId || assuntoId) {
+                            setReviewWarning(
+                                "As revisões foram carregadas, mas parte delas não pôde ser classificada pelo catálogo canônico."
+                            );
+                        }
+                    }
+
+                    for (const event of events) {
+                        const sourceId = event.source_id
+                            ? String(event.source_id)
+                            : "";
+
                         const method = normalizeReviewMethod(
-                            metaString(event.metadata, "method")
+                            metaString(
+                                event.metadata,
+                                "method"
+                            )
                         );
 
                         if (!sourceId || !method) continue;
 
-                        const reviewMeta = reviewMetaMap.get(
-                            reviewMapKey(method, sourceId)
-                        );
-
                         if (materiaId || assuntoId) {
-                            if (!reviewMeta) continue;
-                            if (materiaId && reviewMeta.materia_id !== materiaId) continue;
-                            if (assuntoId && reviewMeta.assunto_id !== assuntoId) continue;
+                            const meta = reviewMetaMap.get(
+                                reviewMapKey(
+                                    method,
+                                    sourceId
+                                )
+                            );
+
+                            if (!meta) continue;
+
+                            if (
+                                materiaId &&
+                                meta.disciplinaId !== materiaId
+                            ) {
+                                continue;
+                            }
+
+                            if (
+                                assuntoId &&
+                                meta.assuntoId !== assuntoId
+                            ) {
+                                continue;
+                            }
                         }
 
                         const weight =
-                            event.event_type === "LEGACY_REVIEW_COUNT"
+                            event.event_type ===
+                                "LEGACY_REVIEW_COUNT"
                                 ? Math.max(
                                     0,
-                                    Math.floor(metaNumber(event.metadata, "count") ?? 0)
+                                    Math.floor(
+                                        metaNumber(
+                                            event.metadata,
+                                            "count"
+                                        ) ?? 0
+                                    )
                                 )
                                 : 1;
 
                         if (weight <= 0) continue;
 
                         nextReviewTotals.total += weight;
-                        if (method === "CADERNO") nextReviewTotals.caderno += weight;
-                        if (method === "FLASHCARD") nextReviewTotals.flashcards += weight;
-                        if (method === "RESUMO") nextReviewTotals.resumos += weight;
 
-                        // LEGACY_REVIEW_COUNT preserva volume histórico, mas não possui
-                        // a data individual de cada revisão. Por isso não entra no gráfico diário.
-                        if (event.event_type === "REVIEW_COMPLETED") {
-                            const d = new Date(event.occurred_at);
+                        if (method === "CADERNO") {
+                            nextReviewTotals.caderno += weight;
+                        }
+
+                        if (method === "FLASHCARD") {
+                            nextReviewTotals.flashcards +=
+                                weight;
+                        }
+
+                        if (method === "RESUMO") {
+                            nextReviewTotals.resumos += weight;
+                        }
+
+                        if (
+                            event.event_type ===
+                            "REVIEW_COMPLETED"
+                        ) {
+                            const d = new Date(
+                                event.occurred_at
+                            );
+
                             if (!Number.isNaN(d.getTime())) {
                                 const key = localDateKey(d);
-                                byDayReview[key] = (byDayReview[key] ?? 0) + 1;
-                                exactReviewTimestamps.push(d.getTime());
+                                byDayReview[key] =
+                                    (byDayReview[key] ?? 0) + 1;
+                                exactReviewTimestamps.push(
+                                    d.getTime()
+                                );
                             }
                         }
                     }
@@ -676,6 +1149,7 @@ export default function EstatisticasPage() {
 
                 setTempoTotalSeg(totalSec);
                 setSessoes(sessionRows.length);
+
                 const erradasTotal = Math.max(
                     0,
                     attemptsFiltered.length - corretasTotal
@@ -684,7 +1158,13 @@ export default function EstatisticasPage() {
                 setQuestoesTotal(attemptsFiltered.length);
                 setQuestoesCertas(corretasTotal);
                 setQuestoesErradas(erradasTotal);
-                setAcertoTotal(safePct(corretasTotal, attemptsFiltered.length));
+                setAcertoTotal(
+                    safePct(
+                        corretasTotal,
+                        attemptsFiltered.length
+                    )
+                );
+
                 setReviewTotals(nextReviewTotals);
 
                 setTopMateriasTempo(
@@ -692,20 +1172,29 @@ export default function EstatisticasPage() {
                         ? []
                         : Object.entries(byMatSec)
                             .map(([id, sec]) => ({
-                                nome: matName[id] || `${id.slice(0, 8)}…`,
+                                nome:
+                                    matName[id] ||
+                                    `${id.slice(0, 8)}…`,
                                 valor: Math.round(sec / 60),
                             }))
-                            .sort((a, b) => b.valor - a.valor)
+                            .sort(
+                                (a, b) =>
+                                    b.valor - a.valor
+                            )
                             .slice(0, 5)
                 );
 
                 setTopAssuntosTempo(
                     Object.entries(byAssSec)
                         .map(([id, sec]) => ({
-                            nome: assName[id] || `${id.slice(0, 8)}…`,
+                            nome:
+                                assName[id] ||
+                                `${id.slice(0, 8)}…`,
                             valor: Math.round(sec / 60),
                         }))
-                        .sort((a, b) => b.valor - a.valor)
+                        .sort(
+                            (a, b) => b.valor - a.valor
+                        )
                         .slice(0, 5)
                 );
 
@@ -714,20 +1203,32 @@ export default function EstatisticasPage() {
                         ? matAgg[materiaId]
                             ? [
                                 {
-                                    nome: matName[materiaId] ?? "Matéria",
+                                    nome:
+                                        matName[materiaId] ??
+                                        "Disciplina",
                                     valor: safePct(
-                                        matAgg[materiaId].corretas,
-                                        matAgg[materiaId].total
+                                        matAgg[materiaId]
+                                            .corretas,
+                                        matAgg[materiaId]
+                                            .total
                                     ),
                                 },
                             ]
                             : []
                         : Object.entries(matAgg)
                             .map(([id, v]) => ({
-                                nome: matName[id] || `${id.slice(0, 8)}…`,
-                                valor: safePct(v.corretas, v.total),
+                                nome:
+                                    matName[id] ||
+                                    `${id.slice(0, 8)}…`,
+                                valor: safePct(
+                                    v.corretas,
+                                    v.total
+                                ),
                             }))
-                            .sort((a, b) => b.valor - a.valor)
+                            .sort(
+                                (a, b) =>
+                                    b.valor - a.valor
+                            )
                             .slice(0, 8)
                 );
 
@@ -736,27 +1237,46 @@ export default function EstatisticasPage() {
                         ? assAgg[assuntoId]
                             ? [
                                 {
-                                    nome: assName[assuntoId] ?? "Assunto",
+                                    nome:
+                                        assName[assuntoId] ??
+                                        "Assunto",
                                     valor: safePct(
-                                        assAgg[assuntoId].corretas,
-                                        assAgg[assuntoId].total
+                                        assAgg[assuntoId]
+                                            .corretas,
+                                        assAgg[assuntoId]
+                                            .total
                                     ),
                                 },
                             ]
                             : []
                         : Object.entries(assAgg)
                             .map(([id, v]) => ({
-                                nome: assName[id] || `${id.slice(0, 8)}…`,
-                                valor: safePct(v.corretas, v.total),
+                                nome:
+                                    assName[id] ||
+                                    `${id.slice(0, 8)}…`,
+                                valor: safePct(
+                                    v.corretas,
+                                    v.total
+                                ),
                             }))
-                            .sort((a, b) => b.valor - a.valor)
+                            .sort(
+                                (a, b) =>
+                                    b.valor - a.valor
+                            )
                             .slice(0, 8)
                 );
 
-                const matWeak: AccItem[] = Object.entries(matAgg)
+                const matWeak: AccItem[] = Object.entries(
+                    matAgg
+                )
                     .map(([id, v]) => ({
-                        nome: matName[id] || `${id.slice(0, 8)}…`,
-                        acerto: safePct(v.corretas, v.total),
+                        nome:
+                            matName[id] ||
+                            `${id.slice(0, 8)}…`,
+                        acerto: safePct(
+                            v.corretas,
+                            v.total
+                        ),
                         total: v.total,
                     }))
                     .filter(
@@ -764,13 +1284,22 @@ export default function EstatisticasPage() {
                             x.total >= MIN_QTD_FRACO &&
                             x.acerto < WEAK_THRESHOLD
                     )
-                    .sort((a, b) => a.acerto - b.acerto)
+                    .sort(
+                        (a, b) => a.acerto - b.acerto
+                    )
                     .slice(0, 8);
 
-                const assWeak: AccItem[] = Object.entries(assAgg)
+                const assWeak: AccItem[] = Object.entries(
+                    assAgg
+                )
                     .map(([id, v]) => ({
-                        nome: assName[id] || `${id.slice(0, 8)}…`,
-                        acerto: safePct(v.corretas, v.total),
+                        nome:
+                            assName[id] ||
+                            `${id.slice(0, 8)}…`,
+                        acerto: safePct(
+                            v.corretas,
+                            v.total
+                        ),
                         total: v.total,
                     }))
                     .filter(
@@ -778,7 +1307,9 @@ export default function EstatisticasPage() {
                             x.total >= MIN_QTD_FRACO &&
                             x.acerto < WEAK_THRESHOLD
                     )
-                    .sort((a, b) => a.acerto - b.acerto)
+                    .sort(
+                        (a, b) => a.acerto - b.acerto
+                    )
                     .slice(0, 8);
 
                 setPioresMaterias(matWeak);
@@ -787,27 +1318,50 @@ export default function EstatisticasPage() {
                 let seriesStart: Date;
                 let seriesEnd: Date;
 
-                if (bounds.start && bounds.endExclusive) {
+                if (
+                    bounds.start &&
+                    bounds.endExclusive
+                ) {
                     seriesStart = bounds.start;
-                    seriesEnd = addLocalDays(bounds.endExclusive, -1);
+                    seriesEnd = addLocalDays(
+                        bounds.endExclusive,
+                        -1
+                    );
                 } else {
                     const timestamps: number[] = [];
 
                     for (const s of sessionRows) {
-                        const t = new Date(s.started_at).getTime();
-                        if (Number.isFinite(t)) timestamps.push(t);
+                        const t = new Date(
+                            s.started_at
+                        ).getTime();
+
+                        if (Number.isFinite(t)) {
+                            timestamps.push(t);
+                        }
                     }
 
                     for (const a of attemptsFiltered) {
-                        const t = new Date(a.created_at).getTime();
-                        if (Number.isFinite(t)) timestamps.push(t);
+                        const t = new Date(
+                            a.created_at
+                        ).getTime();
+
+                        if (Number.isFinite(t)) {
+                            timestamps.push(t);
+                        }
                     }
 
-                    timestamps.push(...exactReviewTimestamps);
+                    timestamps.push(
+                        ...exactReviewTimestamps
+                    );
 
                     if (timestamps.length) {
-                        seriesStart = startOfLocalDay(Math.min(...timestamps));
-                        seriesEnd = startOfLocalDay(Math.max(...timestamps));
+                        seriesStart = startOfLocalDay(
+                            Math.min(...timestamps)
+                        );
+
+                        seriesEnd = startOfLocalDay(
+                            Math.max(...timestamps)
+                        );
                     } else {
                         seriesStart = startOfLocalDay();
                         seriesEnd = startOfLocalDay();
@@ -825,7 +1379,11 @@ export default function EstatisticasPage() {
                 );
             } catch (e: any) {
                 if (!cancelled) {
-                    setErro(e?.message || "Falha ao carregar estatísticas.");
+                    setErro(
+                        e?.message ||
+                        "Falha ao carregar estatísticas."
+                    );
+
                     setTempoTotalSeg(0);
                     setSessoes(0);
                     setQuestoesTotal(0);
@@ -847,7 +1405,9 @@ export default function EstatisticasPage() {
                     setPioresAssuntos([]);
                 }
             } finally {
-                if (!cancelled) setLoading(false);
+                if (!cancelled) {
+                    setLoading(false);
+                }
             }
         })();
 
@@ -862,6 +1422,8 @@ export default function EstatisticasPage() {
         assuntoId,
         matName,
         assName,
+        materias,
+        assuntos,
     ]);
 
     const cards = useMemo<MetricCard[]>(
@@ -958,7 +1520,7 @@ export default function EstatisticasPage() {
     const assuntosFiltrados = useMemo(
         () =>
             materiaId
-                ? assuntos.filter((a) => a.materia_id === materiaId)
+                ? assuntos.filter((a) => a.disciplina_id === materiaId)
                 : assuntos,
         [assuntos, materiaId]
     );
@@ -1110,7 +1672,7 @@ export default function EstatisticasPage() {
 
             <div className="flex flex-wrap gap-3 rounded-2xl border border-border bg-card p-4">
                 <div className="flex flex-col gap-1">
-                    <span className="text-xs text-muted-foreground">Matéria</span>
+                    <span className="text-xs text-muted-foreground">Disciplina</span>
                     <select
                         className="rounded-lg border border-border bg-muted px-3 py-2 text-sm"
                         value={materiaId}
@@ -1317,13 +1879,13 @@ export default function EstatisticasPage() {
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {!materiaId && (
-                    <Panel title="Top 5 matérias por tempo (min)">
+                    <Panel title="Top 5 disciplinas por tempo (min)">
                         <TinyBarH data={topMateriasTempo} />
                     </Panel>
                 )}
 
                 <Panel
-                    title={`Top 5 assuntos por tempo (min)${materiaId ? " — desta matéria" : ""
+                    title={`Top 5 assuntos por tempo (min)${materiaId ? " — desta disciplina" : ""
                         }`}
                 >
                     <TinyBarH data={topAssuntosTempo} />
@@ -1332,7 +1894,7 @@ export default function EstatisticasPage() {
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <Panel
-                    title={`Acerto por Matéria ${materiaId ? "(item selecionado)" : "(geral)"
+                    title={`Acerto por Disciplina ${materiaId ? "(item selecionado)" : "(geral)"
                         }`}
                 >
                     <TinyBarH data={matAcc} percent />
@@ -1348,7 +1910,7 @@ export default function EstatisticasPage() {
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <Panel
-                    title={`Onde estou pior — Matérias (acerto < ${WEAK_THRESHOLD}%, min. ${MIN_QTD_FRACO} questões)`}
+                    title={`Onde estou pior — Disciplinas (acerto < ${WEAK_THRESHOLD}%, min. ${MIN_QTD_FRACO} questões)`}
                 >
                     <WeakList
                         items={pioresMaterias}

@@ -112,12 +112,16 @@ type CadernoItem = {
 
 type QuestaoMin = {
     id: string;
+    questao_disciplina_id: string | null;
+    questao_assunto_id: string | null;
     disciplina: string | null;
     assunto: string | null;
 };
 
 type Questao = {
     id: string;
+    questao_disciplina_id?: string | null;
+    questao_assunto_id?: string | null;
     instituicao: string;
     cargo: string;
     disciplina: string;
@@ -176,6 +180,25 @@ export default function CadernosPageGeral() {
     // Cache: metadados mínimos das questões (id, disciplina, assunto)
     const [questoesMinMap, setQuestoesMinMap] = useState<Map<string, QuestaoMin>>(new Map());
 
+    // Catálogo canônico. O caderno não armazena disciplina/assunto:
+    // ele sempre resolve a classificação pela questão relacionada.
+    const [disciplinaCatalogoMap, setDisciplinaCatalogoMap] = useState<Record<string, string>>({});
+    const [assuntoCatalogoMap, setAssuntoCatalogoMap] = useState<Record<string, string>>({});
+
+    function nomeDisciplinaQuestao(q?: QuestaoMin | Questao | null) {
+        if (!q) return "Sem disciplina";
+        const id = q.questao_disciplina_id ?? null;
+        if (id && disciplinaCatalogoMap[id]) return disciplinaCatalogoMap[id];
+        return String(q.disciplina ?? "").trim() || "Sem disciplina";
+    }
+
+    function nomeAssuntoQuestao(q?: QuestaoMin | Questao | null) {
+        if (!q) return "Sem assunto";
+        const id = q.questao_assunto_id ?? null;
+        if (id && assuntoCatalogoMap[id]) return assuntoCatalogoMap[id];
+        return String(q.assunto ?? "").trim() || "Sem assunto";
+    }
+
     // Listas do passo
     const [disciplinas, setDisciplinas] = useState<DisciplinaResumo[]>([]);
     const [assuntos, setAssuntos] = useState<AssuntoResumo[]>([]);
@@ -193,7 +216,7 @@ export default function CadernosPageGeral() {
     const acertosPct = useMemo(() => pct(resumos.ACERTOS.anotadas, resumos.ACERTOS.questoes), [resumos.ACERTOS]);
     const tituloTipo = tipoSelecionado === "ERROS" ? "Erros" : "Acertos";
 
-    /* ===================== Load Inicial (OTIMIZADO + SEM JOIN) ===================== */
+    /* ===================== Load Inicial (CATÁLOGO CANÔNICO) ===================== */
     useEffect(() => {
         let mounted = true;
 
@@ -215,31 +238,65 @@ export default function CadernosPageGeral() {
             setUserId(uid);
 
             try {
-                // 1) Pega itens do caderno (leve)
-                const { data: itensData, error: itensErr } = await supabase
-                    .from("caderno_itens")
-                    .select("questao_id, tipo, anotacao, created_at")
-                    .eq("user_id", uid);
+                const [itensReq, disciplinasReq, assuntosReq] = await Promise.all([
+                    supabase
+                        .from("caderno_itens")
+                        .select("questao_id, tipo, anotacao, created_at")
+                        .eq("user_id", uid),
 
-                if (itensErr) throw itensErr;
+                    supabase
+                        .from("questao_disciplinas")
+                        .select("id,nome")
+                        .eq("user_id", uid)
+                        .eq("ativo", true)
+                        .order("nome"),
 
-                const itens = (itensData ?? []) as CadernoItem[];
+                    supabase
+                        .from("questao_assuntos")
+                        .select("id,nome,disciplina_id")
+                        .eq("user_id", uid)
+                        .eq("ativo", true)
+                        .order("nome"),
+                ]);
 
+                if (itensReq.error) throw itensReq.error;
+                if (disciplinasReq.error) throw disciplinasReq.error;
+                if (assuntosReq.error) throw assuntosReq.error;
+
+                const itens = (itensReq.data ?? []) as CadernoItem[];
                 const itensErros = itens.filter((i) => i.tipo === "ERROS");
                 const itensAcertos = itens.filter((i) => i.tipo === "ACERTOS");
 
                 setCacheItens({ ERROS: itensErros, ACERTOS: itensAcertos });
 
-                // 2) Busca metadados mínimos das questões referenciadas
-                const allIds = Array.from(new Set(itens.map((i) => i.questao_id))).filter(Boolean);
+                const localDiscMap: Record<string, string> = {};
+                for (const row of disciplinasReq.data ?? []) {
+                    localDiscMap[String(row.id)] = String(row.nome ?? "").trim();
+                }
+
+                const localAssMap: Record<string, string> = {};
+                for (const row of assuntosReq.data ?? []) {
+                    localAssMap[String(row.id)] = String(row.nome ?? "").trim();
+                }
+
+                setDisciplinaCatalogoMap(localDiscMap);
+                setAssuntoCatalogoMap(localAssMap);
+
+                // O caderno só guarda questao_id. Toda categorização vem da questão.
+                const allIds = Array.from(
+                    new Set(itens.map((i) => i.questao_id))
+                ).filter(Boolean);
 
                 const minMap = new Map<string, QuestaoMin>();
+
                 if (allIds.length) {
-                    // para não estourar limites de URL, fazemos em chunks
                     for (const part of chunk(allIds, 500)) {
                         const { data: qsMin, error: qsMinErr } = await supabase
                             .from("questoes")
-                            .select("id, disciplina, assunto")
+                            .select(
+                                "id,questao_disciplina_id,questao_assunto_id,disciplina,assunto"
+                            )
+                            .eq("user_id", uid)
                             .in("id", part);
 
                         if (qsMinErr) throw qsMinErr;
@@ -252,27 +309,47 @@ export default function CadernosPageGeral() {
 
                 setQuestoesMinMap(minMap);
 
-                // 3) Calcula resumos e tops (em memória)
+                const resolveDisc = (q?: QuestaoMin) => {
+                    const id = q?.questao_disciplina_id ?? null;
+                    if (id && localDiscMap[id]) return localDiscMap[id];
+                    return String(q?.disciplina ?? "").trim() || "Sem disciplina";
+                };
+
                 const calcResumo = (tipo: CadernoTipo) => {
                     const items = tipo === "ERROS" ? itensErros : itensAcertos;
 
                     let questoes = 0;
                     let anotadas = 0;
                     const disciplinasSet = new Set<string>();
-                    const byDisc: Record<string, { questoes: number; anotadas: number }> = {};
+                    const byDisc: Record<
+                        string,
+                        { questoes: number; anotadas: number }
+                    > = {};
 
                     for (const it of items) {
                         const q = minMap.get(it.questao_id);
-                        const disciplina = (q?.disciplina || "").trim() || "Sem disciplina";
-                        const anotada = !!(it.anotacao && it.anotacao.trim().length > 0);
+                        const disciplina = resolveDisc(q);
+                        const anotada = !!(
+                            it.anotacao &&
+                            it.anotacao.trim().length > 0
+                        );
 
                         questoes += 1;
                         if (anotada) anotadas += 1;
 
                         disciplinasSet.add(disciplina);
-                        if (!byDisc[disciplina]) byDisc[disciplina] = { questoes: 0, anotadas: 0 };
+
+                        if (!byDisc[disciplina]) {
+                            byDisc[disciplina] = {
+                                questoes: 0,
+                                anotadas: 0,
+                            };
+                        }
+
                         byDisc[disciplina].questoes += 1;
-                        if (anotada) byDisc[disciplina].anotadas += 1;
+                        if (anotada) {
+                            byDisc[disciplina].anotadas += 1;
+                        }
                     }
 
                     const resumo: ResumoTipo = {
@@ -283,7 +360,12 @@ export default function CadernosPageGeral() {
                     };
 
                     const top: DisciplinaResumo[] = Object.entries(byDisc)
-                        .map(([disciplina, v]) => ({ tipo, disciplina, questoes: v.questoes, anotadas: v.anotadas }))
+                        .map(([disciplina, v]) => ({
+                            tipo,
+                            disciplina,
+                            questoes: v.questoes,
+                            anotadas: v.anotadas,
+                        }))
                         .sort((a, b) => b.questoes - a.questoes)
                         .slice(0, 4);
 
@@ -303,7 +385,7 @@ export default function CadernosPageGeral() {
             } catch (e: any) {
                 setErro(e?.message || "Erro ao carregar cadernos.");
             } finally {
-                setLoading(false);
+                if (mounted) setLoading(false);
             }
         })();
 
@@ -328,7 +410,7 @@ export default function CadernosPageGeral() {
         const byDisc: Record<string, { questoes: number; anotadas: number }> = {};
         for (const it of items) {
             const q = questoesMinMap.get(it.questao_id);
-            const disciplina = (q?.disciplina || "").trim() || "Sem disciplina";
+            const disciplina = nomeDisciplinaQuestao(q);
             const anotada = !!(it.anotacao && it.anotacao.trim().length > 0);
 
             if (!byDisc[disciplina]) byDisc[disciplina] = { questoes: 0, anotadas: 0 };
@@ -357,10 +439,10 @@ export default function CadernosPageGeral() {
         const byAssunto: Record<string, { questoes: number; anotadas: number }> = {};
         for (const it of items) {
             const q = questoesMinMap.get(it.questao_id);
-            const disc = (q?.disciplina || "").trim() || "Sem disciplina";
+            const disc = nomeDisciplinaQuestao(q);
             if (disc !== disciplina) continue;
 
-            const assunto = (q?.assunto || "").trim() || "Sem assunto";
+            const assunto = nomeAssuntoQuestao(q);
             const anotada = !!(it.anotacao && it.anotacao.trim().length > 0);
 
             if (!byAssunto[assunto]) byAssunto[assunto] = { questoes: 0, anotadas: 0 };
@@ -394,15 +476,42 @@ export default function CadernosPageGeral() {
         const { data, error } = await supabase
             .from("questoes")
             .select(
-                "id, instituicao, cargo, disciplina, assunto, modalidade, banca, enunciado, alternativas, correta, explicacao, comentarios, erros, created_at"
+                "id, questao_disciplina_id, questao_assunto_id, instituicao, cargo, disciplina, assunto, modalidade, banca, enunciado, alternativas, correta, explicacao, comentarios, erros, created_at"
             )
             .in("id", slice);
 
         if (error) throw error;
 
         // mantém a ordem do slice
-        const map = new Map((data ?? []).map((q: any) => [q.id, q]));
-        const ordered = slice.map((id) => map.get(id)).filter(Boolean) as Questao[];
+        const map = new Map(
+            (data ?? []).map((q: any) => {
+                const canonicalDisciplina =
+                    (q.questao_disciplina_id &&
+                        disciplinaCatalogoMap[q.questao_disciplina_id]) ||
+                    String(q.disciplina ?? "").trim() ||
+                    "Sem disciplina";
+
+                const canonicalAssunto =
+                    (q.questao_assunto_id &&
+                        assuntoCatalogoMap[q.questao_assunto_id]) ||
+                    String(q.assunto ?? "").trim() ||
+                    "Sem assunto";
+
+                return [
+                    q.id,
+                    {
+                        ...q,
+                        disciplina: canonicalDisciplina,
+                        assunto: canonicalAssunto,
+                    },
+                ];
+            })
+        );
+
+        const ordered = slice
+            .map((id) => map.get(id))
+            .filter(Boolean) as Questao[];
+
         setQuestoes(ordered);
     }
 
@@ -422,8 +531,8 @@ export default function CadernosPageGeral() {
             const ids = items
                 .filter((it) => {
                     const q = questoesMinMap.get(it.questao_id);
-                    const disc = (q?.disciplina || "").trim() || "Sem disciplina";
-                    const ass = (q?.assunto || "").trim() || "Sem assunto";
+                    const disc = nomeDisciplinaQuestao(q);
+                    const ass = nomeAssuntoQuestao(q);
                     return disc === disciplinaSelecionada && ass === assunto;
                 })
                 .map((it) => it.questao_id);

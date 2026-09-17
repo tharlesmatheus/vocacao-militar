@@ -3,15 +3,15 @@
 // =====================================================================================
 // ARQUIVO: src/app/tempo-de-estudo/page.tsx
 // OBJETIVO (UI):
-// - Mostrar “Tempo de estudo” (pizza + lista) ao abrir, por matéria
+// - Mostrar “Tempo de estudo” (pizza + lista) ao abrir, por disciplina
 // - Permitir iniciar contagem (cronômetro) escolhendo Matéria + Assunto
 // - Permitir parar contagem e salvar no banco (via route.ts)
 // - Cada usuário vê apenas seus dados (RLS na tabela study_sessions)
 //
 // MELHORIA (PEDIDA):
-// - Cores do gráfico e identificação por matéria:
+// - Cores do gráfico e identificação por disciplina:
 //   - Paleta bonita e consistente (tons modernos e contrastantes)
-//   - Cor estável por nome de matéria (mesma matéria = mesma cor sempre)
+//   - Cor estável por nome de matéria (mesma disciplina = mesma cor sempre)
 //   - Legenda com “bolinha” colorida igual ao gráfico
 // =====================================================================================
 
@@ -23,15 +23,15 @@ import { ResponsiveContainer, PieChart, Pie, Tooltip, Cell } from "recharts";
  * Tipos
  * ========================= */
 type Materia = { id: string; nome: string };
-type Assunto = { id: string; nome: string; materia_id?: string | null };
+type Assunto = { id: string; nome: string; disciplina_id: string };
 
 type Slice = { name: string; seconds: number };
 
 type OpenSession = {
     id: string;
     started_at: string;
-    materia_id: string | null;
-    assunto_id: string | null;
+    disciplina_catalogo_id: string | null;
+    assunto_catalogo_id: string | null;
     mode: "cronometro" | "manual";
 };
 
@@ -66,7 +66,7 @@ const COLOR_PALETTE = [
 
 /**
  * Hash simples e determinístico para associar uma cor estável ao texto.
- * - Evita que a mesma matéria mude de cor ao atualizar/paginar.
+ * - Evita que a mesma disciplina mude de cor ao atualizar/paginar.
  * - Não precisa de dependências.
  */
 function hashStringToInt(input: string): number {
@@ -142,11 +142,11 @@ function getRangeStart(range: RangeKey): Date | null {
 }
 
 /**
- * Soma sessões por matéria (segundos) para montar o gráfico.
+ * Soma sessões por disciplina (segundos) para montar o gráfico.
  * - Inclui sessões finalizadas + (opcional) sessão aberta em tempo real.
  */
 function buildSlices(
-    sessions: Array<{ materia_id: string | null; duration_seconds: number | null }>,
+    sessions: Array<{ disciplina_catalogo_id: string | null; duration_seconds: number | null }>,
     matName: Record<string, string>,
     openSession?: OpenSession | null,
     openElapsedSec?: number
@@ -154,20 +154,20 @@ function buildSlices(
     const byMat: Record<string, number> = {};
 
     for (const s of sessions) {
-        const matId = s.materia_id ?? "SEM_MATERIA";
+        const matId = s.disciplina_catalogo_id ?? "SEM_MATERIA";
         const dur = Number(s.duration_seconds ?? 0);
         byMat[matId] = (byMat[matId] ?? 0) + Math.max(0, dur);
     }
 
     // Inclui sessão aberta (se existir)
     if (openSession && typeof openElapsedSec === "number" && openElapsedSec > 0) {
-        const matId = openSession.materia_id ?? "SEM_MATERIA";
+        const matId = openSession.disciplina_catalogo_id ?? "SEM_MATERIA";
         byMat[matId] = (byMat[matId] ?? 0) + Math.max(0, Math.floor(openElapsedSec));
     }
 
     const slices: Slice[] = Object.entries(byMat)
         .map(([id, seconds]) => ({
-            name: id === "SEM_MATERIA" ? "Sem matéria" : matName[id] || "Matéria",
+            name: id === "SEM_MATERIA" ? "Sem disciplina" : matName[id] || "Disciplina",
             seconds,
         }))
         .filter((x) => x.seconds > 0)
@@ -202,7 +202,7 @@ export default function TempoDeEstudoPage() {
 
     // dados agregados (sessões finalizadas)
     const [sessions, setSessions] = useState<
-        Array<{ materia_id: string | null; duration_seconds: number | null }>
+        Array<{ disciplina_catalogo_id: string | null; duration_seconds: number | null }>
     >([]);
 
     // controle de intervalo do cronômetro
@@ -223,10 +223,10 @@ export default function TempoDeEstudoPage() {
                 const user = auth?.user;
                 if (!user?.id) throw new Error("Sem usuário autenticado.");
 
-                // Carrega matérias/assuntos em paralelo (padrão parecido com sua página de estatísticas)
+                // Carrega disciplinas/assuntos em paralelo (padrão parecido com sua página de estatísticas)
                 const [mats, asss] = await Promise.all([
-                    supabase.from("materias").select("id,nome").eq("user_id", user.id),
-                    supabase.from("assuntos").select("id,nome,materia_id").eq("user_id", user.id),
+                    supabase.from("questao_disciplinas").select("id,nome").eq("user_id", user.id).eq("ativo", true).order("nome"),
+                    supabase.from("questao_assuntos").select("id,nome,disciplina_id").eq("user_id", user.id).eq("ativo", true).order("nome"),
                 ]);
 
                 if (!mounted) return;
@@ -247,7 +247,7 @@ export default function TempoDeEstudoPage() {
                 // Busca sessão aberta (se existir)
                 const { data: open } = await supabase
                     .from("study_sessions")
-                    .select("id, started_at, materia_id, assunto_id, mode")
+                    .select("id, started_at, disciplina_catalogo_id, assunto_catalogo_id, mode")
                     .eq("user_id", user.id)
                     .is("ended_at", null)
                     .order("started_at", { ascending: false })
@@ -291,7 +291,7 @@ export default function TempoDeEstudoPage() {
 
                 let q = supabase
                     .from("study_sessions")
-                    .select("materia_id,duration_seconds,started_at,ended_at")
+                    .select("disciplina_catalogo_id,duration_seconds,started_at,ended_at")
                     .eq("user_id", user.id)
                     .not("duration_seconds", "is", null)
                     .not("ended_at", "is", null)
@@ -357,10 +357,10 @@ export default function TempoDeEstudoPage() {
     }, [openSession?.started_at]);
 
     /**
-     * Filtra assuntos conforme matéria selecionada.
+     * Filtra assuntos conforme disciplina selecionada.
      */
     const assuntosFiltrados = useMemo(
-        () => (materiaId ? assuntos.filter((a) => a.materia_id === materiaId) : assuntos),
+        () => (materiaId ? assuntos.filter((a) => a.disciplina_id === materiaId) : assuntos),
         [assuntos, materiaId]
     );
 
@@ -375,7 +375,7 @@ export default function TempoDeEstudoPage() {
     const totalSeconds = useMemo(() => slices.reduce((acc, s) => acc + s.seconds, 0), [slices]);
 
     /**
-     * Mapa de cores por matéria (baseado no nome).
+     * Mapa de cores por disciplina (baseado no nome).
      * - Garante que cada item tenha cor consistente.
      */
     const colorMap = useMemo(() => {
@@ -402,7 +402,7 @@ export default function TempoDeEstudoPage() {
 
         try {
             if (!materiaId) {
-                setErro("Selecione uma Matéria para iniciar.");
+                setErro("Selecione uma Disciplina para iniciar.");
                 return;
             }
 
@@ -414,8 +414,8 @@ export default function TempoDeEstudoPage() {
                 body: JSON.stringify({
                     action: "start",
                     access_token,
-                    materia_id: materiaId,
-                    assunto_id: assuntoId || null,
+                    disciplina_catalogo_id: materiaId,
+                    assunto_catalogo_id: assuntoId || null,
                 }),
             });
 
@@ -461,7 +461,7 @@ export default function TempoDeEstudoPage() {
             const from = getRangeStart(range);
             let q = supabase
                 .from("study_sessions")
-                .select("materia_id,duration_seconds,started_at,ended_at")
+                .select("disciplina_catalogo_id,duration_seconds,started_at,ended_at")
                 .not("duration_seconds", "is", null)
                 .not("ended_at", "is", null)
                 .order("started_at", { ascending: false });
@@ -516,7 +516,7 @@ export default function TempoDeEstudoPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1">
-                        <span className="text-xs text-muted-foreground">Matéria</span>
+                        <span className="text-xs text-muted-foreground">Disciplina</span>
                         <select
                             className="bg-muted border border-border rounded-lg px-3 py-2 text-sm"
                             value={materiaId}
@@ -559,8 +559,8 @@ export default function TempoDeEstudoPage() {
                         <div className="min-w-[240px]">
                             <div className="text-sm font-semibold">Sessão em andamento</div>
                             <div className="text-xs text-muted-foreground">
-                                {openSession.materia_id ? matName[openSession.materia_id] : "Sem matéria"}
-                                {openSession.assunto_id ? ` • ${assName[openSession.assunto_id] ?? "Assunto"}` : ""}
+                                {openSession.disciplina_catalogo_id ? matName[openSession.disciplina_catalogo_id] : "Sem disciplina"}
+                                {openSession.assunto_catalogo_id ? ` • ${assName[openSession.assunto_catalogo_id] ?? "Assunto"}` : ""}
                             </div>
                         </div>
 
@@ -579,7 +579,7 @@ export default function TempoDeEstudoPage() {
                         className="px-6 py-3 rounded-2xl bg-primary text-primary-foreground font-semibold disabled:opacity-60"
                         onClick={handleStart}
                         disabled={loading || !materiaId}
-                        title="Inicia o cronômetro na matéria/assunto selecionados"
+                        title="Inicia o cronômetro na disciplina/assunto selecionados"
                     >
                         Iniciar atividade
                     </button>
@@ -592,7 +592,7 @@ export default function TempoDeEstudoPage() {
             {/* BLOCO: gráfico pizza */}
             <div className="rounded-2xl bg-card border border-border p-4">
                 <div className="flex items-center justify-between mb-2">
-                    <h2 className="font-semibold">Todas as matérias</h2>
+                    <h2 className="font-semibold">Todas as disciplinas</h2>
                     <span className="text-xs text-muted-foreground">{range.toUpperCase()}</span>
                 </div>
 
@@ -641,7 +641,7 @@ export default function TempoDeEstudoPage() {
                                 {fmtHMSFull(totalSeconds)}
                             </div>
 
-                            {/* Lista/legenda com cor por matéria */}
+                            {/* Lista/legenda com cor por disciplina */}
                             <div className="space-y-2">
                                 {slices.map((s) => {
                                     const pct = totalSeconds ? Math.round((s.seconds / totalSeconds) * 100) : 0;

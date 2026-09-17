@@ -393,8 +393,9 @@ export default function NovaQuestaoGeminiLote() {
 
     /*
      * Edital/Matéria/Assunto abaixo continuam existindo apenas para o
-     * cronômetro e para flashcards, pois esses módulos antigos ainda usam
-     * as tabelas editais/materias/assuntos. Eles NÃO classificam a questão.
+     * cronômetro / tempo de estudo, que ainda usa as tabelas
+     * editais/materias/assuntos. Eles NÃO classificam a questão e não são
+     * necessários para criar flashcards.
      */
     const editalSelecionado = useMemo(
         () => editais.find((e) => e.id === editalId) ?? null,
@@ -1037,7 +1038,8 @@ export default function NovaQuestaoGeminiLote() {
 
                 /*
                  * O bloco a seguir restaura SOMENTE o vínculo antigo de estudo
-                 * usado pelo cronômetro/flashcards. Ele não classifica a questão.
+                 * usado pelo cronômetro / tempo de estudo. Ele não classifica a
+                 * questão e não interfere na classificação dos flashcards.
                  */
                 const savedEdital =
                     window.localStorage.getItem(
@@ -2070,13 +2072,38 @@ Retorne SOMENTE JSON válido:
     ) {
         if (!userId) return;
 
+        if (
+            !disciplinaCatalogoSelecionada ||
+            !assuntoCatalogoSelecionado
+        ) {
+            throw new Error(
+                "A classificação canônica da questão está incompleta para criar o flashcard."
+            );
+        }
+
         const { error } = await supabase
             .from("flashcards")
             .insert({
                 user_id: userId,
-                edital_id: editalId,
-                materia_id: materiaId,
-                assunto_id: assuntoId,
+
+                /*
+                 * O flashcard herda diretamente a MESMA classificação canônica
+                 * da questão. Não depende de edital, matéria ou assunto antigos.
+                 */
+                disciplina_catalogo_id:
+                    disciplinaCatalogoSelecionada.id,
+                assunto_catalogo_id:
+                    assuntoCatalogoSelecionado.id,
+
+                /*
+                 * Campos legados preservados apenas quando o usuário também
+                 * estiver usando o cronômetro com um vínculo de estudo antigo.
+                 * Após o SQL de transição, eles podem ficar NULL.
+                 */
+                edital_id: editalId || null,
+                materia_id: materiaId || null,
+                assunto_id: assuntoId || null,
+
                 questao_origem_id: questaoId,
                 frente: q.flashcardFrente.trim(),
                 verso: q.flashcardVerso.trim(),
@@ -2417,21 +2444,6 @@ Retorne SOMENTE JSON válido:
         if (flashcardsNaoConfirmados.length) {
             setErro(
                 "Confirme a prévia de todos os flashcards antes de salvar."
-            );
-            return;
-        }
-
-        const existemFlashcards =
-            questoesProcessadas.some(
-                (q) => q.criarFlashcard
-            );
-
-        if (
-            existemFlashcards &&
-            (!editalId || !materiaId || !assuntoId)
-        ) {
-            setErro(
-                "Para salvar flashcards, selecione também Edital, Disciplina e Assunto no bloco 'Tempo de estudo / vínculo para flashcards'. A questão em si continuará sem vínculo obrigatório com edital."
             );
             return;
         }
@@ -2915,8 +2927,9 @@ Retorne SOMENTE JSON válido:
 
                             <p className="mt-1 text-xs text-muted-foreground">
                                 Este vínculo é separado da classificação da questão.
-                                Ele existe apenas para o cronômetro e para os flashcards,
-                                pois esses módulos ainda usam Edital/Matéria/Assunto.
+                                Ele existe apenas para o cronômetro / tempo de estudo.
+                                Os flashcards já herdam automaticamente a disciplina e
+                                o assunto do catálogo canônico da questão.
                             </p>
                         </div>
 
@@ -2931,11 +2944,12 @@ Retorne SOMENTE JSON válido:
                     <div className="mt-5 rounded-2xl border border-border bg-background p-4">
                         <div className="mb-3">
                             <div className="text-sm font-semibold">
-                                Vínculo de estudo / flashcards
+                                Vínculo do cronômetro
                             </div>
                             <p className="mt-1 text-xs text-muted-foreground">
-                                Opcional para salvar a questão. Necessário apenas para iniciar
-                                o cronômetro ou salvar um flashcard no modelo atual.
+                                Opcional para salvar questões e flashcards. Selecione
+                                Edital, Disciplina e Assunto aqui somente quando quiser
+                                registrar o tempo de estudo nessa estrutura.
                             </p>
                         </div>
 
@@ -3166,7 +3180,7 @@ Retorne SOMENTE JSON válido:
                     </h2>
 
                     <p className="mt-1 text-xs text-muted-foreground">
-                        Escolha se deseja estruturar a questão com IA ou cadastrar tudo manualmente. Os dois caminhos salvam no mesmo banco e usam o mesmo fluxo de estatísticas, cadernos e flashcards.
+                        Escolha se deseja estruturar a questão com IA ou cadastrar tudo manualmente. Os dois caminhos salvam no mesmo banco e usam o mesmo fluxo de estatísticas, cadernos e flashcards canônicos.
                     </p>
 
                     <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -3596,11 +3610,11 @@ QUESTÃO 4 ...
                                                 <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-xs text-red-700">
                                                     Esta tentativa entrará nas estatísticas e a questão será enviada automaticamente para o Caderno de Erros de{" "}
                                                     <strong>
-                                                        {materiaSelecionada?.nome ?? "Disciplina"}
+                                                        {disciplinaCatalogoSelecionada?.nome ?? "Disciplina"}
                                                     </strong>
                                                     {" / "}
                                                     <strong>
-                                                        {assuntoSelecionado?.nome ?? "Assunto"}
+                                                        {assuntoCatalogoSelecionado?.nome ?? "Assunto"}
                                                     </strong>
                                                     .
                                                 </div>
@@ -3611,11 +3625,11 @@ QUESTÃO 4 ...
                                                 <div className="mt-3 rounded-xl bg-green-50 px-4 py-3 text-xs text-green-700">
                                                     Esta tentativa será registrada como acerto nas estatísticas de{" "}
                                                     <strong>
-                                                        {materiaSelecionada?.nome ?? "Disciplina"}
+                                                        {disciplinaCatalogoSelecionada?.nome ?? "Disciplina"}
                                                     </strong>
                                                     {" / "}
                                                     <strong>
-                                                        {assuntoSelecionado?.nome ?? "Assunto"}
+                                                        {assuntoCatalogoSelecionado?.nome ?? "Assunto"}
                                                     </strong>
                                                     .
                                                 </div>
