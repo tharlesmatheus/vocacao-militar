@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import {
     BarChart3,
     BookOpenCheck,
@@ -19,7 +19,10 @@ type MenuItem = {
     href: string;
     label: string;
     description?: string;
-    icon: React.ComponentType<{ size?: number; className?: string }>;
+    icon: ComponentType<{
+        size?: number;
+        className?: string;
+    }>;
 };
 
 const ITEMS: MenuItem[] = [
@@ -72,7 +75,13 @@ function isActive(pathname: string, href: string) {
     return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export default function AppMenu() {
+/*
+ * IMPORTANTE:
+ * O layout atual importa { Sidebar } de "@/components/Sidebar".
+ * Por isso este arquivo exporta Sidebar de forma NOMEADA e também
+ * como default para continuar compatível com ambos os estilos.
+ */
+export function Sidebar() {
     const pathname = usePathname();
     const [open, setOpen] = useState(false);
 
@@ -123,7 +132,10 @@ export default function AppMenu() {
                     <div className="space-y-1">
                         {ITEMS.map((item) => {
                             const Icon = item.icon;
-                            const active = isActive(pathname, item.href);
+                            const active = isActive(
+                                pathname,
+                                item.href
+                            );
 
                             return (
                                 <Link
@@ -152,7 +164,9 @@ export default function AppMenu() {
                                                         : "text-muted-foreground"
                                                     }`}
                                             >
-                                                {item.description}
+                                                {
+                                                    item.description
+                                                }
                                             </span>
                                         )}
                                     </span>
@@ -163,10 +177,20 @@ export default function AppMenu() {
                 </nav>
 
                 <div className="border-t border-border p-4 text-xs text-muted-foreground">
-                    O cadastro de categorias de questões fica exclusivamente em
-                    <span className="font-semibold text-foreground"> /catalogo</span>.
+                    O cadastro das categorias de questões é feito
+                    exclusivamente em{" "}
+                    <Link
+                        href="/catalogo"
+                        onClick={() => setOpen(false)}
+                        className="font-semibold text-foreground hover:underline"
+                    >
+                        /catalogo
+                    </Link>
+                    .
                 </div>
             </aside>
         </>
     );
 }
+
+export default Sidebar;
