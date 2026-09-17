@@ -4,27 +4,38 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ComponentType } from "react";
 import {
-    BarChart3,
-    BookOpenCheck,
+    BarChart2,
+    BookOpen,
+    Brain,
+    CalendarDays,
     ChevronLeft,
     ChevronRight,
-    Clock3,
+    Clock,
     FileText,
+    History,
     Home,
+    Layers3,
     Menu,
-    RotateCcw,
+    NotebookText,
+    PlusCircle,
     Tags,
+    Trophy,
+    User,
     X,
 } from "lucide-react";
 
 type MenuItem = {
+    name: string;
     href: string;
-    label: string;
-    description?: string;
     icon: ComponentType<{
         size?: number;
         className?: string;
     }>;
+};
+
+type MenuGroup = {
+    category: string;
+    items: MenuItem[];
 };
 
 export type SidebarProps = {
@@ -32,48 +43,35 @@ export type SidebarProps = {
     onCollapsedChange?: (collapsed: boolean) => void;
 };
 
-const ITEMS: MenuItem[] = [
+const MENU: MenuGroup[] = [
     {
-        href: "/",
-        label: "Início",
-        description: "Visão geral",
-        icon: Home,
+        category: "PRINCIPAL",
+        items: [
+            { name: "Dashboard", href: "/", icon: Home },
+            { name: "Estatísticas", href: "/estatisticas", icon: BarChart2 },
+            { name: "Conquistas", href: "/conquistas", icon: Trophy },
+        ],
     },
     {
-        href: "/questoes",
-        label: "Questões",
-        description: "Lançar e resolver questões",
-        icon: BookOpenCheck,
+        category: "ESTUDO",
+        items: [
+            { name: "Novas Questões", href: "/landing", icon: PlusCircle },
+            { name: "Questões", href: "/questoes", icon: Brain },
+            { name: "Catálogo", href: "/catalogo", icon: Tags },
+            { name: "Cadernos", href: "/cadernos", icon: NotebookText },
+            { name: "Flash Cards", href: "/flashcards", icon: Layers3 },
+            { name: "Edital", href: "/edital", icon: BookOpen },
+            { name: "Resumos", href: "/resumos", icon: FileText },
+            { name: "Revisão", href: "/revisao", icon: History },
+            { name: "Cronograma", href: "/cronograma", icon: CalendarDays },
+            { name: "Tempo de estudo", href: "/tempo-de-estudo", icon: Clock },
+        ],
     },
     {
-        href: "/catalogo",
-        label: "Catálogo",
-        description: "Instituições, cargos, bancas, disciplinas e assuntos",
-        icon: Tags,
-    },
-    {
-        href: "/revisao",
-        label: "Revisões",
-        description: "Cadernos e revisão espaçada",
-        icon: RotateCcw,
-    },
-    {
-        href: "/edital",
-        label: "Edital",
-        description: "Estrutura do plano de estudos",
-        icon: FileText,
-    },
-    {
-        href: "/estatisticas",
-        label: "Estatísticas",
-        description: "Desempenho e evolução",
-        icon: BarChart3,
-    },
-    {
-        href: "/tempo-de-estudo",
-        label: "Tempo de estudo",
-        description: "Histórico de sessões",
-        icon: Clock3,
+        category: "CONFIGURAÇÕES",
+        items: [
+            { name: "Meu Perfil", href: "/perfil", icon: User },
+        ],
     },
 ];
 
@@ -97,7 +95,7 @@ export function Sidebar({
 
     return (
         <>
-            {/* Botão mobile */}
+            {/* Botão do menu no mobile */}
             <button
                 type="button"
                 onClick={() => setMobileOpen(true)}
@@ -132,15 +130,18 @@ export function Sidebar({
                         href="/"
                         onClick={() => setMobileOpen(false)}
                         className="min-w-0 font-bold tracking-tight"
-                        title={collapsed ? "Estudos" : undefined}
+                        title={collapsed ? "Vocação Militar" : undefined}
                     >
-                        <span className="lg:hidden">Estudos</span>
+                        <span className="lg:hidden">Vocação Militar</span>
+
                         {collapsed ? (
-                            <span className="hidden lg:inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground">
-                                E
+                            <span className="hidden h-9 w-9 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground lg:inline-flex">
+                                VM
                             </span>
                         ) : (
-                            <span className="hidden lg:inline">Estudos</span>
+                            <span className="hidden lg:inline">
+                                Vocação Militar
+                            </span>
                         )}
                     </Link>
 
@@ -156,61 +157,72 @@ export function Sidebar({
 
                 {/* Navegação */}
                 <nav className="flex-1 overflow-y-auto p-3">
-                    <div className="space-y-1">
-                        {ITEMS.map((item) => {
-                            const Icon = item.icon;
-                            const active = isActive(pathname, item.href);
-
-                            return (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    onClick={() => setMobileOpen(false)}
-                                    title={collapsed ? item.label : undefined}
-                                    className={`flex rounded-2xl transition ${collapsed
-                                            ? "items-center gap-3 px-3 py-3 lg:justify-center lg:px-2"
-                                            : "items-start gap-3 px-3 py-3"
-                                        } ${active
-                                            ? "bg-primary text-primary-foreground"
-                                            : "text-foreground hover:bg-muted"
+                    <div className="space-y-5">
+                        {MENU.map((group) => (
+                            <section key={group.category}>
+                                <div
+                                    className={`mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground ${collapsed ? "lg:hidden" : ""
                                         }`}
                                 >
-                                    <Icon
-                                        size={19}
-                                        className={`shrink-0 ${collapsed ? "" : "mt-0.5"
-                                            }`}
-                                    />
+                                    {group.category}
+                                </div>
 
-                                    {/* Mobile sempre exibe texto. Desktop recolhido esconde. */}
-                                    <span
-                                        className={`min-w-0 ${collapsed ? "lg:hidden" : ""
-                                            }`}
-                                    >
-                                        <span className="block text-sm font-semibold">
-                                            {item.label}
-                                        </span>
+                                <div className="space-y-1">
+                                    {group.items.map((item) => {
+                                        const Icon = item.icon;
+                                        const active = isActive(
+                                            pathname,
+                                            item.href
+                                        );
 
-                                        {item.description && (
-                                            <span
-                                                className={`mt-0.5 block text-xs leading-relaxed ${active
-                                                        ? "text-primary-foreground/75"
-                                                        : "text-muted-foreground"
+                                        return (
+                                            <Link
+                                                key={item.href}
+                                                href={item.href}
+                                                onClick={() =>
+                                                    setMobileOpen(false)
+                                                }
+                                                title={
+                                                    collapsed
+                                                        ? item.name
+                                                        : undefined
+                                                }
+                                                className={`flex rounded-2xl transition ${collapsed
+                                                        ? "items-center gap-3 px-3 py-3 lg:justify-center lg:px-2"
+                                                        : "items-center gap-3 px-3 py-3"
+                                                    } ${active
+                                                        ? "bg-primary text-primary-foreground"
+                                                        : "text-foreground hover:bg-muted"
                                                     }`}
                                             >
-                                                {item.description}
-                                            </span>
-                                        )}
-                                    </span>
-                                </Link>
-                            );
-                        })}
+                                                <Icon
+                                                    size={19}
+                                                    className="shrink-0"
+                                                />
+
+                                                <span
+                                                    className={`min-w-0 text-sm font-medium ${collapsed
+                                                            ? "lg:hidden"
+                                                            : ""
+                                                        }`}
+                                                >
+                                                    {item.name}
+                                                </span>
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
+                            </section>
+                        ))}
                     </div>
                 </nav>
 
                 {/* Rodapé */}
                 <div className="shrink-0 border-t border-border">
                     <div
-                        className={`p-3 ${collapsed ? "lg:flex lg:justify-center" : ""
+                        className={`p-3 ${collapsed
+                                ? "lg:flex lg:justify-center"
+                                : ""
                             }`}
                     >
                         <button
@@ -232,6 +244,7 @@ export function Sidebar({
                             }
                         >
                             {!collapsed && <span>Recolher menu</span>}
+
                             {collapsed ? (
                                 <ChevronRight size={18} />
                             ) : (
@@ -241,17 +254,18 @@ export function Sidebar({
                     </div>
 
                     <div
-                        className={`px-4 pb-4 text-xs text-muted-foreground ${collapsed ? "lg:hidden" : ""
+                        className={`px-4 pb-4 text-xs leading-relaxed text-muted-foreground ${collapsed ? "lg:hidden" : ""
                             }`}
                     >
-                        O cadastro das categorias de questões é feito
-                        exclusivamente em{" "}
+                        Cadastros de instituições, cargos, bancas,
+                        disciplinas e assuntos:
+                        {" "}
                         <Link
                             href="/catalogo"
                             onClick={() => setMobileOpen(false)}
                             className="font-semibold text-foreground hover:underline"
                         >
-                            /catalogo
+                            Catálogo
                         </Link>
                         .
                     </div>
