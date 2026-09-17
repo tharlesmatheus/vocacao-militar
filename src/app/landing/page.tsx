@@ -1,26 +1,35 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-/*
- * A chave do Gemini não fica mais no client.
- * Toda chamada de IA passa pelo endpoint server-side /api/gemini.
- */
+/* ========================================================================== */
+/* IA: somente conteúdo da questão.                                           */
+/* A IA NÃO recebe nem devolve instituição/cargo/banca/disciplina/assunto.   */
+/* ========================================================================== */
 
 const PROMPT_PREFIX = `
 Receba a questão de concurso abaixo e extraia SOMENTE os campos:
-instituicao, cargo, modalidade, banca, enunciado, alternativas, correta, explicacao.
+modalidade, enunciado, alternativas, correta, explicacao.
+
+IMPORTANTE SOBRE CLASSIFICAÇÃO
+- NÃO identifique, escolha, sugira ou devolva instituição.
+- NÃO identifique, escolha, sugira ou devolva cargo.
+- NÃO identifique, escolha, sugira ou devolva banca.
+- NÃO identifique, escolha, sugira ou devolva disciplina.
+- NÃO identifique, escolha, sugira ou devolva assunto.
+- Esses dados são escolhidos pelo usuário em catálogos controlados pelo banco.
 
 REGRAS GERAIS
-1. NÃO escolha disciplina nem assunto. Esses campos serão definidos pelo usuário.
-2. Não invente instituição, cargo, banca, datas, números, leis, artigos, súmulas, precedentes ou referências.
+1. Preserve fielmente o sentido do enunciado e das alternativas.
+2. Não invente datas, números, leis, artigos, súmulas, precedentes ou referências.
 3. Quando uma informação não estiver presente ou não puder ser determinada com segurança, use string vazia.
-4. Preserve fielmente o sentido do enunciado e das alternativas.
-5. "alternativas" deve ser um objeto JSON:
+4. "alternativas" deve ser um objeto JSON, por exemplo:
    { "A": "...", "B": "...", "C": "...", "D": "...", "E": "..." }
-6. "correta" deve conter somente a identificação do gabarito:
+5. "correta" deve conter somente a identificação do gabarito:
    "A", "B", "C", "D", "E", "Certo" ou "Errado".
+6. "modalidade" deve ser somente "Multipla Escolha" ou "Certo ou Errado".
 7. Retorne SOMENTE JSON válido.
 8. Não use markdown, cercas de código ou texto fora do JSON.
 
@@ -31,72 +40,21 @@ REGRAS PARA O GABARITO
 12. Não invente um gabarito quando ele não puder ser determinado com segurança.
 
 REGRAS PARA A EXPLICAÇÃO
-13. A explicação deve ser tecnicamente correta, objetiva, didática e voltada para estudo de concurso.
-
+13. A explicação deve ser objetiva, didática e voltada para estudo de concurso.
 14. Use esta ordem de prioridade como fonte:
     a) gabarito explícito fornecido;
     b) comentário, resolução ou justificativa fornecida junto da questão;
     c) enunciado e alternativas;
-    d) conhecimento consolidado necessário apenas para tornar a explicação compreensível.
-
-15. Se houver comentário ou resolução fornecida:
-    - preserve o conteúdo técnico relevante;
-    - reescreva em linguagem clara, organizada e didática;
-    - não mude a conclusão;
-    - não acrescente fundamentos específicos que não possam ser sustentados com segurança;
-    - corrija somente erros materiais ou de redação evidentes que não alterem o sentido.
-
-16. Se NÃO houver comentário:
-    - explique por que o gabarito está correto;
-    - destaque a regra, conceito ou raciocínio central cobrado;
-    - explique alternativas incorretas somente quando isso for útil para compreender a questão;
-    - não invente justificativas específicas.
-
-17. A explicação deve preferencialmente seguir esta estrutura textual:
-    - resposta correta;
-    - fundamento ou regra central;
-    - aplicação dessa regra ao enunciado;
-    - pegadinha ou ponto de atenção, se realmente existir.
-
-18. Evite explicações genéricas como:
-    "A alternativa está correta porque está de acordo com a legislação."
-    Diga QUAL é a regra e COMO ela se aplica, somente quando houver base segura para isso.
-
-REGRAS DE EXATIDÃO E ATUALIZAÇÃO
-19. Não declare que uma informação está "atualizada", "vigente" ou representa o "entendimento atual" se isso não puder ser confirmado a partir do material fornecido ou de uma fonte externa confiável.
-
-20. Em temas sujeitos a alteração, especialmente:
-    - legislação;
-    - jurisprudência;
-    - súmulas;
-    - entendimento de tribunais;
-    - normas administrativas;
-    - dados estatísticos;
-    - prazos ou regras que possam ter mudado;
-
-    não invente atualização.
-
-21. Se o material fornecido indicar expressamente uma lei, artigo, decisão, súmula, data ou entendimento, utilize essa informação respeitando exatamente o que foi fornecido.
-
-22. Se houver indício de que a questão ou comentário pode estar desatualizado e não for possível confirmar a situação atual, acrescente ao final da explicação, de forma curta:
-    "Atenção: este ponto pode depender da legislação ou jurisprudência vigente à época da questão."
-
-23. Nunca crie número de artigo, inciso, súmula, tema, precedente ou processo por aproximação.
-
-24. Não confunda:
-    - regra geral com exceção;
-    - texto legal com interpretação jurisprudencial;
-    - entendimento majoritário com regra absoluta;
-    - situação vigente hoje com situação vigente na data da prova.
-
-25. A explicação deve ser suficiente para que o estudante entenda o motivo do gabarito sem precisar reler uma resposta excessivamente longa.
+    d) conhecimento consolidado apenas quando necessário para tornar a explicação compreensível.
+15. Se houver comentário ou resolução fornecida, preserve o conteúdo técnico relevante e não mude a conclusão.
+16. Se NÃO houver comentário, explique por que o gabarito está correto sem inventar fundamentos específicos.
+17. Evite explicações genéricas. Diga a regra e como ela se aplica quando houver base segura.
+18. Não declare que uma informação está "atualizada", "vigente" ou representa o "entendimento atual" sem base segura.
+19. Nunca crie número de artigo, inciso, súmula, tema, precedente ou processo por aproximação.
 
 Formato obrigatório:
 {
-  "instituicao": "",
-  "cargo": "",
   "modalidade": "",
-  "banca": "",
   "enunciado": "",
   "alternativas": {
     "A": "",
@@ -112,63 +70,48 @@ Formato obrigatório:
 Questão:
 `;
 
+/* ========================================================================== */
+/* Tipos                                                                      */
+/* ========================================================================== */
+
 type ResultadoTentativa = "ACERTO" | "ERRO";
 type ModoInsercao = "IA" | "MANUAL";
-type ModoFlashcard = "IA" | "MANUAL" | null;
-
-type Edital = {
-    id: string;
-    nome: string;
-};
-
-type Materia = {
-    id: string;
-    nome: string;
-    edital_id?: string | null;
-};
-
-type Assunto = {
-    id: string;
-    nome: string;
-    materia_id?: string | null;
-};
-
-type OpenStudySession = {
-    id: string;
-    started_at: string;
-    materia_id: string | null;
-    assunto_id: string | null;
-    mode: "cronometro" | "manual";
-};
-
 type Alternativas = Record<string, string>;
+
+type CatalogBase = {
+    id: string;
+    nome: string;
+    ativo: boolean;
+};
+
+type Instituicao = CatalogBase & {
+    sigla: string | null;
+};
+
+type Cargo = CatalogBase;
+
+type Banca = CatalogBase & {
+    sigla: string | null;
+};
+
+type Disciplina = CatalogBase;
+
+type Assunto = CatalogBase & {
+    disciplina_id: string;
+};
 
 type QuestaoProcessada = {
     localId: string;
     numero: number;
     textoOriginal: string;
     origem: ModoInsercao;
-
-    instituicao: string;
-    cargo: string;
     modalidade: string;
-    banca: string;
     enunciado: string;
     alternativas: Alternativas;
     correta: string;
     explicacao: string;
-
     resultado: ResultadoTentativa | "";
     salvarNoCadernoAcertos: boolean;
-
-    criarFlashcard: boolean;
-    flashcardFrente: string;
-    flashcardVerso: string;
-    flashcardGerando: boolean;
-    flashcardErro: string;
-    flashcardVersao: number;
-    flashcardConfirmado: boolean;
-    flashcardModo: ModoFlashcard;
 };
 
 type FalhaProcessamento = {
@@ -184,23 +127,84 @@ type ResultadoSalvamento = {
     erro?: string;
 };
 
+/* ========================================================================== */
+/* Helpers                                                                    */
+/* ========================================================================== */
+
+function formatarErro(error: unknown): string {
+    if (error instanceof Error) return error.message;
+
+    if (error && typeof error === "object" && "message" in error) {
+        return String((error as { message?: unknown }).message ?? "Erro inesperado.");
+    }
+
+    return "Erro inesperado.";
+}
+
+function criarLocalId() {
+    if (
+        typeof crypto !== "undefined" &&
+        typeof crypto.randomUUID === "function"
+    ) {
+        return crypto.randomUUID();
+    }
+
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function extrairJson(texto: string): any {
+    let jsonStr = String(texto ?? "")
+        .replace(/```json/gi, "")
+        .replace(/```/g, "")
+        .trim();
+
+    const firstBrace = jsonStr.indexOf("{");
+    const lastBrace = jsonStr.lastIndexOf("}");
+
+    if (firstBrace !== -1 && lastBrace !== -1) {
+        jsonStr = jsonStr.slice(firstBrace, lastBrace + 1);
+    }
+
+    return JSON.parse(jsonStr);
+}
+
+function normalizarAlternativas(value: unknown): Alternativas {
+    if (!value || typeof value !== "object") return {};
+
+    const result: Alternativas = {};
+
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+        const letra = String(key).trim().toUpperCase();
+        const texto = String(val ?? "").trim();
+
+        if (!letra || !texto) continue;
+        result[letra] = texto;
+    }
+
+    return result;
+}
+
 function detectarModalidade(
     alternativas: Alternativas,
-    enunciado: string
+    enunciado: string,
+    modalidadeIa?: string
 ): string {
-    if (!alternativas) return "Multipla Escolha";
+    const ia = String(modalidadeIa ?? "").trim().toLowerCase();
 
-    const letras = Object.keys(alternativas).filter(
-        (letra) => String(alternativas[letra] ?? "").trim()
+    if (ia.includes("certo") || ia.includes("errado")) {
+        return "Certo ou Errado";
+    }
+
+    const letras = Object.keys(alternativas).filter((letra) =>
+        String(alternativas[letra] ?? "").trim()
     );
 
-    const textoAE =
-        `${alternativas["A"] ?? ""} ${alternativas["B"] ?? ""} ${enunciado ?? ""}`;
+    const texto = `${enunciado} ${Object.values(alternativas).join(" ")}`;
 
     if (
         letras.length === 2 &&
-        /certo.*errado|errado.*certo|verdadeiro.*falso|falso.*verdadeiro|C\/E|V\/F/i.test(
-            textoAE
+        /certo.*errado|errado.*certo|verdadeiro.*falso|falso.*verdadeiro|c\/e|v\/f/i.test(
+            texto
         )
     ) {
         return "Certo ou Errado";
@@ -221,9 +225,7 @@ function separarQuestoes(texto: string): string[] {
     let match: RegExpExecArray | null;
 
     while ((match = marcadorRegex.exec(clean)) !== null) {
-        const idx =
-            match.index + (clean[match.index] === "\n" ? 1 : 0);
-
+        const idx = match.index + (clean[match.index] === "\n" ? 1 : 0);
         starts.push(idx);
     }
 
@@ -236,1214 +238,338 @@ function separarQuestoes(texto: string): string[] {
 
     for (let i = 0; i < starts.length; i++) {
         const inicio = starts[i];
-        const fim =
-            i + 1 < starts.length
-                ? starts[i + 1]
-                : clean.length;
-
+        const fim = i + 1 < starts.length ? starts[i + 1] : clean.length;
         const bloco = clean.slice(inicio, fim).trim();
 
-        if (bloco.length >= 20) {
-            blocos.push(bloco);
-        }
+        if (bloco.length >= 20) blocos.push(bloco);
     }
 
     return blocos;
 }
 
-function extrairJson(texto: string): any {
-    let jsonStr = String(texto ?? "")
-        .replace(/```json/gi, "")
-        .replace(/```/g, "")
-        .trim();
+function nomeExibicaoComSigla(item: { nome: string; sigla?: string | null }) {
+    const nome = item.nome.trim();
+    const sigla = String(item.sigla ?? "").trim();
 
-    const firstBrace = jsonStr.indexOf("{");
-    const lastBrace = jsonStr.lastIndexOf("}");
-
-    if (firstBrace !== -1 && lastBrace !== -1) {
-        jsonStr = jsonStr.slice(firstBrace, lastBrace + 1);
+    if (!sigla) return nome;
+    if (nome.toLocaleLowerCase("pt-BR") === sigla.toLocaleLowerCase("pt-BR")) {
+        return nome;
     }
 
-    return JSON.parse(jsonStr);
+    return `${sigla} — ${nome}`;
 }
 
-function normalizarAlternativas(value: unknown): Alternativas {
-    if (!value || typeof value !== "object") {
-        return {};
-    }
-
-    const result: Alternativas = {};
-
-    for (const [key, val] of Object.entries(
-        value as Record<string, unknown>
-    )) {
-        const letra = String(key).trim().toUpperCase();
-
-        if (!letra) continue;
-
-        result[letra] = String(val ?? "").trim();
-    }
-
-    return result;
+function textoCanonicoComSigla(item: { nome: string; sigla?: string | null }) {
+    return String(item.sigla ?? "").trim() || item.nome.trim();
 }
 
-function formatarErro(error: unknown): string {
-    if (error instanceof Error) return error.message;
+/* ========================================================================== */
+/* Página                                                                      */
+/* ========================================================================== */
 
-    if (
-        error &&
-        typeof error === "object" &&
-        "message" in error
-    ) {
-        return String((error as any).message);
-    }
-
-    return "Erro inesperado.";
-}
-
-function criarLocalId() {
-    if (
-        typeof crypto !== "undefined" &&
-        typeof crypto.randomUUID === "function"
-    ) {
-        return crypto.randomUUID();
-    }
-
-    return `${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}`;
-}
-
-
-const NOVA_OPCAO = "__NOVA_OPCAO__";
-
-function ordenarOpcoes(valores: Array<string | null | undefined>) {
-    const mapa = new Map<string, string>();
-
-    for (const valor of valores) {
-        const limpo = String(valor ?? "").trim();
-        if (!limpo) continue;
-
-        const chave = limpo.toLocaleLowerCase("pt-BR");
-
-        if (!mapa.has(chave)) {
-            mapa.set(chave, limpo);
-        }
-    }
-
-    return Array.from(mapa.values()).sort((a, b) =>
-        a.localeCompare(b, "pt-BR", { sensitivity: "base" })
-    );
-}
-
-function lerListaLocal(chave: string): string[] {
-    if (typeof window === "undefined") return [];
-
-    try {
-        const raw = window.localStorage.getItem(chave);
-        if (!raw) return [];
-
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed)
-            ? ordenarOpcoes(parsed.map((v) => String(v ?? "")))
-            : [];
-    } catch {
-        return [];
-    }
-}
-
-function salvarListaLocal(chave: string, valores: string[]) {
-    if (typeof window === "undefined") return;
-
-    window.localStorage.setItem(
-        chave,
-        JSON.stringify(ordenarOpcoes(valores))
-    );
-}
-
-function chavePreferencia(userId: string, nome: string) {
-    return `questoes:${userId}:${nome}`;
-}
-
-function formatarDuracao(totalSeconds: number) {
-    const total = Math.max(0, Math.floor(totalSeconds));
-    const horas = Math.floor(total / 3600);
-    const minutos = Math.floor((total % 3600) / 60);
-    const segundos = total % 60;
-
-    return [horas, minutos, segundos]
-        .map((valor) => String(valor).padStart(2, "0"))
-        .join(":");
-}
-
-export default function NovaQuestaoGeminiLote() {
+export default function LancarQuestoesPage() {
     const [userId, setUserId] = useState<string | null>(null);
-
-    const [editais, setEditais] = useState<Edital[]>([]);
-    const [materias, setMaterias] = useState<Materia[]>([]);
-    const [assuntos, setAssuntos] = useState<Assunto[]>([]);
-
-    const [editalId, setEditalId] = useState("");
-    const [materiaId, setMateriaId] = useState("");
-    const [assuntoId, setAssuntoId] = useState("");
-
-    /*
-     * Instituição, Cargo e Banca funcionam como dados-padrão
-     * do lote. As opções vêm das questões já salvas no banco
-     * e das opções criadas manualmente neste navegador.
-     */
-    const [instituicoes, setInstituicoes] = useState<string[]>([]);
-    const [cargos, setCargos] = useState<string[]>([]);
-    const [bancas, setBancas] = useState<string[]>([]);
-
-    const [instituicaoPadrao, setInstituicaoPadrao] = useState("");
-    const [cargoPadrao, setCargoPadrao] = useState("");
-    const [bancaPadrao, setBancaPadrao] = useState("");
-
-    const [criandoInstituicao, setCriandoInstituicao] = useState(false);
-    const [criandoCargo, setCriandoCargo] = useState(false);
-    const [criandoBanca, setCriandoBanca] = useState(false);
-
-    const [novaInstituicao, setNovaInstituicao] = useState("");
-    const [novoCargo, setNovoCargo] = useState("");
-    const [novaBanca, setNovaBanca] = useState("");
-
-    const [input, setInput] = useState("");
-    const [modoInsercao, setModoInsercao] =
-        useState<ModoInsercao>("IA");
-
-    const [loadingInicial, setLoadingInicial] =
-        useState(true);
-
+    const [loadingInicial, setLoadingInicial] = useState(true);
     const [processando, setProcessando] = useState(false);
     const [salvando, setSalvando] = useState(false);
 
     const [erro, setErro] = useState("");
     const [msg, setMsg] = useState("");
 
-    const [questoesProcessadas, setQuestoesProcessadas] =
-        useState<QuestaoProcessada[]>([]);
+    const [instituicoes, setInstituicoes] = useState<Instituicao[]>([]);
+    const [cargos, setCargos] = useState<Cargo[]>([]);
+    const [bancas, setBancas] = useState<Banca[]>([]);
+    const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
+    const [assuntos, setAssuntos] = useState<Assunto[]>([]);
 
-    const [falhasProcessamento, setFalhasProcessamento] =
-        useState<FalhaProcessamento[]>([]);
+    const [instituicaoId, setInstituicaoId] = useState("");
+    const [cargoId, setCargoId] = useState("");
+    const [bancaId, setBancaId] = useState("");
+    const [disciplinaId, setDisciplinaId] = useState("");
+    const [assuntoId, setAssuntoId] = useState("");
+    const [ano, setAno] = useState("");
 
-    const [resultadoSalvamento, setResultadoSalvamento] =
-        useState<ResultadoSalvamento[]>([]);
+    const [input, setInput] = useState("");
+    const [modoInsercao, setModoInsercao] = useState<ModoInsercao>("IA");
 
-    /*
-     * Tempo de estudo:
-     * a duração real é calculada a partir de started_at salvo no banco.
-     * O setInterval abaixo serve apenas para atualizar a exibição.
-     */
-    const [openStudySession, setOpenStudySession] =
-        useState<OpenStudySession | null>(null);
-    const [studyElapsedSec, setStudyElapsedSec] = useState(0);
-    const [studyActionLoading, setStudyActionLoading] = useState(false);
-    const [studyError, setStudyError] = useState("");
-    const [studyMessage, setStudyMessage] = useState("");
-    const [studyMateriaNome, setStudyMateriaNome] = useState("");
-    const [studyAssuntoNome, setStudyAssuntoNome] = useState("");
-    const [studyEditalId, setStudyEditalId] = useState("");
-    const studyTimerRef = useRef<number | null>(null);
+    const [questoesProcessadas, setQuestoesProcessadas] = useState<
+        QuestaoProcessada[]
+    >([]);
+    const [falhasProcessamento, setFalhasProcessamento] = useState<
+        FalhaProcessamento[]
+    >([]);
+    const [resultadoSalvamento, setResultadoSalvamento] = useState<
+        ResultadoSalvamento[]
+    >([]);
 
-    const editalSelecionado = useMemo(
-        () => editais.find((e) => e.id === editalId) ?? null,
-        [editais, editalId]
+    const assuntosDaDisciplina = useMemo(
+        () =>
+            assuntos
+                .filter(
+                    (item) =>
+                        item.ativo && item.disciplina_id === disciplinaId
+                )
+                .sort((a, b) =>
+                    a.nome.localeCompare(b.nome, "pt-BR", {
+                        sensitivity: "base",
+                    })
+                ),
+        [assuntos, disciplinaId]
     );
 
-    const materiaSelecionada = useMemo(
-        () =>
-            materias.find((m) => m.id === materiaId) ?? null,
-        [materias, materiaId]
+    const instituicaoSelecionada = useMemo(
+        () => instituicoes.find((item) => item.id === instituicaoId) ?? null,
+        [instituicoes, instituicaoId]
+    );
+
+    const cargoSelecionado = useMemo(
+        () => cargos.find((item) => item.id === cargoId) ?? null,
+        [cargos, cargoId]
+    );
+
+    const bancaSelecionada = useMemo(
+        () => bancas.find((item) => item.id === bancaId) ?? null,
+        [bancas, bancaId]
+    );
+
+    const disciplinaSelecionada = useMemo(
+        () => disciplinas.find((item) => item.id === disciplinaId) ?? null,
+        [disciplinas, disciplinaId]
     );
 
     const assuntoSelecionado = useMemo(
-        () =>
-            assuntos.find((a) => a.id === assuntoId) ?? null,
+        () => assuntos.find((item) => item.id === assuntoId) ?? null,
         [assuntos, assuntoId]
     );
 
-    const sessaoCorrespondeClassificacao =
-        !openStudySession ||
-        (openStudySession.materia_id === materiaId &&
-            openStudySession.assunto_id === assuntoId);
+    const classificacaoCompleta = !!(
+        instituicaoSelecionada &&
+        cargoSelecionado &&
+        bancaSelecionada &&
+        disciplinaSelecionada &&
+        assuntoSelecionado
+    );
 
     const podeProcessar =
         !!userId &&
-        !!editalId &&
-        !!materiaId &&
-        !!assuntoId &&
+        classificacaoCompleta &&
         !!input.trim() &&
-        sessaoCorrespondeClassificacao &&
         !processando &&
         !salvando;
 
     const podeAdicionarManual =
-        !!userId &&
-        !!editalId &&
-        !!materiaId &&
-        !!assuntoId &&
-        sessaoCorrespondeClassificacao &&
-        !processando &&
-        !salvando;
+        !!userId && classificacaoCompleta && !processando && !salvando;
 
     const podeSalvar =
+        classificacaoCompleta &&
         questoesProcessadas.length > 0 &&
         questoesProcessadas.every((q) => {
-            const alternativasPreenchidas = Object.values(
-                q.alternativas
-            ).filter((valor) => String(valor ?? "").trim()).length;
-
-            const conteudoBasicoValido =
-                q.enunciado.trim() &&
-                q.correta.trim() &&
-                alternativasPreenchidas >= 2;
-
-            const flashcardValido =
-                !q.criarFlashcard ||
-                (!q.flashcardGerando &&
-                    q.flashcardFrente.trim() &&
-                    q.flashcardVerso.trim() &&
-                    q.flashcardConfirmado);
+            const alternativasPreenchidas = Object.values(q.alternativas).filter(
+                (valor) => String(valor ?? "").trim()
+            ).length;
 
             return !!(
-                conteudoBasicoValido &&
-                q.resultado &&
-                flashcardValido
+                q.enunciado.trim() &&
+                q.correta.trim() &&
+                alternativasPreenchidas >= 2 &&
+                q.resultado
             );
         }) &&
         !processando &&
         !salvando;
 
     useEffect(() => {
-        if (studyTimerRef.current) {
-            window.clearInterval(studyTimerRef.current);
-            studyTimerRef.current = null;
-        }
-
-        if (!openStudySession?.started_at) {
-            setStudyElapsedSec(0);
-            return;
-        }
-
-        const atualizar = () => {
-            const inicio = new Date(openStudySession.started_at).getTime();
-            const agora = Date.now();
-
-            setStudyElapsedSec(
-                Number.isFinite(inicio)
-                    ? Math.max(0, Math.floor((agora - inicio) / 1000))
-                    : 0
-            );
-        };
-
-        atualizar();
-
-        studyTimerRef.current = window.setInterval(
-            atualizar,
-            1000
-        );
-
-        return () => {
-            if (studyTimerRef.current) {
-                window.clearInterval(studyTimerRef.current);
-                studyTimerRef.current = null;
-            }
-        };
-    }, [
-        openStudySession?.id,
-        openStudySession?.started_at,
-    ]);
-
-    async function getStudyAccessToken() {
-        const {
-            data,
-            error,
-        } = await supabase.auth.getSession();
-
-        const token = data?.session?.access_token;
-
-        if (error || !token) {
-            throw new Error(
-                "Sua sessão expirou. Entre novamente para controlar o tempo de estudo."
-            );
-        }
-
-        return token;
-    }
-
-    async function carregarNomesDaSessao(
-        session: OpenStudySession,
-        uid: string
-    ) {
-        const [materiaReq, assuntoReq] = await Promise.all([
-            session.materia_id
-                ? supabase
-                    .from("materias")
-                    .select("nome,edital_id")
-                    .eq("user_id", uid)
-                    .eq("id", session.materia_id)
-                    .maybeSingle()
-                : Promise.resolve({
-                    data: null,
-                    error: null,
-                }),
-            session.assunto_id
-                ? supabase
-                    .from("assuntos")
-                    .select("nome")
-                    .eq("user_id", uid)
-                    .eq("id", session.assunto_id)
-                    .maybeSingle()
-                : Promise.resolve({
-                    data: null,
-                    error: null,
-                }),
-        ]);
-
-        const materiaSessao =
-            materiaReq.data as
-            | {
-                nome?: string;
-                edital_id?: string | null;
-            }
-            | null;
-
-        setStudyMateriaNome(
-            String(
-                materiaSessao?.nome ?? ""
-            ).trim()
-        );
-
-        setStudyEditalId(
-            String(
-                materiaSessao?.edital_id ?? ""
-            )
-        );
-
-        setStudyAssuntoNome(
-            String(
-                (assuntoReq.data as { nome?: string } | null)
-                    ?.nome ?? ""
-            ).trim()
-        );
-    }
-
-    async function carregarSessaoAberta(uid: string) {
-        const {
-            data,
-            error,
-        } = await supabase
-            .from("study_sessions")
-            .select(
-                "id,started_at,materia_id,assunto_id,mode"
-            )
-            .eq("user_id", uid)
-            .is("ended_at", null)
-            .order("started_at", {
-                ascending: false,
-            })
-            .limit(1)
-            .maybeSingle();
-
-        if (error) {
-            throw new Error(
-                `Não foi possível verificar o cronômetro: ${error.message}`
-            );
-        }
-
-        if (!data) {
-            setOpenStudySession(null);
-            setStudyElapsedSec(0);
-            setStudyMateriaNome("");
-            setStudyAssuntoNome("");
-            setStudyEditalId("");
-            return;
-        }
-
-        const session = data as OpenStudySession;
-
-        setOpenStudySession(session);
-
-        await carregarNomesDaSessao(
-            session,
-            uid
-        );
-    }
-
-    async function iniciarEstudo() {
-        setStudyError("");
-        setStudyMessage("");
-
-        if (!userId) {
-            setStudyError("Usuário não autenticado.");
-            return;
-        }
-
-        if (!materiaId || !assuntoId) {
-            setStudyError(
-                "Selecione a Disciplina e o Assunto antes de iniciar o estudo."
-            );
-            return;
-        }
-
-        if (openStudySession) {
-            setStudyError(
-                "Já existe uma sessão de estudo em andamento. Finalize-a antes de iniciar outra."
-            );
-            return;
-        }
-
-        setStudyActionLoading(true);
-
-        try {
-            const access_token =
-                await getStudyAccessToken();
-
-            const res = await fetch(
-                "/api/study-sessions",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-                    },
-                    body: JSON.stringify({
-                        action: "start",
-                        access_token,
-                        materia_id: materiaId,
-                        assunto_id: assuntoId,
-                    }),
-                }
-            );
-
-            const out = await res
-                .json()
-                .catch(() => null);
-
-            if (!res.ok) {
-                throw new Error(
-                    out?.error ||
-                    "Falha ao iniciar o tempo de estudo."
-                );
-            }
-
-            const session =
-                out?.session as
-                | OpenStudySession
-                | undefined;
-
-            if (!session?.id) {
-                throw new Error(
-                    "A sessão foi iniciada, mas o servidor não retornou seus dados."
-                );
-            }
-
-            setOpenStudySession(session);
-
-            if (
-                session.materia_id === materiaId &&
-                session.assunto_id === assuntoId
-            ) {
-                setStudyMateriaNome(
-                    materiaSelecionada?.nome ?? ""
-                );
-                setStudyAssuntoNome(
-                    assuntoSelecionado?.nome ?? ""
-                );
-                setStudyEditalId(editalId);
-            } else {
-                await carregarNomesDaSessao(
-                    session,
-                    userId
-                );
-            }
-
-            setStudyMessage(
-                "Cronômetro iniciado. Você pode estudar em outra plataforma e voltar depois; o tempo continuará sendo calculado pelo horário salvo no banco."
-            );
-        } catch (e) {
-            setStudyError(formatarErro(e));
-        } finally {
-            setStudyActionLoading(false);
-        }
-    }
-
-    async function encerrarEstudo(
-        silencioso = false
-    ): Promise<boolean> {
-        setStudyError("");
-
-        if (!openStudySession?.id) {
-            return true;
-        }
-
-        setStudyActionLoading(true);
-
-        try {
-            const access_token =
-                await getStudyAccessToken();
-
-            const res = await fetch(
-                "/api/study-sessions",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-                    },
-                    body: JSON.stringify({
-                        action: "stop",
-                        access_token,
-                        session_id:
-                            openStudySession.id,
-                    }),
-                }
-            );
-
-            const out = await res
-                .json()
-                .catch(() => null);
-
-            if (!res.ok) {
-                throw new Error(
-                    out?.error ||
-                    "Falha ao finalizar o tempo de estudo."
-                );
-            }
-
-            const duracaoFinal =
-                studyElapsedSec;
-
-            setOpenStudySession(null);
-            setStudyElapsedSec(0);
-            setStudyMateriaNome("");
-            setStudyAssuntoNome("");
-            setStudyEditalId("");
-
-            if (!silencioso) {
-                setStudyMessage(
-                    `Sessão finalizada. Tempo contabilizado: ${formatarDuracao(
-                        duracaoFinal
-                    )}.`
-                );
-            }
-
-            return true;
-        } catch (e) {
-            setStudyError(formatarErro(e));
-            return false;
-        } finally {
-            setStudyActionLoading(false);
-        }
-    }
-
-    async function confirmarTrocaDeClassificacao(
-        descricaoDestino: string
-    ) {
-        if (!openStudySession) {
-            return true;
-        }
-
-        const confirmou = window.confirm(
-            `Existe um estudo em andamento em ${studyMateriaNome || "outra disciplina"} / ${studyAssuntoNome || "outro assunto"} (${formatarDuracao(
-                studyElapsedSec
-            )}).\n\nPara alterar ${descricaoDestino}, a sessão atual precisa ser finalizada. Deseja finalizar agora?`
-        );
-
-        if (!confirmou) {
-            return false;
-        }
-
-        return encerrarEstudo(true);
-    }
-
-    useEffect(() => {
         let cancelled = false;
 
-        async function iniciar() {
+        async function carregar() {
             setLoadingInicial(true);
             setErro("");
 
             try {
-                const {
-                    data: auth,
-                    error: authError,
-                } = await supabase.auth.getUser();
+                const { data: auth, error: authError } =
+                    await supabase.auth.getUser();
 
-                const user = auth?.user;
+                const uid = auth.user?.id ?? null;
 
-                if (authError || !user?.id) {
-                    throw new Error(
-                        "Usuário não autenticado."
-                    );
-                }
-
-                if (cancelled) return;
-
-                setUserId(user.id);
-
-                try {
-                    await carregarSessaoAberta(user.id);
-                } catch (e) {
-                    setStudyError(formatarErro(e));
+                if (authError || !uid) {
+                    throw new Error("Usuário não autenticado.");
                 }
 
                 const [
-                    editaisReq,
-                    metadadosReq,
+                    instituicoesReq,
+                    cargosReq,
+                    bancasReq,
+                    disciplinasReq,
+                    assuntosReq,
                 ] = await Promise.all([
                     supabase
-                        .from("editais")
-                        .select("id,nome")
-                        .eq("user_id", user.id)
+                        .from("questao_instituicoes")
+                        .select("id,nome,sigla,ativo")
+                        .eq("user_id", uid)
+                        .eq("ativo", true)
                         .order("nome"),
-
-                    /*
-                     * Não precisa de tabelas extras de catálogo.
-                     * Usamos os valores já existentes nas questões
-                     * do próprio usuário como opções reutilizáveis.
-                     */
                     supabase
-                        .from("questoes")
-                        .select("instituicao,cargo,banca")
-                        .eq("user_id", user.id)
-                        .limit(5000),
+                        .from("questao_cargos")
+                        .select("id,nome,ativo")
+                        .eq("user_id", uid)
+                        .eq("ativo", true)
+                        .order("nome"),
+                    supabase
+                        .from("questao_bancas")
+                        .select("id,nome,sigla,ativo")
+                        .eq("user_id", uid)
+                        .eq("ativo", true)
+                        .order("nome"),
+                    supabase
+                        .from("questao_disciplinas")
+                        .select("id,nome,ativo")
+                        .eq("user_id", uid)
+                        .eq("ativo", true)
+                        .order("nome"),
+                    supabase
+                        .from("questao_assuntos")
+                        .select("id,disciplina_id,nome,ativo")
+                        .eq("user_id", uid)
+                        .eq("ativo", true)
+                        .order("nome"),
                 ]);
 
-                if (editaisReq.error) throw editaisReq.error;
+                const firstError =
+                    instituicoesReq.error ||
+                    cargosReq.error ||
+                    bancasReq.error ||
+                    disciplinasReq.error ||
+                    assuntosReq.error;
 
-                /*
-                 * Se a leitura dos metadados falhar, a classificação
-                 * principal continua funcionando. O usuário ainda
-                 * poderá criar opções manualmente.
-                 */
-                const metadadosBanco =
-                    metadadosReq.error
-                        ? []
-                        : (metadadosReq.data ?? []);
-
+                if (firstError) throw firstError;
                 if (cancelled) return;
 
-                const listaEditais =
-                    (editaisReq.data ?? []) as Edital[];
-
-                setEditais(listaEditais);
-
-                const instituicoesBanco = ordenarOpcoes(
-                    metadadosBanco.map((row: any) => row?.instituicao)
+                setUserId(uid);
+                setInstituicoes(
+                    (instituicoesReq.data ?? []) as Instituicao[]
                 );
-                const cargosBanco = ordenarOpcoes(
-                    metadadosBanco.map((row: any) => row?.cargo)
+                setCargos((cargosReq.data ?? []) as Cargo[]);
+                setBancas((bancasReq.data ?? []) as Banca[]);
+                setDisciplinas(
+                    (disciplinasReq.data ?? []) as Disciplina[]
                 );
-                const bancasBanco = ordenarOpcoes(
-                    metadadosBanco.map((row: any) => row?.banca)
-                );
+                setAssuntos((assuntosReq.data ?? []) as Assunto[]);
 
-                const instituicoesLocais = lerListaLocal(
-                    chavePreferencia(user.id, "custom_instituicoes")
-                );
-                const cargosLocais = lerListaLocal(
-                    chavePreferencia(user.id, "custom_cargos")
-                );
-                const bancasLocais = lerListaLocal(
-                    chavePreferencia(user.id, "custom_bancas")
-                );
-
-                const listaInstituicoes = ordenarOpcoes([
-                    ...instituicoesBanco,
-                    ...instituicoesLocais,
-                ]);
-                const listaCargos = ordenarOpcoes([
-                    ...cargosBanco,
-                    ...cargosLocais,
-                ]);
-                const listaBancas = ordenarOpcoes([
-                    ...bancasBanco,
-                    ...bancasLocais,
-                ]);
-
-                setInstituicoes(listaInstituicoes);
-                setCargos(listaCargos);
-                setBancas(listaBancas);
-
-                const savedInstituicao =
+                const pref = (nome: string) =>
                     window.localStorage.getItem(
-                        chavePreferencia(user.id, "last_instituicao")
+                        `questoes-catalogo:${uid}:${nome}`
                     ) ?? "";
 
-                const savedCargo =
-                    window.localStorage.getItem(
-                        chavePreferencia(user.id, "last_cargo")
-                    ) ?? "";
+                const savedInstituicao = pref("instituicao_id");
+                const savedCargo = pref("cargo_id");
+                const savedBanca = pref("banca_id");
+                const savedDisciplina = pref("disciplina_id");
+                const savedAssunto = pref("assunto_id");
+                const savedAno = pref("ano");
 
-                const savedBanca =
-                    window.localStorage.getItem(
-                        chavePreferencia(user.id, "last_banca")
-                    ) ?? "";
+                const instituicoesData =
+                    (instituicoesReq.data ?? []) as Instituicao[];
+                const cargosData = (cargosReq.data ?? []) as Cargo[];
+                const bancasData = (bancasReq.data ?? []) as Banca[];
+                const disciplinasData =
+                    (disciplinasReq.data ?? []) as Disciplina[];
+                const assuntosData = (assuntosReq.data ?? []) as Assunto[];
 
-                if (savedInstituicao) {
-                    setInstituicaoPadrao(savedInstituicao);
-                    setInstituicoes((prev) =>
-                        ordenarOpcoes([...prev, savedInstituicao])
-                    );
+                if (instituicoesData.some((x) => x.id === savedInstituicao)) {
+                    setInstituicaoId(savedInstituicao);
                 }
-
-                if (savedCargo) {
-                    setCargoPadrao(savedCargo);
-                    setCargos((prev) =>
-                        ordenarOpcoes([...prev, savedCargo])
-                    );
+                if (cargosData.some((x) => x.id === savedCargo)) {
+                    setCargoId(savedCargo);
                 }
-
-                if (savedBanca) {
-                    setBancaPadrao(savedBanca);
-                    setBancas((prev) =>
-                        ordenarOpcoes([...prev, savedBanca])
-                    );
+                if (bancasData.some((x) => x.id === savedBanca)) {
+                    setBancaId(savedBanca);
                 }
-
-                const savedEdital =
-                    window.localStorage.getItem(
-                        chavePreferencia(user.id, "last_edital_id")
-                    ) ??
-                    window.sessionStorage.getItem(
-                        "questoes:last_edital_id"
-                    );
-
-                const editalInicial =
-                    listaEditais.some(
-                        (e) => e.id === savedEdital
+                if (disciplinasData.some((x) => x.id === savedDisciplina)) {
+                    setDisciplinaId(savedDisciplina);
+                }
+                if (
+                    assuntosData.some(
+                        (x) =>
+                            x.id === savedAssunto &&
+                            (!savedDisciplina ||
+                                x.disciplina_id === savedDisciplina)
                     )
-                        ? savedEdital ?? ""
-                        : "";
-
-                if (!editalInicial) {
-                    setLoadingInicial(false);
-                    return;
+                ) {
+                    setAssuntoId(savedAssunto);
                 }
-
-                setEditalId(editalInicial);
-
-                const {
-                    data: materiasData,
-                    error: materiasError,
-                } = await supabase
-                    .from("materias")
-                    .select("id,nome,edital_id")
-                    .eq("user_id", user.id)
-                    .eq("edital_id", editalInicial)
-                    .order("nome");
-
-                if (materiasError) throw materiasError;
-
-                if (cancelled) return;
-
-                const listaMaterias =
-                    (materiasData ?? []) as Materia[];
-
-                setMaterias(listaMaterias);
-
-                const savedMateria =
-                    window.localStorage.getItem(
-                        chavePreferencia(user.id, "last_materia_id")
-                    ) ??
-                    window.sessionStorage.getItem(
-                        "questoes:last_materia_id"
-                    );
-
-                const materiaInicial =
-                    listaMaterias.some(
-                        (m) => m.id === savedMateria
-                    )
-                        ? savedMateria ?? ""
-                        : "";
-
-                if (!materiaInicial) {
-                    setLoadingInicial(false);
-                    return;
-                }
-
-                setMateriaId(materiaInicial);
-
-                const {
-                    data: assuntosData,
-                    error: assuntosError,
-                } = await supabase
-                    .from("assuntos")
-                    .select("id,nome,materia_id")
-                    .eq("user_id", user.id)
-                    .eq("materia_id", materiaInicial)
-                    .order("nome");
-
-                if (assuntosError) throw assuntosError;
-
-                if (cancelled) return;
-
-                const listaAssuntos =
-                    (assuntosData ?? []) as Assunto[];
-
-                setAssuntos(listaAssuntos);
-
-                const savedAssunto =
-                    window.localStorage.getItem(
-                        chavePreferencia(user.id, "last_assunto_id")
-                    ) ??
-                    window.sessionStorage.getItem(
-                        "questoes:last_assunto_id"
-                    );
-
-                const assuntoInicial =
-                    listaAssuntos.some(
-                        (a) => a.id === savedAssunto
-                    )
-                        ? savedAssunto ?? ""
-                        : "";
-
-                if (assuntoInicial) {
-                    setAssuntoId(assuntoInicial);
+                if (/^\d{4}$/.test(savedAno)) {
+                    setAno(savedAno);
                 }
             } catch (e) {
-                if (!cancelled) {
-                    setErro(formatarErro(e));
-                }
+                if (!cancelled) setErro(formatarErro(e));
             } finally {
-                if (!cancelled) {
-                    setLoadingInicial(false);
-                }
+                if (!cancelled) setLoadingInicial(false);
             }
         }
 
-        iniciar();
+        void carregar();
 
         return () => {
             cancelled = true;
         };
     }, []);
 
-    async function handleEditalChange(
-        novoEditalId: string
-    ) {
-        if (
-            openStudySession &&
-            novoEditalId !== studyEditalId
-        ) {
-            const podeTrocar =
-                await confirmarTrocaDeClassificacao(
-                    "o Edital"
-                );
-
-            if (!podeTrocar) return;
-        }
-
-        setEditalId(novoEditalId);
-        setMateriaId("");
-        setAssuntoId("");
-        setMaterias([]);
-        setAssuntos([]);
-        setQuestõesLimparDepoisDaClassificacao();
-        setErro("");
-        setMsg("");
-
-        window.sessionStorage.setItem(
-            "questoes:last_edital_id",
-            novoEditalId
-        );
-
-        if (userId) {
-            window.localStorage.setItem(
-                chavePreferencia(userId, "last_edital_id"),
-                novoEditalId
-            );
-            window.localStorage.removeItem(
-                chavePreferencia(userId, "last_materia_id")
-            );
-            window.localStorage.removeItem(
-                chavePreferencia(userId, "last_assunto_id")
-            );
-        }
-
-        window.sessionStorage.removeItem(
-            "questoes:last_materia_id"
-        );
-
-        window.sessionStorage.removeItem(
-            "questoes:last_assunto_id"
-        );
-
-        if (!novoEditalId || !userId) return;
-
-        const { data, error } = await supabase
-            .from("materias")
-            .select("id,nome,edital_id")
-            .eq("user_id", userId)
-            .eq("edital_id", novoEditalId)
-            .order("nome");
-
-        if (error) {
-            setErro(error.message);
-            return;
-        }
-
-        setMaterias((data ?? []) as Materia[]);
+    function salvarPreferencia(nome: string, valor: string) {
+        if (!userId) return;
+        window.localStorage.setItem(`questoes-catalogo:${userId}:${nome}`, valor);
     }
 
-    async function handleMateriaChange(
-        novaMateriaId: string
-    ) {
-        if (
-            openStudySession &&
-            openStudySession.materia_id !== novaMateriaId
-        ) {
-            const podeTrocar =
-                await confirmarTrocaDeClassificacao(
-                    "a Disciplina"
-                );
+    function limparQuestoesAoTrocarClassificacao() {
+        if (!questoesProcessadas.length) return true;
 
-            if (!podeTrocar) return;
-        }
-
-        setMateriaId(novaMateriaId);
-        setAssuntoId("");
-        setAssuntos([]);
-        setQuestõesLimparDepoisDaClassificacao();
-        setErro("");
-        setMsg("");
-
-        window.sessionStorage.setItem(
-            "questoes:last_materia_id",
-            novaMateriaId
+        const confirmar = window.confirm(
+            "Há questões já processadas nesta classificação. Alterar a classificação descartará essas questões da tela. Deseja continuar?"
         );
 
-        if (userId) {
-            window.localStorage.setItem(
-                chavePreferencia(userId, "last_materia_id"),
-                novaMateriaId
-            );
-            window.localStorage.removeItem(
-                chavePreferencia(userId, "last_assunto_id")
-            );
-        }
+        if (!confirmar) return false;
 
-        window.sessionStorage.removeItem(
-            "questoes:last_assunto_id"
-        );
-
-        if (!novaMateriaId || !userId) return;
-
-        const { data, error } = await supabase
-            .from("assuntos")
-            .select("id,nome,materia_id")
-            .eq("user_id", userId)
-            .eq("materia_id", novaMateriaId)
-            .order("nome");
-
-        if (error) {
-            setErro(error.message);
-            return;
-        }
-
-        setAssuntos((data ?? []) as Assunto[]);
-    }
-
-    async function handleAssuntoChange(
-        novoAssuntoId: string
-    ) {
-        if (
-            openStudySession &&
-            openStudySession.assunto_id !== novoAssuntoId
-        ) {
-            const podeTrocar =
-                await confirmarTrocaDeClassificacao(
-                    "o Assunto"
-                );
-
-            if (!podeTrocar) return;
-        }
-
-        setAssuntoId(novoAssuntoId);
-        setQuestõesLimparDepoisDaClassificacao();
-        setErro("");
-        setMsg("");
-
-        window.sessionStorage.setItem(
-            "questoes:last_assunto_id",
-            novoAssuntoId
-        );
-
-        if (userId) {
-            window.localStorage.setItem(
-                chavePreferencia(userId, "last_assunto_id"),
-                novoAssuntoId
-            );
-        }
-    }
-
-    function aplicarMetadadoNasQuestoes(
-        campo: "instituicao" | "cargo" | "banca",
-        valor: string
-    ) {
-        if (!valor.trim()) return;
-
-        setQuestoesProcessadas((prev) =>
-            prev.map((q) => ({
-                ...q,
-                [campo]: valor,
-            }))
-        );
-    }
-
-    function handleInstituicaoChange(valor: string) {
-        if (valor === NOVA_OPCAO) {
-            setCriandoInstituicao(true);
-            setNovaInstituicao("");
-            return;
-        }
-
-        setInstituicaoPadrao(valor);
-        setCriandoInstituicao(false);
-
-        if (userId) {
-            window.localStorage.setItem(
-                chavePreferencia(userId, "last_instituicao"),
-                valor
-            );
-        }
-
-        aplicarMetadadoNasQuestoes("instituicao", valor);
-    }
-
-    function handleCargoChange(valor: string) {
-        if (valor === NOVA_OPCAO) {
-            setCriandoCargo(true);
-            setNovoCargo("");
-            return;
-        }
-
-        setCargoPadrao(valor);
-        setCriandoCargo(false);
-
-        if (userId) {
-            window.localStorage.setItem(
-                chavePreferencia(userId, "last_cargo"),
-                valor
-            );
-        }
-
-        aplicarMetadadoNasQuestoes("cargo", valor);
-    }
-
-    function handleBancaChange(valor: string) {
-        if (valor === NOVA_OPCAO) {
-            setCriandoBanca(true);
-            setNovaBanca("");
-            return;
-        }
-
-        setBancaPadrao(valor);
-        setCriandoBanca(false);
-
-        if (userId) {
-            window.localStorage.setItem(
-                chavePreferencia(userId, "last_banca"),
-                valor
-            );
-        }
-
-        aplicarMetadadoNasQuestoes("banca", valor);
-    }
-
-    function adicionarInstituicao() {
-        const valor = novaInstituicao.trim();
-        if (!valor || !userId) return;
-
-        const novaLista = ordenarOpcoes([...instituicoes, valor]);
-
-        setInstituicoes(novaLista);
-        setInstituicaoPadrao(valor);
-        setNovaInstituicao("");
-        setCriandoInstituicao(false);
-
-        const chaveLista = chavePreferencia(
-            userId,
-            "custom_instituicoes"
-        );
-
-        salvarListaLocal(
-            chaveLista,
-            ordenarOpcoes([...lerListaLocal(chaveLista), valor])
-        );
-
-        window.localStorage.setItem(
-            chavePreferencia(userId, "last_instituicao"),
-            valor
-        );
-
-        aplicarMetadadoNasQuestoes("instituicao", valor);
-    }
-
-    function adicionarCargo() {
-        const valor = novoCargo.trim();
-        if (!valor || !userId) return;
-
-        const novaLista = ordenarOpcoes([...cargos, valor]);
-
-        setCargos(novaLista);
-        setCargoPadrao(valor);
-        setNovoCargo("");
-        setCriandoCargo(false);
-
-        const chaveLista = chavePreferencia(
-            userId,
-            "custom_cargos"
-        );
-
-        salvarListaLocal(
-            chaveLista,
-            ordenarOpcoes([...lerListaLocal(chaveLista), valor])
-        );
-
-        window.localStorage.setItem(
-            chavePreferencia(userId, "last_cargo"),
-            valor
-        );
-
-        aplicarMetadadoNasQuestoes("cargo", valor);
-    }
-
-    function adicionarBanca() {
-        const valor = novaBanca.trim();
-        if (!valor || !userId) return;
-
-        const novaLista = ordenarOpcoes([...bancas, valor]);
-
-        setBancas(novaLista);
-        setBancaPadrao(valor);
-        setNovaBanca("");
-        setCriandoBanca(false);
-
-        const chaveLista = chavePreferencia(
-            userId,
-            "custom_bancas"
-        );
-
-        salvarListaLocal(
-            chaveLista,
-            ordenarOpcoes([...lerListaLocal(chaveLista), valor])
-        );
-
-        window.localStorage.setItem(
-            chavePreferencia(userId, "last_banca"),
-            valor
-        );
-
-        aplicarMetadadoNasQuestoes("banca", valor);
-    }
-
-    function setQuestõesLimparDepoisDaClassificacao() {
         setQuestoesProcessadas([]);
         setFalhasProcessamento([]);
         setResultadoSalvamento([]);
+        return true;
+    }
+
+    function handleInstituicaoChange(value: string) {
+        if (!limparQuestoesAoTrocarClassificacao()) return;
+        setInstituicaoId(value);
+        salvarPreferencia("instituicao_id", value);
+    }
+
+    function handleCargoChange(value: string) {
+        if (!limparQuestoesAoTrocarClassificacao()) return;
+        setCargoId(value);
+        salvarPreferencia("cargo_id", value);
+    }
+
+    function handleBancaChange(value: string) {
+        if (!limparQuestoesAoTrocarClassificacao()) return;
+        setBancaId(value);
+        salvarPreferencia("banca_id", value);
+    }
+
+    function handleDisciplinaChange(value: string) {
+        if (!limparQuestoesAoTrocarClassificacao()) return;
+        setDisciplinaId(value);
+        setAssuntoId("");
+        salvarPreferencia("disciplina_id", value);
+        salvarPreferencia("assunto_id", "");
+    }
+
+    function handleAssuntoChange(value: string) {
+        if (!limparQuestoesAoTrocarClassificacao()) return;
+        setAssuntoId(value);
+        salvarPreferencia("assunto_id", value);
+    }
+
+    function handleAnoChange(value: string) {
+        const clean = value.replace(/\D/g, "").slice(0, 4);
+        setAno(clean);
+        salvarPreferencia("ano", clean);
     }
 
     function proximoNumeroQuestao() {
@@ -1460,23 +586,19 @@ export default function NovaQuestaoGeminiLote() {
         setMsg("");
         setResultadoSalvamento([]);
 
-        if (!podeAdicionarManual) {
+        if (!classificacaoCompleta) {
             setErro(
-                "Selecione Edital, Disciplina e Assunto antes de inserir manualmente."
+                "Selecione Instituição, Cargo, Banca, Disciplina e Assunto antes de adicionar uma questão."
             );
             return;
         }
 
-        const novaQuestao: QuestaoProcessada = {
+        const nova: QuestaoProcessada = {
             localId: criarLocalId(),
             numero: proximoNumeroQuestao(),
             textoOriginal: "",
             origem: "MANUAL",
-
-            instituicao: instituicaoPadrao,
-            cargo: cargoPadrao,
             modalidade: "Multipla Escolha",
-            banca: bancaPadrao,
             enunciado: "",
             alternativas: {
                 A: "",
@@ -1487,55 +609,21 @@ export default function NovaQuestaoGeminiLote() {
             },
             correta: "",
             explicacao: "",
-
             resultado: "",
             salvarNoCadernoAcertos: false,
-
-            criarFlashcard: false,
-            flashcardFrente: "",
-            flashcardVerso: "",
-            flashcardGerando: false,
-            flashcardErro: "",
-            flashcardVersao: 0,
-            flashcardConfirmado: false,
-            flashcardModo: null,
         };
 
-        setQuestoesProcessadas((prev) => [
-            ...prev,
-            novaQuestao,
-        ]);
-
-        setMsg(
-            "Questão manual adicionada. Preencha enunciado, alternativas, gabarito, comentário e informe o resultado."
-        );
+        setQuestoesProcessadas((prev) => [...prev, nova]);
     }
 
-    function prepararFlashcardManual(localId: string) {
-        atualizarQuestao(localId, {
-            criarFlashcard: true,
-            flashcardModo: "MANUAL",
-            flashcardGerando: false,
-            flashcardErro: "",
-            flashcardConfirmado: false,
-        });
-    }
+    async function chamarGeminiJson(prompt: string): Promise<any> {
+        const { data: sessionData, error: sessionError } =
+            await supabase.auth.getSession();
 
-    async function chamarGeminiJson(
-        prompt: string
-    ): Promise<any> {
-        const {
-            data: sessionData,
-            error: sessionError,
-        } = await supabase.auth.getSession();
-
-        const accessToken =
-            sessionData?.session?.access_token;
+        const accessToken = sessionData.session?.access_token;
 
         if (sessionError || !accessToken) {
-            throw new Error(
-                "Sua sessão expirou. Entre novamente para usar a IA."
-            );
+            throw new Error("Sua sessão expirou. Entre novamente para usar a IA.");
         }
 
         const res = await fetch("/api/gemini", {
@@ -1548,9 +636,7 @@ export default function NovaQuestaoGeminiLote() {
             cache: "no-store",
         });
 
-        const data = (await res
-            .json()
-            .catch(() => null)) as
+        const data = (await res.json().catch(() => null)) as
             | { text?: string; error?: string }
             | null;
 
@@ -1564,269 +650,16 @@ export default function NovaQuestaoGeminiLote() {
         const texto = String(data?.text ?? "").trim();
 
         if (!texto) {
-            throw new Error(
-                "A IA retornou uma resposta vazia."
-            );
+            throw new Error("A IA retornou uma resposta vazia.");
         }
 
         return extrairJson(texto);
     }
 
-    async function chamarGemini(
-        questaoTxt: string
-    ): Promise<any> {
-        return chamarGeminiJson(
-            PROMPT_PREFIX + questaoTxt
-        );
-    }
-
-    async function gerarFlashcardComIA(
-        localId: string,
-        forcarNovaVersao = false
-    ) {
-        const questao = questoesProcessadas.find(
-            (q) => q.localId === localId
-        );
-
-        if (!questao) return;
-
-        atualizarQuestao(localId, {
-            criarFlashcard: true,
-            flashcardModo: "IA",
-            flashcardGerando: true,
-            flashcardErro: "",
-            flashcardConfirmado: false,
-        });
-
-        const prompt = `
-Crie UM flashcard de estudo para concurso a partir da questão abaixo.
-
-OBJETIVO
-O flashcard deve ajudar o estudante a recuperar ativamente da memória
-UMA informação realmente importante cobrada pela questão.
-
-PRINCÍPIOS
-1. Crie apenas UM flashcard.
-2. Teste apenas UMA ideia principal.
-3. A frente deve permitir uma resposta objetiva e não ambígua.
-4. O verso deve ser curto, preciso e suficiente para revisar.
-5. Não copie a questão inteira.
-6. Não transforme todas as alternativas em uma pergunta.
-7. Não crie perguntas excessivamente longas.
-8. Não use informações irrelevantes apenas para preencher o cartão.
-
-FONTES E CONFIABILIDADE
-9. Use esta ordem de prioridade:
-   a) gabarito explícito da questão;
-   b) comentário/explicação fornecido;
-   c) enunciado e alternativas;
-   d) conhecimento consolidado apenas quando necessário para compreender
-      aquilo que já está sustentado pelo material.
-
-10. O conteúdo do flashcard deve ser coerente com o gabarito e com a
-    explicação fornecida.
-
-11. NÃO altere silenciosamente o gabarito da questão.
-
-12. NÃO invente:
-    - artigos;
-    - incisos;
-    - parágrafos;
-    - súmulas;
-    - temas;
-    - precedentes;
-    - números;
-    - prazos;
-    - exceções;
-    - conceitos;
-    - requisitos;
-    quando essas informações não puderem ser sustentadas com segurança.
-
-13. Nunca cite um dispositivo legal por aproximação.
-    Se tiver segurança sobre a regra, mas não sobre o número do dispositivo,
-    apresente a regra sem inventar a referência.
-
-ATUALIZAÇÃO
-14. Não diga que uma regra é "atual", "vigente" ou representa o
-    "entendimento atual" se isso não puder ser confirmado pelo material fornecido.
-
-15. Se a questão tratar de legislação, jurisprudência ou regra sujeita a mudança
-    e houver indicação de possível desatualização na explicação, NÃO transforme
-    uma regra histórica em verdade atual.
-
-16. Quando necessário, preserve o contexto temporal no próprio cartão.
-    Exemplo:
-    "Segundo o entendimento considerado nesta questão..."
-    ou
-    "De acordo com a regra cobrada pela banca nesta questão..."
-
-ESCOLHA DO CONTEÚDO
-17. Dê preferência ao ponto com maior valor de memorização, como:
-    - regra;
-    - conceito;
-    - requisito;
-    - exceção;
-    - prazo;
-    - competência;
-    - vedação;
-    - distinção entre institutos;
-    - fórmula;
-    - hipótese de cabimento;
-    - consequência jurídica;
-    - erro conceitual explorado pela banca.
-
-18. Quando a questão explorar uma confusão clássica entre dois conceitos,
-    prefira criar um cartão que teste essa distinção.
-
-19. Se o estudante ERROU a questão, priorize o conhecimento que impediria
-    a repetição daquele erro.
-
-20. Se o estudante ACERTOU a questão, priorize a regra central ou uma
-    pegadinha realmente relevante, evitando criar cartão trivial.
-
-QUALIDADE DA FRENTE
-21. A frente deve:
-    - ser curta;
-    - ser específica;
-    - exigir recuperação ativa;
-    - ter resposta identificável;
-    - evitar pistas óbvias da resposta.
-
-22. Evite perguntas como:
-    "O que você sabe sobre..."
-    "Explique tudo sobre..."
-    "Fale sobre..."
-
-23. Prefira formatos como:
-    "Qual é...?"
-    "Quando...?"
-    "Em que hipótese...?"
-    "Qual a diferença entre X e Y?"
-    "X pode ocorrer quando...?"
-    "Qual é a consequência de...?"
-
-QUALIDADE DO VERSO
-24. Comece pela resposta direta.
-
-25. Depois, se necessário, acrescente uma explicação curta que ajude
-    a evitar confusão futura.
-
-26. Não transforme o verso em um resumo ou aula extensa.
-
-27. Quando houver uma exceção essencial para não memorizar a regra de forma
-    errada, inclua-a de maneira curta.
-
-28. Se houver uma pegadinha importante da banca sustentada pela questão,
-    ela pode aparecer no final do verso em uma frase curta.
-
-${forcarNovaVersao || questao.flashcardVersao > 0
-                ? `
-Gere uma NOVA versão, pedagogicamente diferente da anterior.
-
-Não faça apenas uma paráfrase.
-
-Sugestão anterior:
-Frente: ${questao.flashcardFrente || "(vazia)"}
-Verso: ${questao.flashcardVerso || "(vazio)"}
-`
-                : ""
-            }
-
-Disciplina:
-${materiaSelecionada?.nome ?? ""}
-
-Assunto:
-${assuntoSelecionado?.nome ?? ""}
-
-Resultado do estudante:
-${questao.resultado || "não informado"}
-
-Enunciado:
-${questao.enunciado}
-
-Alternativas:
-${Object.entries(questao.alternativas)
-                .map(([letra, valor]) => `${letra}) ${valor}`)
-                .join("\n")}
-
-Gabarito:
-${questao.correta}
-
-Explicação / comentário:
-${questao.explicacao}
-
-Retorne SOMENTE JSON válido:
-{
-  "frente": "...",
-  "verso": "..."
-}
-`;
-
-        try {
-            const obj = await chamarGeminiJson(prompt);
-
-            const frente = String(
-                obj?.frente ?? ""
-            ).trim();
-
-            const verso = String(
-                obj?.verso ?? ""
-            ).trim();
-
-            if (!frente || !verso) {
-                throw new Error(
-                    "A IA não retornou frente e verso válidos."
-                );
-            }
-
-            atualizarQuestao(localId, {
-                flashcardFrente: frente,
-                flashcardVerso: verso,
-                flashcardGerando: false,
-                flashcardErro: "",
-                flashcardVersao:
-                    questao.flashcardVersao + 1,
-                flashcardConfirmado: false,
-                flashcardModo: "IA",
-            });
-        } catch (e) {
-            atualizarQuestao(localId, {
-                flashcardGerando: false,
-                flashcardErro: formatarErro(e),
-            });
-        }
-    }
-
-    async function handleToggleFlashcard(
-        questao: QuestaoProcessada,
-        checked: boolean
-    ) {
-        if (!checked) {
-            atualizarQuestao(questao.localId, {
-                criarFlashcard: false,
-                flashcardFrente: "",
-                flashcardVerso: "",
-                flashcardGerando: false,
-                flashcardErro: "",
-                flashcardVersao: 0,
-                flashcardConfirmado: false,
-                flashcardModo: null,
-            });
-            return;
-        }
-
-        atualizarQuestao(questao.localId, {
-            criarFlashcard: true,
-            flashcardErro: "",
-            flashcardConfirmado: false,
-            flashcardModo: null,
-        });
-    }
-
     async function handleProcessarLote() {
-        if (!editalId || !materiaId || !assuntoId) {
+        if (!classificacaoCompleta) {
             setErro(
-                "Selecione Edital, Disciplina e Assunto antes de processar."
+                "Selecione Instituição, Cargo, Banca, Disciplina e Assunto antes de processar."
             );
             return;
         }
@@ -1834,13 +667,13 @@ Retorne SOMENTE JSON válido:
         const questoesSeparadas = separarQuestoes(input);
 
         if (!questoesSeparadas.length) {
-            setErro(
-                "Não foi possível identificar nenhuma questão no texto."
-            );
+            setErro("Não foi possível identificar nenhuma questão no texto.");
             return;
         }
 
         const numeroInicial = proximoNumeroQuestao();
+        const prontas: QuestaoProcessada[] = [];
+        const falhas: FalhaProcessamento[] = [];
 
         setProcessando(true);
         setErro("");
@@ -1848,107 +681,50 @@ Retorne SOMENTE JSON válido:
         setFalhasProcessamento([]);
         setResultadoSalvamento([]);
 
-        const prontas: QuestaoProcessada[] = [];
-        const falhas: FalhaProcessamento[] = [];
-
         try {
-            for (
-                let i = 0;
-                i < questoesSeparadas.length;
-                i++
-            ) {
+            for (let i = 0; i < questoesSeparadas.length; i++) {
                 const questaoTxt = questoesSeparadas[i];
 
                 try {
-                    const obj = await chamarGemini(
-                        questaoTxt
+                    const obj = await chamarGeminiJson(
+                        PROMPT_PREFIX + questaoTxt
                     );
 
-                    const alternativas =
-                        normalizarAlternativas(
-                            obj?.alternativas
-                        );
-
-                    const enunciado = String(
-                        obj?.enunciado ?? ""
-                    ).trim();
-
-                    const correta = String(
-                        obj?.correta ?? ""
-                    ).trim();
+                    const alternativas = normalizarAlternativas(
+                        obj?.alternativas
+                    );
+                    const enunciado = String(obj?.enunciado ?? "").trim();
+                    const correta = String(obj?.correta ?? "").trim();
+                    const explicacao = String(obj?.explicacao ?? "").trim();
 
                     if (!enunciado) {
-                        throw new Error(
-                            "A IA não retornou o enunciado."
-                        );
+                        throw new Error("A IA não retornou o enunciado.");
                     }
-
                     if (!correta) {
+                        throw new Error("A IA não retornou o gabarito.");
+                    }
+                    if (Object.keys(alternativas).length < 2) {
                         throw new Error(
-                            "A IA não retornou o gabarito."
+                            "A IA não retornou alternativas suficientes."
                         );
                     }
-
-                    if (
-                        Object.keys(alternativas).length ===
-                        0
-                    ) {
-                        throw new Error(
-                            "A IA não retornou as alternativas."
-                        );
-                    }
-
-                    const modalidade =
-                        detectarModalidade(
-                            alternativas,
-                            enunciado
-                        );
 
                     prontas.push({
                         localId: criarLocalId(),
                         numero: numeroInicial + i,
                         textoOriginal: questaoTxt,
                         origem: "IA",
-
-                        instituicao:
-                            instituicaoPadrao ||
-                            String(
-                                obj?.instituicao ?? ""
-                            ).trim(),
-
-                        cargo:
-                            cargoPadrao ||
-                            String(
-                                obj?.cargo ?? ""
-                            ).trim(),
-
-                        modalidade,
-
-                        banca:
-                            bancaPadrao ||
-                            String(
-                                obj?.banca ?? ""
-                            ).trim(),
-
+                        modalidade: detectarModalidade(
+                            alternativas,
+                            enunciado,
+                            obj?.modalidade
+                        ),
                         enunciado,
                         alternativas,
                         correta,
-
-                        explicacao: String(
-                            obj?.explicacao ?? ""
-                        ).trim(),
-
+                        explicacao,
                         resultado: "",
                         salvarNoCadernoAcertos: false,
-
-                        criarFlashcard: false,
-                        flashcardFrente: "",
-                        flashcardVerso: "",
-                        flashcardGerando: false,
-                        flashcardErro: "",
-                        flashcardVersao: 0,
-                        flashcardConfirmado: false,
-                        flashcardModo: null,
                     });
                 } catch (e) {
                     falhas.push({
@@ -1959,48 +735,15 @@ Retorne SOMENTE JSON válido:
                 }
             }
 
-            setQuestoesProcessadas((prev) => [
-                ...prev,
-                ...prontas,
-            ]);
+            setQuestoesProcessadas((prev) => [...prev, ...prontas]);
             setFalhasProcessamento(falhas);
-
-            /*
-             * Valores identificados pela IA também aparecem como
-             * opções durante esta sessão. Depois que a questão for
-             * salva, passam a vir do banco nas próximas visitas.
-             */
-            setInstituicoes((prev) =>
-                ordenarOpcoes([
-                    ...prev,
-                    ...prontas.map((q) => q.instituicao),
-                ])
-            );
-
-            setCargos((prev) =>
-                ordenarOpcoes([
-                    ...prev,
-                    ...prontas.map((q) => q.cargo),
-                ])
-            );
-
-            setBancas((prev) =>
-                ordenarOpcoes([
-                    ...prev,
-                    ...prontas.map((q) => q.banca),
-                ])
-            );
 
             if (prontas.length) {
                 setMsg(
-                    `${prontas.length} questão(ões) processada(s). Revise os dados, marque Acertei ou Errei em cada uma e depois salve.`
+                    `${prontas.length} questão(ões) processada(s). A classificação permaneceu exatamente a selecionada nos catálogos.`
                 );
-            }
-
-            if (!prontas.length) {
-                setErro(
-                    "Nenhuma questão foi processada com sucesso."
-                );
+            } else {
+                setErro("Nenhuma questão foi processada com sucesso.");
             }
         } finally {
             setProcessando(false);
@@ -2012,31 +755,7 @@ Retorne SOMENTE JSON válido:
         patch: Partial<QuestaoProcessada>
     ) {
         setQuestoesProcessadas((prev) =>
-            prev.map((q) => {
-                if (q.localId !== localId) return q;
-
-                const alteraConteudoBase =
-                    "enunciado" in patch ||
-                    "correta" in patch ||
-                    "explicacao" in patch;
-
-                const alteraConteudoFlashcard =
-                    "flashcardFrente" in patch ||
-                    "flashcardVerso" in patch;
-
-                const deveInvalidarConfirmacao =
-                    q.criarFlashcard &&
-                    (alteraConteudoBase ||
-                        alteraConteudoFlashcard);
-
-                return {
-                    ...q,
-                    ...patch,
-                    ...(deveInvalidarConfirmacao
-                        ? { flashcardConfirmado: false }
-                        : {}),
-                };
-            })
+            prev.map((q) => (q.localId === localId ? { ...q, ...patch } : q))
         );
     }
 
@@ -2046,30 +765,23 @@ Retorne SOMENTE JSON válido:
         valor: string
     ) {
         setQuestoesProcessadas((prev) =>
-            prev.map((q) => {
-                if (q.localId !== localId) {
-                    return q;
-                }
-
-                return {
-                    ...q,
-                    alternativas: {
-                        ...q.alternativas,
-                        [letra]: valor,
-                    },
-                    ...(q.criarFlashcard
-                        ? { flashcardConfirmado: false }
-                        : {}),
-                };
-            })
+            prev.map((q) =>
+                q.localId === localId
+                    ? {
+                        ...q,
+                        alternativas: {
+                            ...q.alternativas,
+                            [letra]: valor,
+                        },
+                    }
+                    : q
+            )
         );
     }
 
     function removerQuestao(localId: string) {
         setQuestoesProcessadas((prev) =>
-            prev.filter(
-                (q) => q.localId !== localId
-            )
+            prev.filter((q) => q.localId !== localId)
         );
     }
 
@@ -2079,44 +791,17 @@ Retorne SOMENTE JSON válido:
     ) {
         if (!userId) return;
 
-        const { error } = await supabase
-            .from("caderno_itens")
-            .insert({
-                user_id: userId,
-                questao_id: questaoId,
-                tipo,
-                anotacao: null,
-            });
+        const { error } = await supabase.from("caderno_itens").insert({
+            user_id: userId,
+            questao_id: questaoId,
+            tipo,
+            anotacao: null,
+        });
 
         if (error) {
             throw new Error(
-                `Falha ao inserir no Caderno de ${tipo === "ERROS" ? "Erros" : "Acertos"}: ${error.message}`
-            );
-        }
-    }
-
-    async function inserirFlashcard(
-        questaoId: string,
-        q: QuestaoProcessada
-    ) {
-        if (!userId) return;
-
-        const { error } = await supabase
-            .from("flashcards")
-            .insert({
-                user_id: userId,
-                edital_id: editalId,
-                materia_id: materiaId,
-                assunto_id: assuntoId,
-                questao_origem_id: questaoId,
-                frente: q.flashcardFrente.trim(),
-                verso: q.flashcardVerso.trim(),
-                active: true,
-            });
-
-        if (error) {
-            throw new Error(
-                `Falha ao criar flashcard: ${error.message}`
+                `Falha ao inserir no Caderno de ${tipo === "ERROS" ? "Erros" : "Acertos"
+                }: ${error.message}`
             );
         }
     }
@@ -2127,14 +812,12 @@ Retorne SOMENTE JSON válido:
     ) {
         if (!userId) return;
 
-        const { error } = await supabase
-            .from("question_attempts")
-            .insert({
-                user_id: userId,
-                questao_id: questaoId,
-                resultado,
-                is_revisao: false,
-            });
+        const { error } = await supabase.from("question_attempts").insert({
+            user_id: userId,
+            questao_id: questaoId,
+            resultado,
+            is_revisao: false,
+        });
 
         if (error) {
             throw new Error(
@@ -2146,70 +829,48 @@ Retorne SOMENTE JSON válido:
     async function sincronizarEstatisticasDoUsuario() {
         if (!userId) return;
 
-        const {
-            data: tentativasData,
-            error: tentativasError,
-        } = await supabase
+        const { data: tentativasData, error: tentativasError } = await supabase
             .from("question_attempts")
             .select("questao_id,resultado,created_at")
             .eq("user_id", userId)
             .order("created_at", { ascending: true });
 
-        if (tentativasError) {
-            throw new Error(
-                `Falha ao ler tentativas para as estatísticas: ${tentativasError.message}`
-            );
-        }
+        if (tentativasError) throw tentativasError;
 
-        const tentativas =
-            (tentativasData ?? []) as Array<{
-                questao_id: string;
-                resultado: ResultadoTentativa;
-                created_at: string;
-            }>;
+        const tentativas = (tentativasData ?? []) as Array<{
+            questao_id: string;
+            resultado: ResultadoTentativa;
+            created_at: string;
+        }>;
 
-        const questaoIds = Array.from(
-            new Set(
-                tentativas
-                    .map((t) => t.questao_id)
-                    .filter(Boolean)
-            )
+        const ids = Array.from(
+            new Set(tentativas.map((t) => t.questao_id).filter(Boolean))
         );
 
-        const questoesMap = new Map<
+        const meta = new Map<
             string,
-            {
-                materia_id: string | null;
-                assunto_id: string | null;
-            }
+            { disciplina_id: string | null; assunto_id: string | null }
         >();
 
-        for (
-            let i = 0;
-            i < questaoIds.length;
-            i += 500
-        ) {
-            const lote = questaoIds.slice(i, i + 500);
+        for (let i = 0; i < ids.length; i += 500) {
+            const lote = ids.slice(i, i + 500);
 
-            const {
-                data: questoesData,
-                error: questoesError,
-            } = await supabase
+            const { data, error } = await supabase
                 .from("questoes")
-                .select("id,materia_id,assunto_id")
+                .select(
+                    "id,questao_disciplina_id,questao_assunto_id,materia_id,assunto_id"
+                )
                 .eq("user_id", userId)
                 .in("id", lote);
 
-            if (questoesError) {
-                throw new Error(
-                    `Falha ao ler questões para as estatísticas: ${questoesError.message}`
-                );
-            }
+            if (error) throw error;
 
-            for (const row of questoesData ?? []) {
-                questoesMap.set(String(row.id), {
-                    materia_id: row.materia_id ?? null,
-                    assunto_id: row.assunto_id ?? null,
+            for (const row of data ?? []) {
+                meta.set(String(row.id), {
+                    disciplina_id:
+                        row.questao_disciplina_id ?? row.materia_id ?? null,
+                    assunto_id:
+                        row.questao_assunto_id ?? row.assunto_id ?? null,
                 });
             }
         }
@@ -2218,150 +879,81 @@ Retorne SOMENTE JSON válido:
             string,
             { total: number; corretas: number }
         > = {};
-
         const accPorAssunto: Record<
             string,
             { total: number; corretas: number }
         > = {};
-
         const porDia = new Map<string, number>();
-
         let corretas = 0;
 
         for (const tentativa of tentativas) {
-            const acertou =
-                tentativa.resultado === "ACERTO";
-
+            const acertou = tentativa.resultado === "ACERTO";
             if (acertou) corretas += 1;
 
-            const questaoMeta = questoesMap.get(
-                tentativa.questao_id
-            );
+            const q = meta.get(tentativa.questao_id);
 
-            if (questaoMeta?.materia_id) {
-                const atual =
-                    accPorMateria[
-                    questaoMeta.materia_id
-                    ] ?? {
-                        total: 0,
-                        corretas: 0,
-                    };
-
+            if (q?.disciplina_id) {
+                const atual = accPorMateria[q.disciplina_id] ?? {
+                    total: 0,
+                    corretas: 0,
+                };
                 atual.total += 1;
-
-                if (acertou) {
-                    atual.corretas += 1;
-                }
-
-                accPorMateria[
-                    questaoMeta.materia_id
-                ] = atual;
+                if (acertou) atual.corretas += 1;
+                accPorMateria[q.disciplina_id] = atual;
             }
 
-            if (questaoMeta?.assunto_id) {
-                const atual =
-                    accPorAssunto[
-                    questaoMeta.assunto_id
-                    ] ?? {
-                        total: 0,
-                        corretas: 0,
-                    };
-
+            if (q?.assunto_id) {
+                const atual = accPorAssunto[q.assunto_id] ?? {
+                    total: 0,
+                    corretas: 0,
+                };
                 atual.total += 1;
-
-                if (acertou) {
-                    atual.corretas += 1;
-                }
-
-                accPorAssunto[
-                    questaoMeta.assunto_id
-                ] = atual;
+                if (acertou) atual.corretas += 1;
+                accPorAssunto[q.assunto_id] = atual;
             }
 
-            const d = new Date(
-                tentativa.created_at
-            );
-
-            const dia = d.toLocaleDateString(
-                "pt-BR",
-                {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                }
-            );
-
-            porDia.set(
-                dia,
-                (porDia.get(dia) ?? 0) + 1
-            );
+            const d = new Date(tentativa.created_at);
+            const dia = d.toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+            });
+            porDia.set(dia, (porDia.get(dia) ?? 0) + 1);
         }
 
         const total = tentativas.length;
-
-        const taxaAcerto = total
-            ? (corretas / total) * 100
-            : 0;
-
-        const progressoSemanal = Array.from(
-            porDia.entries()
-        ).map(([dia, questoes]) => ({
-            dia,
-            questoes,
-        }));
-
-        const payloadEstatisticas = {
+        const payload = {
             questoes_respondidas: total,
-            taxa_acerto: taxaAcerto,
-            progresso_semanal: progressoSemanal,
+            taxa_acerto: total ? (corretas / total) * 100 : 0,
+            progresso_semanal: Array.from(porDia.entries()).map(
+                ([dia, questoes]) => ({ dia, questoes })
+            ),
             acc_por_materia: accPorMateria,
             acc_por_assunto: accPorAssunto,
         };
 
-        const {
-            data: existente,
-            error: existenteError,
-        } = await supabase
+        const { data: existente, error: existeErro } = await supabase
             .from("estatisticas")
             .select("user_id")
             .eq("user_id", userId)
             .maybeSingle();
 
-        if (existenteError) {
-            throw new Error(
-                `Falha ao consultar estatísticas: ${existenteError.message}`
-            );
-        }
+        if (existeErro) throw existeErro;
 
         if (existente) {
             const { error } = await supabase
                 .from("estatisticas")
-                .update(payloadEstatisticas)
+                .update(payload)
                 .eq("user_id", userId);
-
-            if (error) {
-                throw new Error(
-                    `Falha ao atualizar estatísticas: ${error.message}`
-                );
-            }
-
-            return;
-        }
-
-        const { error } = await supabase
-            .from("estatisticas")
-            .insert({
+            if (error) throw error;
+        } else {
+            const { error } = await supabase.from("estatisticas").insert({
                 user_id: userId,
-                ...payloadEstatisticas,
+                ...payload,
             });
-
-        if (error) {
-            throw new Error(
-                `Falha ao criar estatísticas: ${error.message}`
-            );
+            if (error) throw error;
         }
     }
-
 
     async function handleSalvarTodas() {
         if (!userId) {
@@ -2369,88 +961,54 @@ Retorne SOMENTE JSON válido:
             return;
         }
 
-        if (!editalSelecionado) {
-            setErro("Edital inválido.");
+        if (
+            !instituicaoSelecionada ||
+            !cargoSelecionado ||
+            !bancaSelecionada ||
+            !disciplinaSelecionada ||
+            !assuntoSelecionado
+        ) {
+            setErro("A classificação selecionada é inválida ou incompleta.");
             return;
         }
 
-        if (!materiaSelecionada) {
-            setErro("Disciplina inválida.");
-            return;
-        }
-
-        if (!assuntoSelecionado) {
-            setErro("Assunto inválido.");
+        if (assuntoSelecionado.disciplina_id !== disciplinaSelecionada.id) {
+            setErro("O assunto selecionado não pertence à disciplina escolhida.");
             return;
         }
 
         if (!questoesProcessadas.length) {
+            setErro("Não existem questões processadas para salvar.");
+            return;
+        }
+
+        const invalidas = questoesProcessadas.filter((q) => {
+            const alternativas = Object.values(q.alternativas).filter((x) =>
+                String(x ?? "").trim()
+            ).length;
+
+            return (
+                !q.enunciado.trim() ||
+                !q.correta.trim() ||
+                alternativas < 2 ||
+                !q.resultado
+            );
+        });
+
+        if (invalidas.length) {
             setErro(
-                "Não existem questões processadas para salvar."
+                "Todas as questões precisam de enunciado, gabarito, ao menos duas alternativas e resultado Acertei/Errei."
             );
             return;
         }
 
-        const questoesIncompletas =
-            questoesProcessadas.filter((q) => {
-                const alternativasPreenchidas = Object.values(
-                    q.alternativas
-                ).filter((valor) =>
-                    String(valor ?? "").trim()
-                ).length;
+        const anoNumero = ano.trim() ? Number(ano) : null;
 
-                return (
-                    !q.enunciado.trim() ||
-                    !q.correta.trim() ||
-                    alternativasPreenchidas < 2
-                );
-            });
-
-        if (questoesIncompletas.length) {
-            setErro(
-                "Preencha o enunciado, o gabarito e pelo menos duas alternativas em todas as questões antes de salvar."
-            );
-            return;
-        }
-
-        const semResultado =
-            questoesProcessadas.filter(
-                (q) => !q.resultado
-            );
-
-        if (semResultado.length) {
-            setErro(
-                "Marque Acertei ou Errei em todas as questões antes de salvar."
-            );
-            return;
-        }
-
-        const flashcardsInvalidos =
-            questoesProcessadas.filter(
-                (q) =>
-                    q.criarFlashcard &&
-                    (!q.flashcardFrente.trim() ||
-                        !q.flashcardVerso.trim())
-            );
-
-        if (flashcardsInvalidos.length) {
-            setErro(
-                "Preencha Frente e Verso de todos os flashcards marcados, manualmente ou com IA."
-            );
-            return;
-        }
-
-        const flashcardsNaoConfirmados =
-            questoesProcessadas.filter(
-                (q) =>
-                    q.criarFlashcard &&
-                    !q.flashcardConfirmado
-            );
-
-        if (flashcardsNaoConfirmados.length) {
-            setErro(
-                "Confirme a prévia de todos os flashcards antes de salvar."
-            );
+        if (
+            anoNumero !== null &&
+            (!Number.isInteger(anoNumero) || anoNumero < 1900 || anoNumero > 2100)
+        ) {
+            setErro("Informe um ano válido entre 1900 e 2100 ou deixe em branco.");
             return;
         }
 
@@ -2466,37 +1024,49 @@ Retorne SOMENTE JSON válido:
                 let questaoId: string | null = null;
 
                 try {
+                    const instituicaoTexto = textoCanonicoComSigla(
+                        instituicaoSelecionada
+                    );
+                    const bancaTexto = textoCanonicoComSigla(bancaSelecionada);
+
                     const payload = {
                         user_id: userId,
-                        edital_id: editalId,
-                        materia_id: materiaId,
-                        assunto_id: assuntoId,
 
-                        /*
-                         * Mantemos também os nomes em texto para
-                         * compatibilidade com telas antigas.
-                         */
-                        disciplina: materiaSelecionada.nome,
+                        // Novos vínculos canônicos.
+                        questao_instituicao_id: instituicaoSelecionada.id,
+                        questao_cargo_id: cargoSelecionado.id,
+                        questao_banca_id: bancaSelecionada.id,
+                        questao_disciplina_id: disciplinaSelecionada.id,
+                        questao_assunto_id: assuntoSelecionado.id,
+                        ano: anoNumero,
+
+                        // Campos antigos mantidos temporariamente apenas para
+                        // compatibilidade de leitura. Os valores vêm dos
+                        // catálogos, nunca de texto livre ou da IA.
+                        instituicao: instituicaoTexto,
+                        cargo: cargoSelecionado.nome,
+                        banca: bancaTexto,
+                        disciplina: disciplinaSelecionada.nome,
                         assunto: assuntoSelecionado.nome,
 
-                        instituicao: q.instituicao,
-                        cargo: q.cargo,
+                        // Sem vínculo obrigatório com edital/matéria antigos.
+                        edital_id: null,
+                        materia_id: null,
+                        assunto_id: null,
+
                         modalidade: q.modalidade,
-                        banca: q.banca,
-                        enunciado: q.enunciado,
+                        enunciado: q.enunciado.trim(),
                         alternativas: q.alternativas,
-                        correta: q.correta,
-                        explicacao: q.explicacao,
+                        correta: q.correta.trim(),
+                        explicacao: q.explicacao.trim(),
                     };
 
-                    const {
-                        data: questaoCriada,
-                        error: questaoError,
-                    } = await supabase
-                        .from("questoes")
-                        .insert(payload)
-                        .select("id")
-                        .single();
+                    const { data: questaoCriada, error: questaoError } =
+                        await supabase
+                            .from("questoes")
+                            .insert(payload)
+                            .select("id")
+                            .single();
 
                     if (questaoError) {
                         throw new Error(
@@ -2504,9 +1074,7 @@ Retorne SOMENTE JSON válido:
                         );
                     }
 
-                    questaoId = String(
-                        questaoCriada.id
-                    );
+                    questaoId = String(questaoCriada.id);
 
                     await inserirTentativa(
                         questaoId,
@@ -2514,33 +1082,14 @@ Retorne SOMENTE JSON válido:
                     );
 
                     if (q.resultado === "ERRO") {
-                        await inserirCaderno(
-                            questaoId,
-                            "ERROS"
-                        );
+                        await inserirCaderno(questaoId, "ERROS");
                     }
 
-                    // Toda questão acertada já foi salva em `questoes` e em
-                    // `question_attempts`. O Caderno de Acertos é opcional: só
-                    // recebe a questão quando o usuário marcar explicitamente.
                     if (
                         q.resultado === "ACERTO" &&
                         q.salvarNoCadernoAcertos
                     ) {
-                        await inserirCaderno(
-                            questaoId,
-                            "ACERTOS"
-                        );
-                    }
-
-                    if (
-                        q.criarFlashcard &&
-                        q.flashcardConfirmado
-                    ) {
-                        await inserirFlashcard(
-                            questaoId,
-                            q
-                        );
+                        await inserirCaderno(questaoId, "ACERTOS");
                     }
 
                     resultados.push({
@@ -2548,32 +1097,9 @@ Retorne SOMENTE JSON válido:
                         status: "OK",
                         questaoId,
                     });
-
                 } catch (e) {
-                    /*
-                     * Compensação:
-                     * se a questão foi criada mas o caderno ou o
-                     * flashcard falhar, tentamos remover registros
-                     * dependentes antes de remover a própria questão.
-                     */
                     if (questaoId) {
-                        await Promise.allSettled([
-                            supabase
-                                .from("flashcards")
-                                .delete()
-                                .eq(
-                                    "questao_origem_id",
-                                    questaoId
-                                )
-                                .eq("user_id", userId),
-
-                            supabase
-                                .from("caderno_itens")
-                                .delete()
-                                .eq("questao_id", questaoId)
-                                .eq("user_id", userId),
-                        ]);
-
+                        // As FKs atuais removem tentativas/caderno por CASCADE.
                         await supabase
                             .from("questoes")
                             .delete()
@@ -2589,43 +1115,30 @@ Retorne SOMENTE JSON válido:
                 }
             }
 
-            let avisoEstatisticas = "";
-
             try {
                 await sincronizarEstatisticasDoUsuario();
             } catch (e) {
-                avisoEstatisticas =
-                    formatarErro(e);
+                console.error(
+                    "Questões salvas, mas não foi possível sincronizar as estatísticas:",
+                    e
+                );
             }
 
             setResultadoSalvamento(resultados);
 
-            const ok = resultados.filter(
-                (r) => r.status === "OK"
-            ).length;
+            const ok = resultados.filter((r) => r.status === "OK").length;
+            const falhas = resultados.length - ok;
 
-            const falhas = resultados.filter(
-                (r) => r.status === "ERRO"
-            ).length;
-
-            if (ok) {
+            if (ok > 0) {
                 setMsg(
-                    `${ok} questão(ões) cadastrada(s) com sucesso.${falhas ? ` ${falhas} falharam.` : ""}${avisoEstatisticas
-                        ? ` As questões foram salvas, mas houve falha ao sincronizar as estatísticas: ${avisoEstatisticas}`
-                        : " Estatísticas atualizadas."
+                    `${ok} questão(ões) salva(s) usando exclusivamente os IDs dos catálogos.${falhas ? ` ${falhas} falharam.` : ""
                     }`
                 );
             }
 
-            if (!ok) {
-                setErro(
-                    "Nenhuma questão pôde ser cadastrada. Veja os erros abaixo."
-                );
-            }
-
-            if (ok === questoesProcessadas.length) {
-                setInput("");
+            if (falhas === 0) {
                 setQuestoesProcessadas([]);
+                setInput("");
                 setFalhasProcessamento([]);
             }
         } finally {
@@ -2637,25 +1150,33 @@ Retorne SOMENTE JSON válido:
         return (
             <main className="min-h-[60vh] flex items-center justify-center px-4">
                 <span className="text-sm text-muted-foreground">
-                    Carregando...
+                    Carregando catálogos de questões...
                 </span>
             </main>
         );
     }
 
     return (
-        <main className="w-full px-4 sm:px-6 lg:px-8 py-6 md:py-10">
-            <div className="mx-auto max-w-5xl space-y-6">
-                <header>
-                    <h1 className="text-2xl font-bold text-foreground">
-                        Lançar Questões
-                    </h1>
+        <main className="w-full px-4 py-6 sm:px-6 lg:px-8 md:py-10">
+            <div className="mx-auto max-w-6xl space-y-6">
+                <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold text-foreground">
+                            Lançar Questões
+                        </h1>
+                        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                            A classificação é controlada por catálogos do banco.
+                            A IA processa apenas o conteúdo da questão e nunca
+                            escolhe instituição, cargo, banca, disciplina ou assunto.
+                        </p>
+                    </div>
 
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Classifique pelo Edital, processe o
-                        texto com IA e registre o resultado de
-                        cada questão.
-                    </p>
+                    <Link
+                        href="/catalogo"
+                        className="inline-flex shrink-0 items-center justify-center rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold hover:bg-muted"
+                    >
+                        Administrar catálogo
+                    </Link>
                 </header>
 
                 {erro && (
@@ -2670,1308 +1191,493 @@ Retorne SOMENTE JSON válido:
                     </div>
                 )}
 
-                <section className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm">
-                    <h2 className="text-base font-semibold">
-                        1. Classificação
-                    </h2>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        A classificação vem do seu Edital. A IA
-                        não escolhe disciplina nem assunto.
-                    </p>
-
-                    <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <label className="space-y-2">
-                            <span className="text-sm font-medium">
-                                Edital
-                            </span>
-
-                            <select
-                                value={editalId}
-                                onChange={(e) =>
-                                    handleEditalChange(
-                                        e.target.value
-                                    )
-                                }
-                                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                            >
-                                <option value="">
-                                    Selecione o Edital
-                                </option>
-
-                                {editais.map((edital) => (
-                                    <option
-                                        key={edital.id}
-                                        value={edital.id}
-                                    >
-                                        {edital.nome}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-
-                        <label className="space-y-2">
-                            <span className="text-sm font-medium">
-                                Disciplina
-                            </span>
-
-                            <select
-                                value={materiaId}
-                                disabled={!editalId}
-                                onChange={(e) =>
-                                    handleMateriaChange(
-                                        e.target.value
-                                    )
-                                }
-                                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none disabled:opacity-50 focus:ring-2 focus:ring-primary/30"
-                            >
-                                <option value="">
-                                    Selecione a Disciplina
-                                </option>
-
-                                {materias.map((materia) => (
-                                    <option
-                                        key={materia.id}
-                                        value={materia.id}
-                                    >
-                                        {materia.nome}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-
-                        <label className="space-y-2">
-                            <span className="text-sm font-medium">
-                                Assunto
-                            </span>
-
-                            <select
-                                value={assuntoId}
-                                disabled={!materiaId}
-                                onChange={(e) =>
-                                    handleAssuntoChange(
-                                        e.target.value
-                                    )
-                                }
-                                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none disabled:opacity-50 focus:ring-2 focus:ring-primary/30"
-                            >
-                                <option value="">
-                                    Selecione o Assunto
-                                </option>
-
-                                {assuntos.map((assunto) => (
-                                    <option
-                                        key={assunto.id}
-                                        value={assunto.id}
-                                    >
-                                        {assunto.nome}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium">
-                                Instituição
-                            </label>
-
-                            <select
-                                value={instituicaoPadrao}
-                                onChange={(e) =>
-                                    handleInstituicaoChange(
-                                        e.target.value
-                                    )
-                                }
-                                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                            >
-                                <option value="">
-                                    Deixar a IA identificar
-                                </option>
-
-                                {instituicoes.map((valor) => (
-                                    <option
-                                        key={valor}
-                                        value={valor}
-                                    >
-                                        {valor}
-                                    </option>
-                                ))}
-
-                                <option value={NOVA_OPCAO}>
-                                    + Adicionar nova instituição
-                                </option>
-                            </select>
-
-                            {criandoInstituicao && (
-                                <div className="flex gap-2">
-                                    <input
-                                        autoFocus
-                                        value={novaInstituicao}
-                                        onChange={(e) =>
-                                            setNovaInstituicao(
-                                                e.target.value
-                                            )
-                                        }
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
-                                                e.preventDefault();
-                                                adicionarInstituicao();
-                                            }
-                                        }}
-                                        placeholder="Nova instituição"
-                                        className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={adicionarInstituicao}
-                                        disabled={!novaInstituicao.trim()}
-                                        className="rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
-                                    >
-                                        Adicionar
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium">
-                                Cargo
-                            </label>
-
-                            <select
-                                value={cargoPadrao}
-                                onChange={(e) =>
-                                    handleCargoChange(
-                                        e.target.value
-                                    )
-                                }
-                                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                            >
-                                <option value="">
-                                    Deixar a IA identificar
-                                </option>
-
-                                {cargos.map((valor) => (
-                                    <option
-                                        key={valor}
-                                        value={valor}
-                                    >
-                                        {valor}
-                                    </option>
-                                ))}
-
-                                <option value={NOVA_OPCAO}>
-                                    + Adicionar novo cargo
-                                </option>
-                            </select>
-
-                            {criandoCargo && (
-                                <div className="flex gap-2">
-                                    <input
-                                        autoFocus
-                                        value={novoCargo}
-                                        onChange={(e) =>
-                                            setNovoCargo(
-                                                e.target.value
-                                            )
-                                        }
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
-                                                e.preventDefault();
-                                                adicionarCargo();
-                                            }
-                                        }}
-                                        placeholder="Novo cargo"
-                                        className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={adicionarCargo}
-                                        disabled={!novoCargo.trim()}
-                                        className="rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
-                                    >
-                                        Adicionar
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium">
-                                Banca
-                            </label>
-
-                            <select
-                                value={bancaPadrao}
-                                onChange={(e) =>
-                                    handleBancaChange(
-                                        e.target.value
-                                    )
-                                }
-                                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                            >
-                                <option value="">
-                                    Deixar a IA identificar
-                                </option>
-
-                                {bancas.map((valor) => (
-                                    <option
-                                        key={valor}
-                                        value={valor}
-                                    >
-                                        {valor}
-                                    </option>
-                                ))}
-
-                                <option value={NOVA_OPCAO}>
-                                    + Adicionar nova banca
-                                </option>
-                            </select>
-
-                            {criandoBanca && (
-                                <div className="flex gap-2">
-                                    <input
-                                        autoFocus
-                                        value={novaBanca}
-                                        onChange={(e) =>
-                                            setNovaBanca(
-                                                e.target.value
-                                            )
-                                        }
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
-                                                e.preventDefault();
-                                                adicionarBanca();
-                                            }
-                                        }}
-                                        placeholder="Nova banca"
-                                        className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={adicionarBanca}
-                                        disabled={!novaBanca.trim()}
-                                        className="rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
-                                    >
-                                        Adicionar
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {editalSelecionado &&
-                        materiaSelecionada &&
-                        assuntoSelecionado && (
-                            <div className="mt-4 rounded-xl bg-muted px-4 py-3 text-sm">
-                                <div>
-                                    <span className="font-medium">
-                                        Classificação:
-                                    </span>{" "}
-                                    {editalSelecionado.nome} /{" "}
-                                    {materiaSelecionada.nome} /{" "}
-                                    {assuntoSelecionado.nome}
-                                </div>
-
-                                <div className="mt-1 text-xs text-muted-foreground">
-                                    Padrões do próximo lote:{" "}
-                                    {instituicaoPadrao ||
-                                        "Instituição pela IA"}{" "}
-                                    /{" "}
-                                    {cargoPadrao ||
-                                        "Cargo pela IA"}{" "}
-                                    /{" "}
-                                    {bancaPadrao ||
-                                        "Banca pela IA"}
-                                </div>
-                            </div>
-                        )}
-                </section>
-
-                <section className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm">
+                <section className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                             <h2 className="text-base font-semibold">
-                                2. Tempo de estudo
+                                1. Classificação canônica
                             </h2>
-
                             <p className="mt-1 text-xs text-muted-foreground">
-                                Inicie o cronômetro antes de resolver
-                                questões na plataforma externa. O tempo
-                                fica associado à Disciplina e ao Assunto
-                                selecionados acima.
+                                Aqui não existe texto livre nem opção “criar novo”.
+                                Cadastros novos são feitos somente em /catalogo.
                             </p>
                         </div>
 
-                        <a
-                            href="/tempo-de-estudo"
+                        <Link
+                            href="/catalogo"
                             className="text-xs font-medium text-primary hover:underline"
                         >
-                            Ver histórico de tempo
-                        </a>
+                            Ir para Catálogo de Questões
+                        </Link>
                     </div>
 
-                    {studyError && (
-                        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                            {studyError}
+                    <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <CatalogSelect
+                            label="Instituição"
+                            value={instituicaoId}
+                            onChange={handleInstituicaoChange}
+                            placeholder="Selecione a Instituição"
+                            options={instituicoes.map((item) => ({
+                                id: item.id,
+                                label: nomeExibicaoComSigla(item),
+                            }))}
+                        />
+
+                        <CatalogSelect
+                            label="Cargo"
+                            value={cargoId}
+                            onChange={handleCargoChange}
+                            placeholder="Selecione o Cargo"
+                            options={cargos.map((item) => ({
+                                id: item.id,
+                                label: item.nome,
+                            }))}
+                        />
+
+                        <CatalogSelect
+                            label="Banca"
+                            value={bancaId}
+                            onChange={handleBancaChange}
+                            placeholder="Selecione a Banca"
+                            options={bancas.map((item) => ({
+                                id: item.id,
+                                label: nomeExibicaoComSigla(item),
+                            }))}
+                        />
+
+                        <CatalogSelect
+                            label="Disciplina"
+                            value={disciplinaId}
+                            onChange={handleDisciplinaChange}
+                            placeholder="Selecione a Disciplina"
+                            options={disciplinas.map((item) => ({
+                                id: item.id,
+                                label: item.nome,
+                            }))}
+                        />
+
+                        <CatalogSelect
+                            label="Assunto"
+                            value={assuntoId}
+                            onChange={handleAssuntoChange}
+                            placeholder={
+                                disciplinaId
+                                    ? "Selecione o Assunto"
+                                    : "Selecione a Disciplina primeiro"
+                            }
+                            disabled={!disciplinaId}
+                            options={assuntosDaDisciplina.map((item) => ({
+                                id: item.id,
+                                label: item.nome,
+                            }))}
+                        />
+
+                        <label className="space-y-2">
+                            <span className="text-sm font-medium">
+                                Ano <span className="text-muted-foreground">(opcional)</span>
+                            </span>
+                            <input
+                                type="text"
+                                inputMode="numeric"
+                                value={ano}
+                                onChange={(e) => handleAnoChange(e.target.value)}
+                                placeholder="Ex.: 2022"
+                                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                            />
+                        </label>
+                    </div>
+
+                    {!classificacaoCompleta && (
+                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                            Para lançar questões, cadastre as categorias em /catalogo
+                            e selecione Instituição, Cargo, Banca, Disciplina e Assunto.
                         </div>
                     )}
 
-                    {studyMessage && (
-                        <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-                            {studyMessage}
-                        </div>
-                    )}
-
-                    {openStudySession ? (
-                        <div className="mt-5 rounded-2xl border border-green-300 bg-green-50/70 p-5">
-                            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                                <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <span className="relative flex h-3 w-3">
-                                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-50" />
-                                            <span className="relative inline-flex h-3 w-3 rounded-full bg-green-600" />
-                                        </span>
-
-                                        <span className="text-xs font-semibold uppercase tracking-wider text-green-700">
-                                            Estudo em andamento
-                                        </span>
-                                    </div>
-
-                                    <div className="mt-3 text-lg font-semibold text-foreground">
-                                        {studyMateriaNome ||
-                                            "Disciplina da sessão"}
-                                    </div>
-
-                                    <div className="mt-1 text-sm text-muted-foreground">
-                                        {studyAssuntoNome ||
-                                            "Assunto da sessão"}
-                                    </div>
-
-                                    <div className="mt-2 text-xs text-muted-foreground">
-                                        Iniciado em{" "}
-                                        {new Date(
-                                            openStudySession.started_at
-                                        ).toLocaleString("pt-BR")}
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col items-stretch gap-3 sm:items-end">
-                                    <div className="font-mono text-4xl font-bold tabular-nums text-foreground">
-                                        {formatarDuracao(
-                                            studyElapsedSec
-                                        )}
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            encerrarEstudo(false)
-                                        }
-                                        disabled={studyActionLoading}
-                                        className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        {studyActionLoading
-                                            ? "Finalizando..."
-                                            : "Finalizar estudo"}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="mt-4 rounded-xl border border-green-200 bg-white/60 px-4 py-3 text-xs text-green-800">
-                                Você pode sair desta página, trocar de aba
-                                ou estudar em outro site. O tempo real é
-                                calculado pelo horário de início salvo no
-                                banco, e não pelo contador visual desta
-                                página.
-                            </div>
-
-                            {!sessaoCorrespondeClassificacao && (
-                                <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-                                    A classificação selecionada na página
-                                    é diferente da sessão em andamento.
-                                    Para evitar contabilizar tempo na
-                                    matéria errada, o processamento das
-                                    questões fica bloqueado até você
-                                    selecionar a mesma Disciplina/Assunto
-                                    da sessão ou finalizar o estudo.
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="mt-5 rounded-2xl border border-border bg-background p-5">
-                            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                                <div>
-                                    <div className="text-sm font-semibold">
-                                        {materiaSelecionada?.nome ||
-                                            "Selecione uma Disciplina"}
-                                    </div>
-
-                                    <div className="mt-1 text-sm text-muted-foreground">
-                                        {assuntoSelecionado?.nome ||
-                                            "Selecione um Assunto"}
-                                    </div>
-
-                                    <p className="mt-3 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                                        Ao iniciar, uma sessão é criada
-                                        em <code>study_sessions</code>.
-                                        Ela continua aberta enquanto você
-                                        resolve as questões externamente
-                                        e só termina quando você clicar
-                                        em Finalizar estudo.
-                                    </p>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={iniciarEstudo}
-                                    disabled={
-                                        studyActionLoading ||
-                                        !materiaId ||
-                                        !assuntoId
-                                    }
-                                    className="shrink-0 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {studyActionLoading
-                                        ? "Iniciando..."
-                                        : "Iniciar estudo"}
-                                </button>
-                            </div>
+                    {classificacaoCompleta && (
+                        <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-xs text-green-800">
+                            <strong>Classificação aplicada ao lote:</strong>{" "}
+                            {textoCanonicoComSigla(instituicaoSelecionada!)} •{" "}
+                            {cargoSelecionado!.nome} •{" "}
+                            {textoCanonicoComSigla(bancaSelecionada!)} •{" "}
+                            {disciplinaSelecionada!.nome} •{" "}
+                            {assuntoSelecionado!.nome}
+                            {ano ? ` • ${ano}` : ""}
                         </div>
                     )}
                 </section>
 
-                <section className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm">
+                <section className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
                     <h2 className="text-base font-semibold">
-                        3. Adicione as questões
+                        2. Inserir questões
                     </h2>
-
                     <p className="mt-1 text-xs text-muted-foreground">
-                        Escolha se deseja estruturar a questão com IA ou cadastrar tudo manualmente. Os dois caminhos salvam no mesmo banco e usam o mesmo fluxo de estatísticas, cadernos e flashcards.
+                        Use IA para separar e organizar o conteúdo ou cadastre
+                        manualmente. A classificação acima permanece fixa.
                     </p>
 
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="mt-5 inline-flex rounded-xl border border-border bg-muted/40 p-1">
                         <button
                             type="button"
                             onClick={() => setModoInsercao("IA")}
-                            className={`rounded-xl border px-4 py-3 text-left transition ${modoInsercao === "IA"
-                                ? "border-primary bg-primary/10 text-foreground"
-                                : "border-border bg-background hover:bg-muted"
+                            className={`rounded-lg px-4 py-2 text-sm font-medium transition ${modoInsercao === "IA"
+                                    ? "bg-background shadow-sm"
+                                    : "text-muted-foreground"
                                 }`}
                         >
-                            <span className="block text-sm font-semibold">
-                                Inserir com IA
-                            </span>
-                            <span className="mt-1 block text-xs text-muted-foreground">
-                                Cole uma ou várias questões. A IA organiza enunciado, alternativas, gabarito e comentário para você revisar.
-                            </span>
+                            Processar com IA
                         </button>
-
                         <button
                             type="button"
                             onClick={() => setModoInsercao("MANUAL")}
-                            className={`rounded-xl border px-4 py-3 text-left transition ${modoInsercao === "MANUAL"
-                                ? "border-primary bg-primary/10 text-foreground"
-                                : "border-border bg-background hover:bg-muted"
+                            className={`rounded-lg px-4 py-2 text-sm font-medium transition ${modoInsercao === "MANUAL"
+                                    ? "bg-background shadow-sm"
+                                    : "text-muted-foreground"
                                 }`}
                         >
-                            <span className="block text-sm font-semibold">
-                                Inserir manualmente
-                            </span>
-                            <span className="mt-1 block text-xs text-muted-foreground">
-                                Não depende da IA. Você preenche enunciado, alternativas, gabarito, comentário e, se quiser, o flashcard.
-                            </span>
+                            Cadastro manual
                         </button>
                     </div>
 
                     {modoInsercao === "IA" ? (
-                        <>
+                        <div className="mt-5">
                             <textarea
-                                className="mt-4 w-full min-h-[240px] resize-y rounded-xl border border-border bg-background p-4 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                                placeholder={`Exemplos de separação:
-1) ...
-2) ...
-
-QUESTÃO 3 ...
-QUESTÃO 4 ...
-
-1. ...
-2. ...`}
                                 value={input}
-                                onChange={(e) =>
-                                    setInput(e.target.value)
-                                }
+                                onChange={(e) => setInput(e.target.value)}
+                                placeholder="Cole aqui uma ou várias questões, preferencialmente com gabarito/comentário..."
+                                className="min-h-[240px] w-full rounded-2xl border border-border bg-background p-4 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-primary/30"
                             />
 
-                            <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-xs text-muted-foreground">
+                                    A IA não tem permissão para classificar a questão.
+                                </p>
                                 <button
                                     type="button"
-                                    onClick={handleProcessarLote}
+                                    onClick={() => void handleProcessarLote()}
                                     disabled={!podeProcessar}
-                                    className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {processando
-                                        ? "Processando com IA..."
-                                        : "Processar com IA"}
+                                        ? "Processando..."
+                                        : "Processar questões"}
                                 </button>
-
-                                <span className="text-xs text-muted-foreground">
-                                    Se a IA estiver indisponível, troque para Inserir manualmente sem perder a classificação selecionada.
-                                </span>
                             </div>
-                        </>
+                        </div>
                     ) : (
-                        <div className="mt-4 rounded-2xl border border-border bg-background p-4 sm:p-5">
-                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                    <div className="text-sm font-semibold text-foreground">
-                                        Cadastro manual
-                                    </div>
-                                    <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                                        Crie uma ficha vazia e preencha os dados abaixo. Você pode adicionar várias questões manuais ao mesmo lote. Nenhuma chamada à IA é necessária.
-                                    </p>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={adicionarQuestaoManual}
-                                    disabled={!podeAdicionarManual}
-                                    className="shrink-0 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    + Adicionar questão manual
-                                </button>
-                            </div>
-
-                            {!podeAdicionarManual && (
-                                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-                                    Selecione Edital, Disciplina e Assunto e mantenha a classificação compatível com a sessão de estudo para liberar o cadastro manual.
-                                </div>
-                            )}
+                        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-sm text-muted-foreground">
+                                Adicione uma questão vazia e preencha todos os dados manualmente.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={adicionarQuestaoManual}
+                                disabled={!podeAdicionarManual}
+                                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                + Adicionar questão manual
+                            </button>
                         </div>
                     )}
                 </section>
 
                 {falhasProcessamento.length > 0 && (
-                    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-                        <h2 className="font-semibold text-amber-900">
+                    <section className="rounded-2xl border border-red-200 bg-red-50 p-5 sm:p-6">
+                        <h2 className="font-semibold text-red-800">
                             Falhas no processamento
                         </h2>
-
-                        <div className="mt-3 space-y-3">
-                            {falhasProcessamento.map(
-                                (falha) => (
-                                    <div
-                                        key={`${falha.numero}-${falha.erro}`}
-                                        className="rounded-xl bg-white/70 p-3 text-sm"
-                                    >
-                                        <div className="font-medium text-amber-900">
-                                            Questão{" "}
-                                            {falha.numero}
-                                        </div>
-
-                                        <div className="mt-1 text-amber-800">
-                                            {falha.erro}
-                                        </div>
-                                    </div>
-                                )
-                            )}
+                        <div className="mt-3 space-y-2">
+                            {falhasProcessamento.map((falha) => (
+                                <div
+                                    key={`${falha.numero}-${falha.texto.slice(0, 20)}`}
+                                    className="rounded-xl border border-red-200 bg-white/60 px-4 py-3 text-sm text-red-700"
+                                >
+                                    <strong>Item {falha.numero}:</strong>{" "}
+                                    {falha.erro}
+                                </div>
+                            ))}
                         </div>
                     </section>
                 )}
 
                 {questoesProcessadas.length > 0 && (
-                    <section className="space-y-5">
+                    <section className="space-y-4">
                         <div>
                             <h2 className="text-lg font-semibold">
-                                4. Preencha, revise e informe o resultado
+                                3. Revisar antes de salvar
                             </h2>
-
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                Complete os campos obrigatórios e marque cada questão como Acertei ou Errei antes do salvamento.
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                A classificação não é editável por questão; todo o lote usa os IDs selecionados acima.
                             </p>
                         </div>
 
-                        {questoesProcessadas.map(
-                            (q, index) => {
-                                const letras =
-                                    Object.keys(
-                                        q.alternativas
-                                    ).sort();
-
-                                return (
-                                    <article
-                                        key={q.localId}
-                                        className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm"
-                                    >
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div>
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                                        Questão{" "}
-                                                        {q.numero}
-                                                    </div>
-                                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${q.origem === "MANUAL"
-                                                        ? "bg-slate-100 text-slate-700"
-                                                        : "bg-primary/10 text-primary"
-                                                        }`}>
-                                                        {q.origem === "MANUAL" ? "Manual" : "IA"}
-                                                    </span>
-                                                </div>
-
-                                                <h3 className="mt-1 font-semibold">
-                                                    {q.instituicao ||
-                                                        q.banca ||
-                                                        `Item ${index + 1}`}
-                                                </h3>
-                                            </div>
-
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    removerQuestao(
-                                                        q.localId
-                                                    )
-                                                }
-                                                className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
-                                            >
-                                                Remover
-                                            </button>
-                                        </div>
-
-                                        <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-xl border border-border bg-muted/40 p-4">
-                                            <div>
-                                                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                    Instituição
-                                                </div>
-                                                <div className="mt-1 text-sm font-medium">
-                                                    {q.instituicao || "Não informada"}
-                                                </div>
-                                            </div>
-
-                                            <div>
-                                                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                    Cargo
-                                                </div>
-                                                <div className="mt-1 text-sm font-medium">
-                                                    {q.cargo || "Não informado"}
-                                                </div>
-                                            </div>
-
-                                            <div>
-                                                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                    Banca
-                                                </div>
-                                                <div className="mt-1 text-sm font-medium">
-                                                    {q.banca || "Não informada"}
-                                                </div>
-                                            </div>
-
-                                            <div className="sm:col-span-3 text-xs text-muted-foreground">
-                                                Para alterar esses dados em lote, use Instituição, Cargo e Banca na seção 1. A nova seleção é aplicada às questões que já estão abertas e fica lembrada para os próximos lançamentos.
-                                            </div>
-                                        </div>
-
-                                        <label className="mt-4 block space-y-1">
-                                            <span className="text-xs text-muted-foreground">
-                                                Enunciado
-                                            </span>
-
-                                            <textarea
-                                                value={
-                                                    q.enunciado
-                                                }
-                                                onChange={(
-                                                    e
-                                                ) =>
-                                                    atualizarQuestao(
-                                                        q.localId,
-                                                        {
-                                                            enunciado:
-                                                                e
-                                                                    .target
-                                                                    .value,
-                                                        }
-                                                    )
-                                                }
-                                                className="w-full min-h-[120px] rounded-xl border border-border bg-background p-3 text-sm"
-                                            />
-                                        </label>
-
-                                        <div className="mt-4 space-y-2">
-                                            <div className="text-xs text-muted-foreground">
-                                                Alternativas
-                                            </div>
-
-                                            {letras.map(
-                                                (letra) => (
-                                                    <div
-                                                        key={
-                                                            letra
-                                                        }
-                                                        className="flex gap-2"
-                                                    >
-                                                        <div className="w-10 shrink-0 rounded-lg bg-muted px-2 py-2 text-center text-sm font-semibold">
-                                                            {
-                                                                letra
-                                                            }
-                                                        </div>
-
-                                                        <textarea
-                                                            value={
-                                                                q
-                                                                    .alternativas[
-                                                                letra
-                                                                ] ??
-                                                                ""
-                                                            }
-                                                            onChange={(
-                                                                e
-                                                            ) =>
-                                                                atualizarAlternativa(
-                                                                    q.localId,
-                                                                    letra,
-                                                                    e
-                                                                        .target
-                                                                        .value
-                                                                )
-                                                            }
-                                                            className="min-h-[44px] flex-1 resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                                                        />
-                                                    </div>
-                                                )
-                                            )}
-                                        </div>
-
-                                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <label className="space-y-1">
-                                                <span className="text-xs text-muted-foreground">
-                                                    Gabarito
-                                                </span>
-
-                                                <input
-                                                    value={
-                                                        q.correta
-                                                    }
-                                                    onChange={(
-                                                        e
-                                                    ) =>
-                                                        atualizarQuestao(
-                                                            q.localId,
-                                                            {
-                                                                correta:
-                                                                    e
-                                                                        .target
-                                                                        .value,
-                                                            }
-                                                        )
-                                                    }
-                                                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                                                />
-                                            </label>
-
-                                            <label className="space-y-1">
-                                                <span className="text-xs text-muted-foreground">
-                                                    Modalidade
-                                                </span>
-
-                                                <input
-                                                    value={
-                                                        q.modalidade
-                                                    }
-                                                    onChange={(
-                                                        e
-                                                    ) =>
-                                                        atualizarQuestao(
-                                                            q.localId,
-                                                            {
-                                                                modalidade:
-                                                                    e
-                                                                        .target
-                                                                        .value,
-                                                            }
-                                                        )
-                                                    }
-                                                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                                                />
-                                            </label>
-                                        </div>
-
-                                        <label className="mt-4 block space-y-1">
-                                            <span className="text-xs text-muted-foreground">
-                                                Comentário /
-                                                explicação
-                                            </span>
-
-                                            <textarea
-                                                value={
-                                                    q.explicacao
-                                                }
-                                                onChange={(
-                                                    e
-                                                ) =>
-                                                    atualizarQuestao(
-                                                        q.localId,
-                                                        {
-                                                            explicacao:
-                                                                e
-                                                                    .target
-                                                                    .value,
-                                                        }
-                                                    )
-                                                }
-                                                className="w-full min-h-[140px] rounded-xl border border-border bg-background p-3 text-sm"
-                                            />
-                                        </label>
-
-                                        <div className="mt-6">
-                                            <div className="text-sm font-semibold">
-                                                Resultado
-                                            </div>
-
-                                            <div className="mt-2 grid grid-cols-2 gap-3">
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        atualizarQuestao(
-                                                            q.localId,
-                                                            {
-                                                                resultado:
-                                                                    "ERRO",
-                                                                salvarNoCadernoAcertos: false,
-                                                            }
-                                                        )
-                                                    }
-                                                    className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${q.resultado ===
-                                                        "ERRO"
-                                                        ? "border-red-500 bg-red-50 text-red-700"
-                                                        : "border-border hover:bg-muted"
-                                                        }`}
-                                                >
-                                                    Errei
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        atualizarQuestao(
-                                                            q.localId,
-                                                            {
-                                                                resultado:
-                                                                    "ACERTO",
-                                                            }
-                                                        )
-                                                    }
-                                                    className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${q.resultado ===
-                                                        "ACERTO"
-                                                        ? "border-green-500 bg-green-50 text-green-700"
-                                                        : "border-border hover:bg-muted"
-                                                        }`}
-                                                >
-                                                    Acertei
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {q.resultado ===
-                                            "ERRO" && (
-                                                <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-xs text-red-700">
-                                                    Esta tentativa entrará nas estatísticas e a questão será enviada automaticamente para o Caderno de Erros de{" "}
-                                                    <strong>
-                                                        {materiaSelecionada?.nome ?? "Disciplina"}
-                                                    </strong>
-                                                    {" / "}
-                                                    <strong>
-                                                        {assuntoSelecionado?.nome ?? "Assunto"}
-                                                    </strong>
-                                                    .
-                                                </div>
-                                            )}
-
-                                        {q.resultado ===
-                                            "ACERTO" && (
-                                                <div className="mt-3 rounded-xl bg-green-50 px-4 py-3 text-xs text-green-700">
-                                                    Esta tentativa será registrada como acerto nas estatísticas de{" "}
-                                                    <strong>
-                                                        {materiaSelecionada?.nome ?? "Disciplina"}
-                                                    </strong>
-                                                    {" / "}
-                                                    <strong>
-                                                        {assuntoSelecionado?.nome ?? "Assunto"}
-                                                    </strong>
-                                                    .
-                                                </div>
-                                            )}
-
-                                        {q.resultado ===
-                                            "ACERTO" && (
-                                                <label
-                                                    className={`mt-4 flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${q.salvarNoCadernoAcertos
-                                                        ? "border-green-300 bg-green-50/70"
-                                                        : "border-border bg-background hover:bg-muted/40"
-                                                        }`}
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={
-                                                            q.salvarNoCadernoAcertos
-                                                        }
-                                                        onChange={(
-                                                            e
-                                                        ) =>
-                                                            atualizarQuestao(
-                                                                q.localId,
-                                                                {
-                                                                    salvarNoCadernoAcertos:
-                                                                        e
-                                                                            .target
-                                                                            .checked,
-                                                                }
-                                                            )
-                                                        }
-                                                        className="mt-1 h-4 w-4 accent-green-600"
-                                                    />
-
-                                                    <span className="min-w-0">
-                                                        <span className="block text-sm font-semibold text-foreground">
-                                                            Guardar esta questão no Caderno de Acertos
-                                                        </span>
-
-                                                        <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-                                                            Opcional. O acerto já será salvo no banco de questões e contabilizado nas estatísticas mesmo se você não marcar esta opção. Marque somente as questões boas, clássicas, difíceis ou importantes que deseja revisar novamente no futuro.
-                                                        </span>
-
-                                                        {q.salvarNoCadernoAcertos && (
-                                                            <span className="mt-2 block text-xs font-semibold text-green-700">
-                                                                ✓ Esta questão também será adicionada ao Caderno de Acertos.
-                                                            </span>
-                                                        )}
-                                                    </span>
-                                                </label>
-                                            )}
-
-                                        <label className="mt-4 flex items-start gap-3 rounded-xl border border-border p-4">
-                                            <input
-                                                type="checkbox"
-                                                checked={q.criarFlashcard}
-                                                onChange={(e) =>
-                                                    handleToggleFlashcard(
-                                                        q,
-                                                        e.target.checked
-                                                    )
-                                                }
-                                                className="mt-0.5"
-                                            />
-
-                                            <span>
-                                                <span className="block text-sm font-medium">
-                                                    Criar flashcard desta questão
-                                                </span>
-
-                                                <span className="block text-xs text-muted-foreground mt-1">
-                                                    O flashcard pode ser gerado com IA ou preenchido totalmente à mão. Se a IA estiver indisponível, o cadastro manual continua funcionando normalmente.
-                                                </span>
-                                            </span>
-                                        </label>
-
-                                        {q.criarFlashcard && (
-                                            <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
-                                                <div>
-                                                    <div className="text-sm font-semibold text-foreground">
-                                                        Flashcard
-                                                    </div>
-                                                    <div className="mt-1 text-xs text-muted-foreground">
-                                                        Escolha como deseja criar Frente e Verso. Em ambos os casos você poderá editar e deverá confirmar antes de salvar.
-                                                    </div>
-                                                </div>
-
-                                                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            gerarFlashcardComIA(
-                                                                q.localId,
-                                                                q.flashcardVersao > 0
-                                                            )
-                                                        }
-                                                        disabled={q.flashcardGerando}
-                                                        className={`rounded-xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${q.flashcardModo === "IA"
-                                                            ? "border-primary bg-primary/10"
-                                                            : "border-border bg-background hover:bg-muted"
-                                                            }`}
-                                                    >
-                                                        <span className="block text-sm font-semibold">
-                                                            {q.flashcardGerando
-                                                                ? "Gerando com IA..."
-                                                                : q.flashcardVersao > 0
-                                                                    ? "Gerar nova versão com IA"
-                                                                    : "Gerar com IA"}
-                                                        </span>
-                                                        <span className="mt-1 block text-xs text-muted-foreground">
-                                                            Usa enunciado, alternativas, gabarito, comentário e seu resultado para sugerir um cartão.
-                                                        </span>
-                                                    </button>
-
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            prepararFlashcardManual(
-                                                                q.localId
-                                                            )
-                                                        }
-                                                        disabled={q.flashcardGerando}
-                                                        className={`rounded-xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${q.flashcardModo === "MANUAL"
-                                                            ? "border-primary bg-primary/10"
-                                                            : "border-border bg-background hover:bg-muted"
-                                                            }`}
-                                                    >
-                                                        <span className="block text-sm font-semibold">
-                                                            Preencher manualmente
-                                                        </span>
-                                                        <span className="mt-1 block text-xs text-muted-foreground">
-                                                            Não faz chamada à IA. Digite a Frente e o Verso diretamente.
-                                                        </span>
-                                                    </button>
-                                                </div>
-
-                                                {q.flashcardErro && (
-                                                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                                                        <div className="font-medium">
-                                                            Não foi possível gerar o flashcard com IA.
-                                                        </div>
-                                                        <div className="mt-1 text-xs">
-                                                            {q.flashcardErro}
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                prepararFlashcardManual(
-                                                                    q.localId
-                                                                )
-                                                            }
-                                                            className="mt-3 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
-                                                        >
-                                                            Preencher manualmente agora
-                                                        </button>
-                                                    </div>
-                                                )}
-
-                                                {q.flashcardGerando && (
-                                                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                        <div className="min-h-[180px] animate-pulse rounded-2xl border border-border bg-card p-5">
-                                                            <div className="h-3 w-16 rounded bg-muted" />
-                                                            <div className="mt-6 h-4 w-full rounded bg-muted" />
-                                                            <div className="mt-2 h-4 w-4/5 rounded bg-muted" />
-                                                        </div>
-                                                        <div className="min-h-[180px] animate-pulse rounded-2xl border border-border bg-card p-5">
-                                                            <div className="h-3 w-16 rounded bg-muted" />
-                                                            <div className="mt-6 h-4 w-full rounded bg-muted" />
-                                                            <div className="mt-2 h-4 w-3/4 rounded bg-muted" />
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {!q.flashcardGerando &&
-                                                    q.flashcardModo === null &&
-                                                    !q.flashcardFrente.trim() &&
-                                                    !q.flashcardVerso.trim() &&
-                                                    !q.flashcardErro && (
-                                                        <div className="mt-4 rounded-xl border border-dashed border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
-                                                            Escolha Gerar com IA ou Preencher manualmente.
-                                                        </div>
-                                                    )}
-
-                                                {!q.flashcardGerando &&
-                                                    (q.flashcardModo === "MANUAL" ||
-                                                        q.flashcardFrente.trim() ||
-                                                        q.flashcardVerso.trim()) && (
-                                                        <>
-                                                            {q.flashcardFrente.trim() &&
-                                                                q.flashcardVerso.trim() && (
-                                                                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                        <div className="min-h-[190px] rounded-2xl border border-border bg-card p-5 shadow-sm">
-                                                                            <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-                                                                                Frente
-                                                                            </div>
-                                                                            <div className="mt-6 whitespace-pre-wrap text-base font-semibold leading-relaxed text-foreground">
-                                                                                {q.flashcardFrente}
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className="min-h-[190px] rounded-2xl border border-border bg-card p-5 shadow-sm">
-                                                                            <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-                                                                                Verso
-                                                                            </div>
-                                                                            <div className="mt-6 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                                                                                {q.flashcardVerso}
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-
-                                                            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                                <label className="space-y-1">
-                                                                    <span className="text-xs text-muted-foreground">
-                                                                        Frente
-                                                                    </span>
-                                                                    <textarea
-                                                                        value={q.flashcardFrente}
-                                                                        onChange={(e) =>
-                                                                            atualizarQuestao(
-                                                                                q.localId,
-                                                                                {
-                                                                                    flashcardFrente:
-                                                                                        e.target.value,
-                                                                                }
-                                                                            )
-                                                                        }
-                                                                        placeholder="Digite a pergunta curta que deseja recuperar da memória."
-                                                                        className="w-full min-h-[110px] rounded-xl border border-border bg-background p-3 text-sm"
-                                                                    />
-                                                                </label>
-
-                                                                <label className="space-y-1">
-                                                                    <span className="text-xs text-muted-foreground">
-                                                                        Verso
-                                                                    </span>
-                                                                    <textarea
-                                                                        value={q.flashcardVerso}
-                                                                        onChange={(e) =>
-                                                                            atualizarQuestao(
-                                                                                q.localId,
-                                                                                {
-                                                                                    flashcardVerso:
-                                                                                        e.target.value,
-                                                                                }
-                                                                            )
-                                                                        }
-                                                                        placeholder="Digite a resposta objetiva e suficiente para revisão."
-                                                                        className="w-full min-h-[110px] rounded-xl border border-border bg-background p-3 text-sm"
-                                                                    />
-                                                                </label>
-                                                            </div>
-
-                                                            <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-border bg-background p-4">
-                                                                <div>
-                                                                    <div className="text-sm font-medium">
-                                                                        {q.flashcardConfirmado
-                                                                            ? "Flashcard confirmado"
-                                                                            : "Confirme o flashcard antes de salvar"}
-                                                                    </div>
-                                                                    <div className="mt-1 text-xs text-muted-foreground">
-                                                                        {q.flashcardConfirmado
-                                                                            ? `Esta versão ${q.flashcardModo === "MANUAL" ? "manual" : "gerada com IA"} será salva junto com a questão.`
-                                                                            : "Qualquer edição invalida a confirmação e exige confirmar novamente."}
-                                                                    </div>
-                                                                </div>
-
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() =>
-                                                                        atualizarQuestao(
-                                                                            q.localId,
-                                                                            {
-                                                                                flashcardConfirmado: true,
-                                                                            }
-                                                                        )
-                                                                    }
-                                                                    disabled={
-                                                                        q.flashcardGerando ||
-                                                                        !q.flashcardFrente.trim() ||
-                                                                        !q.flashcardVerso.trim()
-                                                                    }
-                                                                    className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${q.flashcardConfirmado
-                                                                        ? "border border-green-300 bg-green-50 text-green-700"
-                                                                        : "bg-primary text-primary-foreground hover:opacity-90"
-                                                                        }`}
-                                                                >
-                                                                    {q.flashcardConfirmado
-                                                                        ? "Flashcard confirmado"
-                                                                        : "Confirmar flashcard"}
-                                                                </button>
-                                                            </div>
-                                                        </>
-                                                    )}
-                                            </div>
-                                        )}
-
-                                    </article>
-                                );
-                            }
-                        )}
+                        {questoesProcessadas.map((q) => (
+                            <QuestionEditor
+                                key={q.localId}
+                                question={q}
+                                onPatch={(patch) =>
+                                    atualizarQuestao(q.localId, patch)
+                                }
+                                onAlternative={(letter, value) =>
+                                    atualizarAlternativa(
+                                        q.localId,
+                                        letter,
+                                        value
+                                    )
+                                }
+                                onRemove={() => removerQuestao(q.localId)}
+                            />
+                        ))}
 
                         <div className="sticky bottom-4 z-20 rounded-2xl border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="text-sm">
                                     <span className="font-semibold">
-                                        {
-                                            questoesProcessadas.length
-                                        }
+                                        {questoesProcessadas.length}
                                     </span>{" "}
-                                    questão(ões) pronta(s)
-                                    para cadastro
+                                    questão(ões) pronta(s) para cadastro
                                 </div>
 
                                 <button
                                     type="button"
-                                    onClick={
-                                        handleSalvarTodas
-                                    }
+                                    onClick={() => void handleSalvarTodas()}
                                     disabled={!podeSalvar}
                                     className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                    {salvando
-                                        ? "Salvando..."
-                                        : "Salvar todas"}
+                                    {salvando ? "Salvando..." : "Salvar todas"}
                                 </button>
                             </div>
 
-                            {!podeSalvar &&
-                                !salvando && (
-                                    <p className="mt-2 text-xs text-muted-foreground">
-                                        Preencha enunciado, gabarito e pelo menos duas alternativas em cada questão, marque Acertei ou Errei e, se criar flashcard, preencha Frente e Verso e confirme o cartão.
-                                    </p>
-                                )}
+                            {!podeSalvar && !salvando && (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                    Selecione toda a classificação e, em cada questão,
+                                    preencha enunciado, gabarito, ao menos duas alternativas e Acertei/Errei.
+                                </p>
+                            )}
                         </div>
                     </section>
                 )}
 
                 {resultadoSalvamento.length > 0 && (
                     <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-                        <h2 className="font-semibold">
-                            Resultado do salvamento
-                        </h2>
-
+                        <h2 className="font-semibold">Resultado do salvamento</h2>
                         <div className="mt-4 space-y-2">
-                            {resultadoSalvamento.map(
-                                (r) => (
-                                    <div
-                                        key={`${r.numero}-${r.status}`}
-                                        className={`rounded-xl border px-4 py-3 text-sm ${r.status ===
-                                            "OK"
+                            {resultadoSalvamento.map((r) => (
+                                <div
+                                    key={`${r.numero}-${r.status}`}
+                                    className={`rounded-xl border px-4 py-3 text-sm ${r.status === "OK"
                                             ? "border-green-200 bg-green-50 text-green-700"
                                             : "border-red-200 bg-red-50 text-red-700"
-                                            }`}
-                                    >
-                                        <strong>
-                                            Questão{" "}
-                                            {r.numero}:
-                                        </strong>{" "}
-                                        {r.status ===
-                                            "OK"
-                                            ? "salva com sucesso."
-                                            : r.erro}
-                                    </div>
-                                )
-                            )}
+                                        }`}
+                                >
+                                    <strong>Questão {r.numero}:</strong>{" "}
+                                    {r.status === "OK"
+                                        ? "salva com sucesso."
+                                        : r.erro}
+                                </div>
+                            ))}
                         </div>
                     </section>
                 )}
 
                 <footer className="pb-6 text-center text-xs text-muted-foreground">
-                    Supabase • cadastro manual disponível • IA opcional via Gemini
+                    Catálogos controlados pelo Supabase • classificação manual por select • IA somente para conteúdo
                 </footer>
             </div>
         </main>
+    );
+}
+
+/* ========================================================================== */
+/* Componentes                                                                */
+/* ========================================================================== */
+
+function CatalogSelect({
+    label,
+    value,
+    onChange,
+    placeholder,
+    options,
+    disabled = false,
+}: {
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+    options: Array<{ id: string; label: string }>;
+    disabled?: boolean;
+}) {
+    return (
+        <label className="space-y-2">
+            <span className="text-sm font-medium">{label}</span>
+            <select
+                value={value}
+                disabled={disabled}
+                onChange={(e) => onChange(e.target.value)}
+                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+                <option value="">{placeholder}</option>
+                {options.map((option) => (
+                    <option key={option.id} value={option.id}>
+                        {option.label}
+                    </option>
+                ))}
+            </select>
+        </label>
+    );
+}
+
+function QuestionEditor({
+    question: q,
+    onPatch,
+    onAlternative,
+    onRemove,
+}: {
+    question: QuestaoProcessada;
+    onPatch: (patch: Partial<QuestaoProcessada>) => void;
+    onAlternative: (letter: string, value: string) => void;
+    onRemove: () => void;
+}) {
+    const alternativasOrdenadas = Object.entries(q.alternativas).sort(
+        ([a], [b]) => a.localeCompare(b)
+    );
+
+    return (
+        <article className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-primary">
+                        Questão {q.numero} • {q.origem === "IA" ? "IA" : "Manual"}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                        A categorização desta questão vem exclusivamente dos selects do lote.
+                    </div>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    className="shrink-0 rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50"
+                >
+                    Remover da tela
+                </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <label className="space-y-2">
+                    <span className="text-sm font-medium">Modalidade</span>
+                    <select
+                        value={q.modalidade}
+                        onChange={(e) => onPatch({ modalidade: e.target.value })}
+                        className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm"
+                    >
+                        <option value="Multipla Escolha">Múltipla Escolha</option>
+                        <option value="Certo ou Errado">Certo ou Errado</option>
+                    </select>
+                </label>
+
+                <label className="space-y-2">
+                    <span className="text-sm font-medium">Gabarito</span>
+                    <input
+                        value={q.correta}
+                        onChange={(e) => onPatch({ correta: e.target.value })}
+                        placeholder="A, B, C, Certo, Errado..."
+                        className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm"
+                    />
+                </label>
+            </div>
+
+            <label className="mt-4 block space-y-2">
+                <span className="text-sm font-medium">Enunciado</span>
+                <textarea
+                    value={q.enunciado}
+                    onChange={(e) => onPatch({ enunciado: e.target.value })}
+                    className="min-h-[130px] w-full rounded-xl border border-border bg-background p-3 text-sm leading-relaxed"
+                />
+            </label>
+
+            <div className="mt-4 space-y-3">
+                <div className="text-sm font-medium">Alternativas</div>
+                {alternativasOrdenadas.map(([letra, texto]) => (
+                    <label
+                        key={letra}
+                        className="flex items-start gap-3 rounded-xl border border-border bg-background p-3"
+                    >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-bold">
+                            {letra}
+                        </span>
+                        <textarea
+                            value={texto}
+                            onChange={(e) =>
+                                onAlternative(letra, e.target.value)
+                            }
+                            className="min-h-[54px] flex-1 resize-y bg-transparent text-sm outline-none"
+                        />
+                    </label>
+                ))}
+            </div>
+
+            <label className="mt-4 block space-y-2">
+                <span className="text-sm font-medium">Explicação / comentário</span>
+                <textarea
+                    value={q.explicacao}
+                    onChange={(e) => onPatch({ explicacao: e.target.value })}
+                    className="min-h-[120px] w-full rounded-xl border border-border bg-background p-3 text-sm leading-relaxed"
+                />
+            </label>
+
+            <div className="mt-5 rounded-2xl border border-border bg-muted/30 p-4">
+                <div className="text-sm font-semibold">Seu resultado</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        onClick={() => onPatch({ resultado: "ACERTO" })}
+                        className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${q.resultado === "ACERTO"
+                                ? "border-green-600 bg-green-600 text-white"
+                                : "border-green-200 text-green-700 hover:bg-green-50"
+                            }`}
+                    >
+                        Acertei
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onPatch({ resultado: "ERRO" })}
+                        className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${q.resultado === "ERRO"
+                                ? "border-red-600 bg-red-600 text-white"
+                                : "border-red-200 text-red-700 hover:bg-red-50"
+                            }`}
+                    >
+                        Errei
+                    </button>
+                </div>
+
+                {q.resultado === "ERRO" && (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                        Ao salvar, a questão entrará automaticamente no Caderno de Erros.
+                    </p>
+                )}
+
+                {q.resultado === "ACERTO" && (
+                    <label className="mt-3 flex items-start gap-3">
+                        <input
+                            type="checkbox"
+                            checked={q.salvarNoCadernoAcertos}
+                            onChange={(e) =>
+                                onPatch({
+                                    salvarNoCadernoAcertos: e.target.checked,
+                                })
+                            }
+                            className="mt-1 h-4 w-4 accent-green-600"
+                        />
+                        <span className="text-sm">
+                            Guardar esta questão no Caderno de Acertos
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                                Opcional. Use apenas para questões clássicas, difíceis ou especialmente importantes.
+                            </span>
+                        </span>
+                    </label>
+                )}
+            </div>
+        </article>
     );
 }
