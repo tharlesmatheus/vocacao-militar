@@ -81,23 +81,6 @@ type ResultadoTentativa = "ACERTO" | "ERRO";
 type ModoInsercao = "IA" | "MANUAL";
 type ModoFlashcard = "IA" | "MANUAL" | null;
 
-type Edital = {
-    id: string;
-    nome: string;
-};
-
-type Materia = {
-    id: string;
-    nome: string;
-    edital_id?: string | null;
-};
-
-type Assunto = {
-    id: string;
-    nome: string;
-    materia_id?: string | null;
-};
-
 type CatalogBase = {
     id: string;
     nome: string;
@@ -123,8 +106,15 @@ type QuestaoAssunto = CatalogBase & {
 type OpenStudySession = {
     id: string;
     started_at: string;
-    materia_id: string | null;
-    assunto_id: string | null;
+
+    // Classificação principal do tempo de estudo.
+    disciplina_catalogo_id: string | null;
+    assunto_catalogo_id: string | null;
+
+    // Compatibilidade com sessões antigas já existentes no banco.
+    materia_id?: string | null;
+    assunto_id?: string | null;
+
     mode: "cronometro" | "manual";
 };
 
@@ -325,14 +315,6 @@ function formatarDuracao(totalSeconds: number) {
 export default function NovaQuestaoGeminiLote() {
     const [userId, setUserId] = useState<string | null>(null);
 
-    const [editais, setEditais] = useState<Edital[]>([]);
-    const [materias, setMaterias] = useState<Materia[]>([]);
-    const [assuntos, setAssuntos] = useState<Assunto[]>([]);
-
-    const [editalId, setEditalId] = useState("");
-    const [materiaId, setMateriaId] = useState("");
-    const [assuntoId, setAssuntoId] = useState("");
-
     /*
      * Classificação canônica das questões.
      * Estes valores vêm SOMENTE das tabelas de catálogo e nunca são criados
@@ -388,29 +370,7 @@ export default function NovaQuestaoGeminiLote() {
     const [studyMessage, setStudyMessage] = useState("");
     const [studyMateriaNome, setStudyMateriaNome] = useState("");
     const [studyAssuntoNome, setStudyAssuntoNome] = useState("");
-    const [studyEditalId, setStudyEditalId] = useState("");
     const studyTimerRef = useRef<number | null>(null);
-
-    /*
-     * Edital/Matéria/Assunto abaixo continuam existindo apenas para o
-     * cronômetro / tempo de estudo, que ainda usa as tabelas
-     * editais/materias/assuntos. Eles NÃO classificam a questão e não são
-     * necessários para criar flashcards.
-     */
-    const editalSelecionado = useMemo(
-        () => editais.find((e) => e.id === editalId) ?? null,
-        [editais, editalId]
-    );
-
-    const materiaSelecionada = useMemo(
-        () => materias.find((m) => m.id === materiaId) ?? null,
-        [materias, materiaId]
-    );
-
-    const assuntoSelecionado = useMemo(
-        () => assuntos.find((a) => a.id === assuntoId) ?? null,
-        [assuntos, assuntoId]
-    );
 
     const instituicaoSelecionada = useMemo(
         () => instituicoes.find((item) => item.id === instituicaoId) ?? null,
@@ -465,8 +425,10 @@ export default function NovaQuestaoGeminiLote() {
 
     const sessaoCorrespondeClassificacao =
         !openStudySession ||
-        (openStudySession.materia_id === materiaId &&
-            openStudySession.assunto_id === assuntoId);
+        (openStudySession.disciplina_catalogo_id ===
+            questaoDisciplinaId &&
+            openStudySession.assunto_catalogo_id ===
+            questaoAssuntoId);
 
     const podeProcessar =
         !!userId &&
@@ -571,67 +533,127 @@ export default function NovaQuestaoGeminiLote() {
         session: OpenStudySession,
         uid: string
     ) {
-        const [materiaReq, assuntoReq] = await Promise.all([
-            session.materia_id
-                ? supabase
-                    .from("materias")
-                    .select("nome,edital_id")
-                    .eq("user_id", uid)
-                    .eq("id", session.materia_id)
-                    .maybeSingle()
-                : Promise.resolve({
-                    data: null,
-                    error: null,
-                }),
-            session.assunto_id
-                ? supabase
-                    .from("assuntos")
-                    .select("nome")
-                    .eq("user_id", uid)
-                    .eq("id", session.assunto_id)
-                    .maybeSingle()
-                : Promise.resolve({
-                    data: null,
-                    error: null,
-                }),
-        ]);
+        /*
+         * Fluxo principal: catálogo canônico.
+         * O fallback legado existe apenas para uma sessão antiga que ainda
+         * não tenha sido mapeada pela migração.
+         */
+        if (
+            session.disciplina_catalogo_id ||
+            session.assunto_catalogo_id
+        ) {
+            const [disciplinaReq, assuntoReq] =
+                await Promise.all([
+                    session.disciplina_catalogo_id
+                        ? supabase
+                            .from("questao_disciplinas")
+                            .select("nome")
+                            .eq("user_id", uid)
+                            .eq(
+                                "id",
+                                session.disciplina_catalogo_id
+                            )
+                            .maybeSingle()
+                        : Promise.resolve({
+                            data: null,
+                            error: null,
+                        }),
 
-        const materiaSessao =
-            materiaReq.data as
-            | {
-                nome?: string;
-                edital_id?: string | null;
-            }
-            | null;
+                    session.assunto_catalogo_id
+                        ? supabase
+                            .from("questao_assuntos")
+                            .select("nome")
+                            .eq("user_id", uid)
+                            .eq(
+                                "id",
+                                session.assunto_catalogo_id
+                            )
+                            .maybeSingle()
+                        : Promise.resolve({
+                            data: null,
+                            error: null,
+                        }),
+                ]);
+
+            setStudyMateriaNome(
+                String(
+                    (
+                        disciplinaReq.data as
+                        | { nome?: string }
+                        | null
+                    )?.nome ?? ""
+                ).trim()
+            );
+
+            setStudyAssuntoNome(
+                String(
+                    (
+                        assuntoReq.data as
+                        | { nome?: string }
+                        | null
+                    )?.nome ?? ""
+                ).trim()
+            );
+
+            return;
+        }
+
+        // Compatibilidade temporária com sessões antigas.
+        const [materiaReq, assuntoReq] =
+            await Promise.all([
+                session.materia_id
+                    ? supabase
+                        .from("materias")
+                        .select("nome")
+                        .eq("user_id", uid)
+                        .eq("id", session.materia_id)
+                        .maybeSingle()
+                    : Promise.resolve({
+                        data: null,
+                        error: null,
+                    }),
+
+                session.assunto_id
+                    ? supabase
+                        .from("assuntos")
+                        .select("nome")
+                        .eq("user_id", uid)
+                        .eq("id", session.assunto_id)
+                        .maybeSingle()
+                    : Promise.resolve({
+                        data: null,
+                        error: null,
+                    }),
+            ]);
 
         setStudyMateriaNome(
             String(
-                materiaSessao?.nome ?? ""
+                (
+                    materiaReq.data as
+                    | { nome?: string }
+                    | null
+                )?.nome ?? ""
             ).trim()
-        );
-
-        setStudyEditalId(
-            String(
-                materiaSessao?.edital_id ?? ""
-            )
         );
 
         setStudyAssuntoNome(
             String(
-                (assuntoReq.data as { nome?: string } | null)
-                    ?.nome ?? ""
+                (
+                    assuntoReq.data as
+                    | { nome?: string }
+                    | null
+                )?.nome ?? ""
             ).trim()
         );
     }
 
-    async function carregarSessaoAberta(uid: string) {
-        const {
-            data,
-            error,
-        } = await supabase
+    async function carregarSessaoAberta(
+        uid: string
+    ): Promise<OpenStudySession | null> {
+        const { data, error } = await supabase
             .from("study_sessions")
             .select(
-                "id,started_at,materia_id,assunto_id,mode"
+                "id,started_at,disciplina_catalogo_id,assunto_catalogo_id,materia_id,assunto_id,mode"
             )
             .eq("user_id", uid)
             .is("ended_at", null)
@@ -652,18 +674,15 @@ export default function NovaQuestaoGeminiLote() {
             setStudyElapsedSec(0);
             setStudyMateriaNome("");
             setStudyAssuntoNome("");
-            setStudyEditalId("");
-            return;
+            return null;
         }
 
         const session = data as OpenStudySession;
 
         setOpenStudySession(session);
+        await carregarNomesDaSessao(session, uid);
 
-        await carregarNomesDaSessao(
-            session,
-            uid
-        );
+        return session;
     }
 
     async function iniciarEstudo() {
@@ -675,9 +694,14 @@ export default function NovaQuestaoGeminiLote() {
             return;
         }
 
-        if (!materiaId || !assuntoId) {
+        if (
+            !questaoDisciplinaId ||
+            !questaoAssuntoId ||
+            !disciplinaCatalogoSelecionada ||
+            !assuntoCatalogoSelecionado
+        ) {
             setStudyError(
-                "Selecione a Disciplina e o Assunto antes de iniciar o estudo."
+                "Selecione Disciplina e Assunto na classificação da questão antes de iniciar o estudo."
             );
             return;
         }
@@ -706,8 +730,10 @@ export default function NovaQuestaoGeminiLote() {
                     body: JSON.stringify({
                         action: "start",
                         access_token,
-                        materia_id: materiaId,
-                        assunto_id: assuntoId,
+                        disciplina_catalogo_id:
+                            questaoDisciplinaId,
+                        assunto_catalogo_id:
+                            questaoAssuntoId,
                     }),
                 }
             );
@@ -737,17 +763,22 @@ export default function NovaQuestaoGeminiLote() {
             setOpenStudySession(session);
 
             if (
-                session.materia_id === materiaId &&
-                session.assunto_id === assuntoId
+                session.disciplina_catalogo_id ===
+                questaoDisciplinaId &&
+                session.assunto_catalogo_id ===
+                questaoAssuntoId
             ) {
                 setStudyMateriaNome(
-                    materiaSelecionada?.nome ?? ""
+                    disciplinaCatalogoSelecionada.nome
                 );
                 setStudyAssuntoNome(
-                    assuntoSelecionado?.nome ?? ""
+                    assuntoCatalogoSelecionado.nome
                 );
-                setStudyEditalId(editalId);
             } else {
+                /*
+                 * A API pode devolver uma sessão que já estava aberta.
+                 * Nesse caso, mostramos a classificação real da sessão.
+                 */
                 await carregarNomesDaSessao(
                     session,
                     userId
@@ -755,7 +786,7 @@ export default function NovaQuestaoGeminiLote() {
             }
 
             setStudyMessage(
-                "Cronômetro iniciado. Você pode estudar em outra plataforma e voltar depois; o tempo continuará sendo calculado pelo horário salvo no banco."
+                "Cronômetro iniciado para a mesma Disciplina e Assunto selecionados na classificação da questão."
             );
         } catch (e) {
             setStudyError(formatarErro(e));
@@ -814,7 +845,6 @@ export default function NovaQuestaoGeminiLote() {
             setStudyElapsedSec(0);
             setStudyMateriaNome("");
             setStudyAssuntoNome("");
-            setStudyEditalId("");
 
             if (!silencioso) {
                 setStudyMessage(
@@ -841,7 +871,9 @@ export default function NovaQuestaoGeminiLote() {
         }
 
         const confirmou = window.confirm(
-            `Existe um estudo em andamento em ${studyMateriaNome || "outra disciplina"} / ${studyAssuntoNome || "outro assunto"} (${formatarDuracao(
+            `Existe um estudo em andamento em ${studyMateriaNome || "outra disciplina"
+            } / ${studyAssuntoNome || "outro assunto"
+            } (${formatarDuracao(
                 studyElapsedSec
             )}).\n\nPara alterar ${descricaoDestino}, a sessão atual precisa ser finalizada. Deseja finalizar agora?`
         );
@@ -876,16 +908,20 @@ export default function NovaQuestaoGeminiLote() {
 
                 if (cancelled) return;
 
-                setUserId(user.id);
+                const uid = user.id;
+                setUserId(uid);
+
+                let sessaoAberta: OpenStudySession | null =
+                    null;
 
                 try {
-                    await carregarSessaoAberta(user.id);
+                    sessaoAberta =
+                        await carregarSessaoAberta(uid);
                 } catch (e) {
                     setStudyError(formatarErro(e));
                 }
 
                 const [
-                    editaisReq,
                     instituicoesReq,
                     cargosReq,
                     bancasReq,
@@ -893,49 +929,42 @@ export default function NovaQuestaoGeminiLote() {
                     assuntosCatalogoReq,
                 ] = await Promise.all([
                     supabase
-                        .from("editais")
-                        .select("id,nome")
-                        .eq("user_id", user.id)
-                        .order("nome"),
-
-                    supabase
                         .from("questao_instituicoes")
                         .select("id,nome,sigla,ativo")
-                        .eq("user_id", user.id)
+                        .eq("user_id", uid)
                         .eq("ativo", true)
                         .order("nome"),
 
                     supabase
                         .from("questao_cargos")
                         .select("id,nome,ativo")
-                        .eq("user_id", user.id)
+                        .eq("user_id", uid)
                         .eq("ativo", true)
                         .order("nome"),
 
                     supabase
                         .from("questao_bancas")
                         .select("id,nome,sigla,ativo")
-                        .eq("user_id", user.id)
+                        .eq("user_id", uid)
                         .eq("ativo", true)
                         .order("nome"),
 
                     supabase
                         .from("questao_disciplinas")
                         .select("id,nome,ativo")
-                        .eq("user_id", user.id)
+                        .eq("user_id", uid)
                         .eq("ativo", true)
                         .order("nome"),
 
                     supabase
                         .from("questao_assuntos")
                         .select("id,nome,disciplina_id,ativo")
-                        .eq("user_id", user.id)
+                        .eq("user_id", uid)
                         .eq("ativo", true)
                         .order("nome"),
                 ]);
 
                 const firstError =
-                    editaisReq.error ||
                     instituicoesReq.error ||
                     cargosReq.error ||
                     bancasReq.error ||
@@ -945,62 +974,100 @@ export default function NovaQuestaoGeminiLote() {
                 if (firstError) throw firstError;
                 if (cancelled) return;
 
-                const listaEditais =
-                    (editaisReq.data ?? []) as Edital[];
                 const listaInstituicoes =
-                    (instituicoesReq.data ?? []) as QuestaoInstituicao[];
-                const listaCargos =
-                    (cargosReq.data ?? []) as QuestaoCargo[];
-                const listaBancas =
-                    (bancasReq.data ?? []) as QuestaoBanca[];
-                const listaDisciplinas =
-                    (disciplinasReq.data ?? []) as QuestaoDisciplina[];
-                const listaAssuntosCatalogo =
-                    (assuntosCatalogoReq.data ?? []) as QuestaoAssunto[];
+                    (instituicoesReq.data ??
+                        []) as QuestaoInstituicao[];
 
-                setEditais(listaEditais);
+                const listaCargos =
+                    (cargosReq.data ??
+                        []) as QuestaoCargo[];
+
+                const listaBancas =
+                    (bancasReq.data ??
+                        []) as QuestaoBanca[];
+
+                const listaDisciplinas =
+                    (disciplinasReq.data ??
+                        []) as QuestaoDisciplina[];
+
+                const listaAssuntosCatalogo =
+                    (assuntosCatalogoReq.data ??
+                        []) as QuestaoAssunto[];
+
                 setInstituicoes(listaInstituicoes);
                 setCargos(listaCargos);
                 setBancas(listaBancas);
-                setDisciplinasCatalogo(listaDisciplinas);
-                setAssuntosCatalogo(listaAssuntosCatalogo);
+                setDisciplinasCatalogo(
+                    listaDisciplinas
+                );
+                setAssuntosCatalogo(
+                    listaAssuntosCatalogo
+                );
 
                 const savedInstituicaoId =
                     window.localStorage.getItem(
-                        chavePreferencia(user.id, "catalogo_instituicao_id")
+                        chavePreferencia(
+                            uid,
+                            "catalogo_instituicao_id"
+                        )
                     ) ?? "";
+
                 const savedCargoId =
                     window.localStorage.getItem(
-                        chavePreferencia(user.id, "catalogo_cargo_id")
+                        chavePreferencia(
+                            uid,
+                            "catalogo_cargo_id"
+                        )
                     ) ?? "";
+
                 const savedBancaId =
                     window.localStorage.getItem(
-                        chavePreferencia(user.id, "catalogo_banca_id")
+                        chavePreferencia(
+                            uid,
+                            "catalogo_banca_id"
+                        )
                     ) ?? "";
+
                 const savedDisciplinaId =
                     window.localStorage.getItem(
-                        chavePreferencia(user.id, "catalogo_disciplina_id")
+                        chavePreferencia(
+                            uid,
+                            "catalogo_disciplina_id"
+                        )
                     ) ?? "";
+
                 const savedQuestaoAssuntoId =
                     window.localStorage.getItem(
-                        chavePreferencia(user.id, "catalogo_assunto_id")
+                        chavePreferencia(
+                            uid,
+                            "catalogo_assunto_id"
+                        )
                     ) ?? "";
+
                 const savedAno =
                     window.localStorage.getItem(
-                        chavePreferencia(user.id, "catalogo_ano")
+                        chavePreferencia(
+                            uid,
+                            "catalogo_ano"
+                        )
                     ) ?? "";
 
                 if (
                     listaInstituicoes.some(
-                        (item) => item.id === savedInstituicaoId
+                        (item) =>
+                            item.id ===
+                            savedInstituicaoId
                     )
                 ) {
-                    setInstituicaoId(savedInstituicaoId);
+                    setInstituicaoId(
+                        savedInstituicaoId
+                    );
                 }
 
                 if (
                     listaCargos.some(
-                        (item) => item.id === savedCargoId
+                        (item) =>
+                            item.id === savedCargoId
                     )
                 ) {
                     setCargoId(savedCargoId);
@@ -1008,134 +1075,69 @@ export default function NovaQuestaoGeminiLote() {
 
                 if (
                     listaBancas.some(
-                        (item) => item.id === savedBancaId
+                        (item) =>
+                            item.id === savedBancaId
                     )
                 ) {
                     setBancaId(savedBancaId);
                 }
 
-                if (
-                    listaDisciplinas.some(
-                        (item) => item.id === savedDisciplinaId
-                    )
-                ) {
-                    setQuestaoDisciplinaId(savedDisciplinaId);
-                }
+                /*
+                 * Se existe um cronômetro aberto, ele passa a ser a fonte da
+                 * Disciplina/Assunto da tela. Assim a classificação da questão
+                 * e o tempo de estudo nunca começam divergentes.
+                 */
+                const disciplinaDaSessao =
+                    sessaoAberta
+                        ?.disciplina_catalogo_id ??
+                    "";
 
-                if (
+                const assuntoDaSessao =
+                    sessaoAberta
+                        ?.assunto_catalogo_id ??
+                    "";
+
+                const disciplinaInicial =
+                    listaDisciplinas.some(
+                        (item) =>
+                            item.id ===
+                            disciplinaDaSessao
+                    )
+                        ? disciplinaDaSessao
+                        : listaDisciplinas.some(
+                            (item) =>
+                                item.id ===
+                                savedDisciplinaId
+                        )
+                            ? savedDisciplinaId
+                            : "";
+
+                const assuntoInicial =
                     listaAssuntosCatalogo.some(
                         (item) =>
-                            item.id === savedQuestaoAssuntoId &&
-                            item.disciplina_id === savedDisciplinaId
+                            item.id ===
+                            assuntoDaSessao &&
+                            item.disciplina_id ===
+                            disciplinaInicial
                     )
-                ) {
-                    setQuestaoAssuntoId(savedQuestaoAssuntoId);
-                }
+                        ? assuntoDaSessao
+                        : listaAssuntosCatalogo.some(
+                            (item) =>
+                                item.id ===
+                                savedQuestaoAssuntoId &&
+                                item.disciplina_id ===
+                                disciplinaInicial
+                        )
+                            ? savedQuestaoAssuntoId
+                            : "";
+
+                setQuestaoDisciplinaId(
+                    disciplinaInicial
+                );
+                setQuestaoAssuntoId(assuntoInicial);
 
                 if (/^\d{4}$/.test(savedAno)) {
                     setAnoQuestao(savedAno);
-                }
-
-                /*
-                 * O bloco a seguir restaura SOMENTE o vínculo antigo de estudo
-                 * usado pelo cronômetro / tempo de estudo. Ele não classifica a
-                 * questão e não interfere na classificação dos flashcards.
-                 */
-                const savedEdital =
-                    window.localStorage.getItem(
-                        chavePreferencia(user.id, "last_edital_id")
-                    ) ??
-                    window.sessionStorage.getItem(
-                        "questoes:last_edital_id"
-                    );
-
-                const editalInicial =
-                    listaEditais.some(
-                        (e) => e.id === savedEdital
-                    )
-                        ? savedEdital ?? ""
-                        : "";
-
-                if (!editalInicial) {
-                    return;
-                }
-
-                setEditalId(editalInicial);
-
-                const {
-                    data: materiasData,
-                    error: materiasError,
-                } = await supabase
-                    .from("materias")
-                    .select("id,nome,edital_id")
-                    .eq("user_id", user.id)
-                    .eq("edital_id", editalInicial)
-                    .order("nome");
-
-                if (materiasError) throw materiasError;
-                if (cancelled) return;
-
-                const listaMaterias =
-                    (materiasData ?? []) as Materia[];
-
-                setMaterias(listaMaterias);
-
-                const savedMateria =
-                    window.localStorage.getItem(
-                        chavePreferencia(user.id, "last_materia_id")
-                    ) ??
-                    window.sessionStorage.getItem(
-                        "questoes:last_materia_id"
-                    );
-
-                const materiaInicial =
-                    listaMaterias.some(
-                        (m) => m.id === savedMateria
-                    )
-                        ? savedMateria ?? ""
-                        : "";
-
-                if (!materiaInicial) {
-                    return;
-                }
-
-                setMateriaId(materiaInicial);
-
-                const {
-                    data: assuntosData,
-                    error: assuntosError,
-                } = await supabase
-                    .from("assuntos")
-                    .select("id,nome,materia_id")
-                    .eq("user_id", user.id)
-                    .eq("materia_id", materiaInicial)
-                    .order("nome");
-
-                if (assuntosError) throw assuntosError;
-                if (cancelled) return;
-
-                const listaAssuntos =
-                    (assuntosData ?? []) as Assunto[];
-
-                setAssuntos(listaAssuntos);
-
-                const savedAssunto =
-                    window.localStorage.getItem(
-                        chavePreferencia(user.id, "last_assunto_id")
-                    ) ??
-                    window.sessionStorage.getItem(
-                        "questoes:last_assunto_id"
-                    );
-
-                const assuntoInicial =
-                    listaAssuntos.some(
-                        (a) => a.id === savedAssunto
-                    )
-                        ? savedAssunto ?? ""
-                        : "";
-
-                if (assuntoInicial) {
-                    setAssuntoId(assuntoInicial);
                 }
             } catch (e) {
                 if (!cancelled) {
@@ -1154,161 +1156,6 @@ export default function NovaQuestaoGeminiLote() {
             cancelled = true;
         };
     }, []);
-
-    async function handleEditalChange(
-        novoEditalId: string
-    ) {
-        if (
-            openStudySession &&
-            novoEditalId !== studyEditalId
-        ) {
-            const podeTrocar =
-                await confirmarTrocaDeClassificacao(
-                    "o Edital"
-                );
-
-            if (!podeTrocar) return;
-        }
-
-        setEditalId(novoEditalId);
-        setMateriaId("");
-        setAssuntoId("");
-        setMaterias([]);
-        setAssuntos([]);
-        setErro("");
-        setMsg("");
-
-        window.sessionStorage.setItem(
-            "questoes:last_edital_id",
-            novoEditalId
-        );
-
-        if (userId) {
-            window.localStorage.setItem(
-                chavePreferencia(userId, "last_edital_id"),
-                novoEditalId
-            );
-            window.localStorage.removeItem(
-                chavePreferencia(userId, "last_materia_id")
-            );
-            window.localStorage.removeItem(
-                chavePreferencia(userId, "last_assunto_id")
-            );
-        }
-
-        window.sessionStorage.removeItem(
-            "questoes:last_materia_id"
-        );
-
-        window.sessionStorage.removeItem(
-            "questoes:last_assunto_id"
-        );
-
-        if (!novoEditalId || !userId) return;
-
-        const { data, error } = await supabase
-            .from("materias")
-            .select("id,nome,edital_id")
-            .eq("user_id", userId)
-            .eq("edital_id", novoEditalId)
-            .order("nome");
-
-        if (error) {
-            setErro(error.message);
-            return;
-        }
-
-        setMaterias((data ?? []) as Materia[]);
-    }
-
-    async function handleMateriaChange(
-        novaMateriaId: string
-    ) {
-        if (
-            openStudySession &&
-            openStudySession.materia_id !== novaMateriaId
-        ) {
-            const podeTrocar =
-                await confirmarTrocaDeClassificacao(
-                    "a Disciplina"
-                );
-
-            if (!podeTrocar) return;
-        }
-
-        setMateriaId(novaMateriaId);
-        setAssuntoId("");
-        setAssuntos([]);
-        setErro("");
-        setMsg("");
-
-        window.sessionStorage.setItem(
-            "questoes:last_materia_id",
-            novaMateriaId
-        );
-
-        if (userId) {
-            window.localStorage.setItem(
-                chavePreferencia(userId, "last_materia_id"),
-                novaMateriaId
-            );
-            window.localStorage.removeItem(
-                chavePreferencia(userId, "last_assunto_id")
-            );
-        }
-
-        window.sessionStorage.removeItem(
-            "questoes:last_assunto_id"
-        );
-
-        if (!novaMateriaId || !userId) return;
-
-        const { data, error } = await supabase
-            .from("assuntos")
-            .select("id,nome,materia_id")
-            .eq("user_id", userId)
-            .eq("materia_id", novaMateriaId)
-            .order("nome");
-
-        if (error) {
-            setErro(error.message);
-            return;
-        }
-
-        setAssuntos((data ?? []) as Assunto[]);
-    }
-
-    async function handleAssuntoChange(
-        novoAssuntoId: string
-    ) {
-        if (
-            openStudySession &&
-            openStudySession.assunto_id !== novoAssuntoId
-        ) {
-            const podeTrocar =
-                await confirmarTrocaDeClassificacao(
-                    "o Assunto"
-                );
-
-            if (!podeTrocar) return;
-        }
-
-        setAssuntoId(novoAssuntoId);
-        setErro("");
-        setMsg("");
-
-        window.sessionStorage.setItem(
-            "questoes:last_assunto_id",
-            novoAssuntoId
-        );
-
-        if (userId) {
-            window.localStorage.setItem(
-                chavePreferencia(userId, "last_assunto_id"),
-                novoAssuntoId
-            );
-        }
-    }
 
     function textoCanonicoComSigla(
         item: { nome: string; sigla?: string | null } | null
@@ -1400,28 +1247,61 @@ export default function NovaQuestaoGeminiLote() {
         );
     }
 
-    function handleQuestaoDisciplinaChange(id: string) {
+    async function handleQuestaoDisciplinaChange(
+        id: string
+    ) {
+        if (
+            openStudySession &&
+            openStudySession.disciplina_catalogo_id !== id
+        ) {
+            const podeTrocar =
+                await confirmarTrocaDeClassificacao(
+                    "a Disciplina"
+                );
+
+            if (!podeTrocar) return;
+        }
+
         setQuestaoDisciplinaId(id);
         setQuestaoAssuntoId("");
+
         salvarPreferenciaCatalogo(
             "catalogo_disciplina_id",
             id
         );
+
         salvarPreferenciaCatalogo(
             "catalogo_assunto_id",
             ""
         );
 
+        setStudyMessage("");
         setQuestõesLimparDepoisDaClassificacao();
     }
 
-    function handleQuestaoAssuntoChange(id: string) {
+    async function handleQuestaoAssuntoChange(
+        id: string
+    ) {
+        if (
+            openStudySession &&
+            openStudySession.assunto_catalogo_id !== id
+        ) {
+            const podeTrocar =
+                await confirmarTrocaDeClassificacao(
+                    "o Assunto"
+                );
+
+            if (!podeTrocar) return;
+        }
+
         setQuestaoAssuntoId(id);
+
         salvarPreferenciaCatalogo(
             "catalogo_assunto_id",
             id
         );
 
+        setStudyMessage("");
         setQuestõesLimparDepoisDaClassificacao();
     }
 
@@ -2096,13 +1976,12 @@ Retorne SOMENTE JSON válido:
                     assuntoCatalogoSelecionado.id,
 
                 /*
-                 * Campos legados preservados apenas quando o usuário também
-                 * estiver usando o cronômetro com um vínculo de estudo antigo.
-                 * Após o SQL de transição, eles podem ficar NULL.
+                 * Classificação antiga não é mais usada pela landing.
+                 * Mantemos NULL apenas para compatibilidade de schema.
                  */
-                edital_id: editalId || null,
-                materia_id: materiaId || null,
-                assunto_id: assuntoId || null,
+                edital_id: null,
+                materia_id: null,
+                assunto_id: null,
 
                 questao_origem_id: questaoId,
                 frente: q.flashcardFrente.trim(),
@@ -2805,11 +2684,11 @@ Retorne SOMENTE JSON válido:
 
                             <select
                                 value={questaoDisciplinaId}
-                                onChange={(e) =>
-                                    handleQuestaoDisciplinaChange(
+                                onChange={(e) => {
+                                    void handleQuestaoDisciplinaChange(
                                         e.target.value
-                                    )
-                                }
+                                    );
+                                }}
                                 className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                             >
                                 <option value="">
@@ -2835,11 +2714,11 @@ Retorne SOMENTE JSON válido:
                             <select
                                 value={questaoAssuntoId}
                                 disabled={!questaoDisciplinaId}
-                                onChange={(e) =>
-                                    handleQuestaoAssuntoChange(
+                                onChange={(e) => {
+                                    void handleQuestaoAssuntoChange(
                                         e.target.value
-                                    )
-                                }
+                                    );
+                                }}
                                 className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none disabled:opacity-50 focus:ring-2 focus:ring-primary/30"
                             >
                                 <option value="">
@@ -2926,10 +2805,10 @@ Retorne SOMENTE JSON válido:
                             </h2>
 
                             <p className="mt-1 text-xs text-muted-foreground">
-                                Este vínculo é separado da classificação da questão.
-                                Ele existe apenas para o cronômetro / tempo de estudo.
-                                Os flashcards já herdam automaticamente a disciplina e
-                                o assunto do catálogo canônico da questão.
+                                O cronômetro usa automaticamente a mesma
+                                Disciplina e o mesmo Assunto selecionados em
+                                “1. Classificação da questão”. Não é necessário
+                                classificar duas vezes.
                             </p>
                         </div>
 
@@ -2939,110 +2818,6 @@ Retorne SOMENTE JSON válido:
                         >
                             Ver histórico de tempo
                         </a>
-                    </div>
-
-                    <div className="mt-5 rounded-2xl border border-border bg-background p-4">
-                        <div className="mb-3">
-                            <div className="text-sm font-semibold">
-                                Vínculo do cronômetro
-                            </div>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                Opcional para salvar questões e flashcards. Selecione
-                                Edital, Disciplina e Assunto aqui somente quando quiser
-                                registrar o tempo de estudo nessa estrutura.
-                            </p>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                            <label className="space-y-2">
-                                <span className="text-xs font-medium">
-                                    Edital de estudo
-                                </span>
-
-                                <select
-                                    value={editalId}
-                                    onChange={(e) =>
-                                        handleEditalChange(
-                                            e.target.value
-                                        )
-                                    }
-                                    className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                                >
-                                    <option value="">
-                                        Selecione
-                                    </option>
-
-                                    {editais.map((edital) => (
-                                        <option
-                                            key={edital.id}
-                                            value={edital.id}
-                                        >
-                                            {edital.nome}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-
-                            <label className="space-y-2">
-                                <span className="text-xs font-medium">
-                                    Disciplina do plano
-                                </span>
-
-                                <select
-                                    value={materiaId}
-                                    disabled={!editalId}
-                                    onChange={(e) =>
-                                        handleMateriaChange(
-                                            e.target.value
-                                        )
-                                    }
-                                    className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none disabled:opacity-50 focus:ring-2 focus:ring-primary/30"
-                                >
-                                    <option value="">
-                                        Selecione
-                                    </option>
-
-                                    {materias.map((materia) => (
-                                        <option
-                                            key={materia.id}
-                                            value={materia.id}
-                                        >
-                                            {materia.nome}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-
-                            <label className="space-y-2">
-                                <span className="text-xs font-medium">
-                                    Assunto do plano
-                                </span>
-
-                                <select
-                                    value={assuntoId}
-                                    disabled={!materiaId}
-                                    onChange={(e) =>
-                                        handleAssuntoChange(
-                                            e.target.value
-                                        )
-                                    }
-                                    className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none disabled:opacity-50 focus:ring-2 focus:ring-primary/30"
-                                >
-                                    <option value="">
-                                        Selecione
-                                    </option>
-
-                                    {assuntos.map((assunto) => (
-                                        <option
-                                            key={assunto.id}
-                                            value={assunto.id}
-                                        >
-                                            {assunto.nome}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-                        </div>
                     </div>
 
                     {studyError && (
@@ -3074,11 +2849,13 @@ Retorne SOMENTE JSON válido:
 
                                     <div className="mt-3 text-lg font-semibold text-foreground">
                                         {studyMateriaNome ||
+                                            disciplinaCatalogoSelecionada?.nome ||
                                             "Disciplina da sessão"}
                                     </div>
 
                                     <div className="mt-1 text-sm text-muted-foreground">
                                         {studyAssuntoNome ||
+                                            assuntoCatalogoSelecionado?.nome ||
                                             "Assunto da sessão"}
                                     </div>
 
@@ -3100,7 +2877,7 @@ Retorne SOMENTE JSON válido:
                                     <button
                                         type="button"
                                         onClick={() =>
-                                            encerrarEstudo(false)
+                                            void encerrarEstudo(false)
                                         }
                                         disabled={studyActionLoading}
                                         className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3113,55 +2890,60 @@ Retorne SOMENTE JSON válido:
                             </div>
 
                             <div className="mt-4 rounded-xl border border-green-200 bg-white/60 px-4 py-3 text-xs text-green-800">
-                                Você pode sair desta página, trocar de aba
-                                ou estudar em outro site. O tempo real é
-                                calculado pelo horário de início salvo no
-                                banco, e não pelo contador visual desta
-                                página.
+                                A sessão está vinculada ao catálogo canônico.
+                                Se você tentar trocar a Disciplina ou o Assunto
+                                no bloco 1, a página pedirá para finalizar o
+                                cronômetro antes da alteração.
                             </div>
 
                             {!sessaoCorrespondeClassificacao && (
                                 <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-                                    O vínculo de estudo selecionado é
-                                    diferente da sessão em andamento.
-                                    Isso não altera a classificação nem
-                                    bloqueia o processamento das questões,
-                                    mas você deve manter o cronômetro na
-                                    matéria correta.
+                                    Existe uma sessão antiga ou reaproveitada
+                                    cuja classificação não corresponde aos
+                                    seletores atuais. Finalize essa sessão antes
+                                    de alterar ou processar uma nova
+                                    classificação.
                                 </div>
                             )}
                         </div>
                     ) : (
                         <div className="mt-5 rounded-2xl border border-border bg-background p-5">
                             <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                                <div>
+                                <div className="min-w-0">
                                     <div className="text-sm font-semibold">
-                                        {materiaSelecionada?.nome ||
-                                            "Selecione uma Disciplina"}
+                                        {disciplinaCatalogoSelecionada?.nome ||
+                                            "Selecione uma Disciplina no bloco 1"}
                                     </div>
 
                                     <div className="mt-1 text-sm text-muted-foreground">
-                                        {assuntoSelecionado?.nome ||
-                                            "Selecione um Assunto"}
+                                        {assuntoCatalogoSelecionado?.nome ||
+                                            "Selecione um Assunto no bloco 1"}
                                     </div>
 
                                     <p className="mt-3 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                                        Ao iniciar, uma sessão é criada
-                                        em <code>study_sessions</code>.
-                                        Ela continua aberta enquanto você
-                                        resolve as questões externamente
-                                        e só termina quando você clicar
-                                        em Finalizar estudo.
+                                        Ao iniciar, uma sessão é criada em{" "}
+                                        <code>study_sessions</code> usando
+                                        diretamente{" "}
+                                        <code>
+                                            disciplina_catalogo_id
+                                        </code>{" "}
+                                        e{" "}
+                                        <code>
+                                            assunto_catalogo_id
+                                        </code>
+                                        .
                                     </p>
                                 </div>
 
                                 <button
                                     type="button"
-                                    onClick={iniciarEstudo}
+                                    onClick={() =>
+                                        void iniciarEstudo()
+                                    }
                                     disabled={
                                         studyActionLoading ||
-                                        !materiaId ||
-                                        !assuntoId
+                                        !questaoDisciplinaId ||
+                                        !questaoAssuntoId
                                     }
                                     className="shrink-0 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
