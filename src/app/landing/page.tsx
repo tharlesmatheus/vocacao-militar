@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 /*
@@ -103,20 +103,6 @@ type QuestaoAssunto = CatalogBase & {
     disciplina_id: string;
 };
 
-type OpenStudySession = {
-    id: string;
-    started_at: string;
-
-    // Classificação principal do tempo de estudo.
-    disciplina_catalogo_id: string | null;
-    assunto_catalogo_id: string | null;
-
-    // Compatibilidade com sessões antigas já existentes no banco.
-    materia_id?: string | null;
-    assunto_id?: string | null;
-
-    mode: "cronometro" | "manual";
-};
 
 type Alternativas = Record<string, string>;
 
@@ -301,16 +287,6 @@ function chavePreferencia(userId: string, nome: string) {
     return `questoes:${userId}:${nome}`;
 }
 
-function formatarDuracao(totalSeconds: number) {
-    const total = Math.max(0, Math.floor(totalSeconds));
-    const horas = Math.floor(total / 3600);
-    const minutos = Math.floor((total % 3600) / 60);
-    const segundos = total % 60;
-
-    return [horas, minutos, segundos]
-        .map((valor) => String(valor).padStart(2, "0"))
-        .join(":");
-}
 
 export default function NovaQuestaoGeminiLote() {
     const [userId, setUserId] = useState<string | null>(null);
@@ -357,20 +333,6 @@ export default function NovaQuestaoGeminiLote() {
     const [resultadoSalvamento, setResultadoSalvamento] =
         useState<ResultadoSalvamento[]>([]);
 
-    /*
-     * Tempo de estudo:
-     * a duração real é calculada a partir de started_at salvo no banco.
-     * O setInterval abaixo serve apenas para atualizar a exibição.
-     */
-    const [openStudySession, setOpenStudySession] =
-        useState<OpenStudySession | null>(null);
-    const [studyElapsedSec, setStudyElapsedSec] = useState(0);
-    const [studyActionLoading, setStudyActionLoading] = useState(false);
-    const [studyError, setStudyError] = useState("");
-    const [studyMessage, setStudyMessage] = useState("");
-    const [studyMateriaNome, setStudyMateriaNome] = useState("");
-    const [studyAssuntoNome, setStudyAssuntoNome] = useState("");
-    const studyTimerRef = useRef<number | null>(null);
 
     const instituicaoSelecionada = useMemo(
         () => instituicoes.find((item) => item.id === instituicaoId) ?? null,
@@ -423,12 +385,6 @@ export default function NovaQuestaoGeminiLote() {
         assuntoCatalogoSelecionado
     );
 
-    const sessaoCorrespondeClassificacao =
-        !openStudySession ||
-        (openStudySession.disciplina_catalogo_id ===
-            questaoDisciplinaId &&
-            openStudySession.assunto_catalogo_id ===
-            questaoAssuntoId);
 
     const podeProcessar =
         !!userId &&
@@ -473,419 +429,6 @@ export default function NovaQuestaoGeminiLote() {
         !salvando;
 
     useEffect(() => {
-        if (studyTimerRef.current) {
-            window.clearInterval(studyTimerRef.current);
-            studyTimerRef.current = null;
-        }
-
-        if (!openStudySession?.started_at) {
-            setStudyElapsedSec(0);
-            return;
-        }
-
-        const atualizar = () => {
-            const inicio = new Date(openStudySession.started_at).getTime();
-            const agora = Date.now();
-
-            setStudyElapsedSec(
-                Number.isFinite(inicio)
-                    ? Math.max(0, Math.floor((agora - inicio) / 1000))
-                    : 0
-            );
-        };
-
-        atualizar();
-
-        studyTimerRef.current = window.setInterval(
-            atualizar,
-            1000
-        );
-
-        return () => {
-            if (studyTimerRef.current) {
-                window.clearInterval(studyTimerRef.current);
-                studyTimerRef.current = null;
-            }
-        };
-    }, [
-        openStudySession?.id,
-        openStudySession?.started_at,
-    ]);
-
-    async function getStudyAccessToken() {
-        const {
-            data,
-            error,
-        } = await supabase.auth.getSession();
-
-        const token = data?.session?.access_token;
-
-        if (error || !token) {
-            throw new Error(
-                "Sua sessão expirou. Entre novamente para controlar o tempo de estudo."
-            );
-        }
-
-        return token;
-    }
-
-    async function carregarNomesDaSessao(
-        session: OpenStudySession,
-        uid: string
-    ) {
-        /*
-         * Fluxo principal: catálogo canônico.
-         * O fallback legado existe apenas para uma sessão antiga que ainda
-         * não tenha sido mapeada pela migração.
-         */
-        if (
-            session.disciplina_catalogo_id ||
-            session.assunto_catalogo_id
-        ) {
-            const [disciplinaReq, assuntoReq] =
-                await Promise.all([
-                    session.disciplina_catalogo_id
-                        ? supabase
-                            .from("questao_disciplinas")
-                            .select("nome")
-                            .eq("user_id", uid)
-                            .eq(
-                                "id",
-                                session.disciplina_catalogo_id
-                            )
-                            .maybeSingle()
-                        : Promise.resolve({
-                            data: null,
-                            error: null,
-                        }),
-
-                    session.assunto_catalogo_id
-                        ? supabase
-                            .from("questao_assuntos")
-                            .select("nome")
-                            .eq("user_id", uid)
-                            .eq(
-                                "id",
-                                session.assunto_catalogo_id
-                            )
-                            .maybeSingle()
-                        : Promise.resolve({
-                            data: null,
-                            error: null,
-                        }),
-                ]);
-
-            setStudyMateriaNome(
-                String(
-                    (
-                        disciplinaReq.data as
-                        | { nome?: string }
-                        | null
-                    )?.nome ?? ""
-                ).trim()
-            );
-
-            setStudyAssuntoNome(
-                String(
-                    (
-                        assuntoReq.data as
-                        | { nome?: string }
-                        | null
-                    )?.nome ?? ""
-                ).trim()
-            );
-
-            return;
-        }
-
-        // Compatibilidade temporária com sessões antigas.
-        const [materiaReq, assuntoReq] =
-            await Promise.all([
-                session.materia_id
-                    ? supabase
-                        .from("materias")
-                        .select("nome")
-                        .eq("user_id", uid)
-                        .eq("id", session.materia_id)
-                        .maybeSingle()
-                    : Promise.resolve({
-                        data: null,
-                        error: null,
-                    }),
-
-                session.assunto_id
-                    ? supabase
-                        .from("assuntos")
-                        .select("nome")
-                        .eq("user_id", uid)
-                        .eq("id", session.assunto_id)
-                        .maybeSingle()
-                    : Promise.resolve({
-                        data: null,
-                        error: null,
-                    }),
-            ]);
-
-        setStudyMateriaNome(
-            String(
-                (
-                    materiaReq.data as
-                    | { nome?: string }
-                    | null
-                )?.nome ?? ""
-            ).trim()
-        );
-
-        setStudyAssuntoNome(
-            String(
-                (
-                    assuntoReq.data as
-                    | { nome?: string }
-                    | null
-                )?.nome ?? ""
-            ).trim()
-        );
-    }
-
-    async function carregarSessaoAberta(
-        uid: string
-    ): Promise<OpenStudySession | null> {
-        const { data, error } = await supabase
-            .from("study_sessions")
-            .select(
-                "id,started_at,disciplina_catalogo_id,assunto_catalogo_id,materia_id,assunto_id,mode"
-            )
-            .eq("user_id", uid)
-            .is("ended_at", null)
-            .order("started_at", {
-                ascending: false,
-            })
-            .limit(1)
-            .maybeSingle();
-
-        if (error) {
-            throw new Error(
-                `Não foi possível verificar o cronômetro: ${error.message}`
-            );
-        }
-
-        if (!data) {
-            setOpenStudySession(null);
-            setStudyElapsedSec(0);
-            setStudyMateriaNome("");
-            setStudyAssuntoNome("");
-            return null;
-        }
-
-        const session = data as OpenStudySession;
-
-        setOpenStudySession(session);
-        await carregarNomesDaSessao(session, uid);
-
-        return session;
-    }
-
-    async function iniciarEstudo() {
-        setStudyError("");
-        setStudyMessage("");
-
-        if (!userId) {
-            setStudyError("Usuário não autenticado.");
-            return;
-        }
-
-        if (
-            !questaoDisciplinaId ||
-            !questaoAssuntoId ||
-            !disciplinaCatalogoSelecionada ||
-            !assuntoCatalogoSelecionado
-        ) {
-            setStudyError(
-                "Selecione Disciplina e Assunto na classificação da questão antes de iniciar o estudo."
-            );
-            return;
-        }
-
-        if (openStudySession) {
-            setStudyError(
-                "Já existe uma sessão de estudo em andamento. Finalize-a antes de iniciar outra."
-            );
-            return;
-        }
-
-        setStudyActionLoading(true);
-
-        try {
-            const access_token =
-                await getStudyAccessToken();
-
-            const res = await fetch(
-                "/api/study-sessions",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-                    },
-                    body: JSON.stringify({
-                        action: "start",
-                        access_token,
-                        disciplina_catalogo_id:
-                            questaoDisciplinaId,
-                        assunto_catalogo_id:
-                            questaoAssuntoId,
-                    }),
-                }
-            );
-
-            const out = await res
-                .json()
-                .catch(() => null);
-
-            if (!res.ok) {
-                throw new Error(
-                    out?.error ||
-                    "Falha ao iniciar o tempo de estudo."
-                );
-            }
-
-            const session =
-                out?.session as
-                | OpenStudySession
-                | undefined;
-
-            if (!session?.id) {
-                throw new Error(
-                    "A sessão foi iniciada, mas o servidor não retornou seus dados."
-                );
-            }
-
-            setOpenStudySession(session);
-
-            if (
-                session.disciplina_catalogo_id ===
-                questaoDisciplinaId &&
-                session.assunto_catalogo_id ===
-                questaoAssuntoId
-            ) {
-                setStudyMateriaNome(
-                    disciplinaCatalogoSelecionada.nome
-                );
-                setStudyAssuntoNome(
-                    assuntoCatalogoSelecionado.nome
-                );
-            } else {
-                /*
-                 * A API pode devolver uma sessão que já estava aberta.
-                 * Nesse caso, mostramos a classificação real da sessão.
-                 */
-                await carregarNomesDaSessao(
-                    session,
-                    userId
-                );
-            }
-
-            setStudyMessage(
-                "Cronômetro iniciado para a mesma Disciplina e Assunto selecionados na classificação da questão."
-            );
-        } catch (e) {
-            setStudyError(formatarErro(e));
-        } finally {
-            setStudyActionLoading(false);
-        }
-    }
-
-    async function encerrarEstudo(
-        silencioso = false
-    ): Promise<boolean> {
-        setStudyError("");
-
-        if (!openStudySession?.id) {
-            return true;
-        }
-
-        setStudyActionLoading(true);
-
-        try {
-            const access_token =
-                await getStudyAccessToken();
-
-            const res = await fetch(
-                "/api/study-sessions",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-                    },
-                    body: JSON.stringify({
-                        action: "stop",
-                        access_token,
-                        session_id:
-                            openStudySession.id,
-                    }),
-                }
-            );
-
-            const out = await res
-                .json()
-                .catch(() => null);
-
-            if (!res.ok) {
-                throw new Error(
-                    out?.error ||
-                    "Falha ao finalizar o tempo de estudo."
-                );
-            }
-
-            const duracaoFinal =
-                studyElapsedSec;
-
-            setOpenStudySession(null);
-            setStudyElapsedSec(0);
-            setStudyMateriaNome("");
-            setStudyAssuntoNome("");
-
-            if (!silencioso) {
-                setStudyMessage(
-                    `Sessão finalizada. Tempo contabilizado: ${formatarDuracao(
-                        duracaoFinal
-                    )}.`
-                );
-            }
-
-            return true;
-        } catch (e) {
-            setStudyError(formatarErro(e));
-            return false;
-        } finally {
-            setStudyActionLoading(false);
-        }
-    }
-
-    async function confirmarTrocaDeClassificacao(
-        descricaoDestino: string
-    ) {
-        if (!openStudySession) {
-            return true;
-        }
-
-        const confirmou = window.confirm(
-            `Existe um estudo em andamento em ${studyMateriaNome || "outra disciplina"
-            } / ${studyAssuntoNome || "outro assunto"
-            } (${formatarDuracao(
-                studyElapsedSec
-            )}).\n\nPara alterar ${descricaoDestino}, a sessão atual precisa ser finalizada. Deseja finalizar agora?`
-        );
-
-        if (!confirmou) {
-            return false;
-        }
-
-        return encerrarEstudo(true);
-    }
-
-    useEffect(() => {
         let cancelled = false;
 
         async function iniciar() {
@@ -911,15 +454,6 @@ export default function NovaQuestaoGeminiLote() {
                 const uid = user.id;
                 setUserId(uid);
 
-                let sessaoAberta: OpenStudySession | null =
-                    null;
-
-                try {
-                    sessaoAberta =
-                        await carregarSessaoAberta(uid);
-                } catch (e) {
-                    setStudyError(formatarErro(e));
-                }
 
                 const [
                     instituicoesReq,
@@ -1082,59 +616,30 @@ export default function NovaQuestaoGeminiLote() {
                     setBancaId(savedBancaId);
                 }
 
-                /*
-                 * Se existe um cronômetro aberto, ele passa a ser a fonte da
-                 * Disciplina/Assunto da tela. Assim a classificação da questão
-                 * e o tempo de estudo nunca começam divergentes.
-                 */
-                const disciplinaDaSessao =
-                    sessaoAberta
-                        ?.disciplina_catalogo_id ??
-                    "";
-
-                const assuntoDaSessao =
-                    sessaoAberta
-                        ?.assunto_catalogo_id ??
-                    "";
-
                 const disciplinaInicial =
                     listaDisciplinas.some(
                         (item) =>
-                            item.id ===
-                            disciplinaDaSessao
+                            item.id === savedDisciplinaId
                     )
-                        ? disciplinaDaSessao
-                        : listaDisciplinas.some(
-                            (item) =>
-                                item.id ===
-                                savedDisciplinaId
-                        )
-                            ? savedDisciplinaId
-                            : "";
+                        ? savedDisciplinaId
+                        : "";
 
                 const assuntoInicial =
                     listaAssuntosCatalogo.some(
                         (item) =>
-                            item.id ===
-                            assuntoDaSessao &&
+                            item.id === savedQuestaoAssuntoId &&
                             item.disciplina_id ===
                             disciplinaInicial
                     )
-                        ? assuntoDaSessao
-                        : listaAssuntosCatalogo.some(
-                            (item) =>
-                                item.id ===
-                                savedQuestaoAssuntoId &&
-                                item.disciplina_id ===
-                                disciplinaInicial
-                        )
-                            ? savedQuestaoAssuntoId
-                            : "";
+                        ? savedQuestaoAssuntoId
+                        : "";
 
                 setQuestaoDisciplinaId(
                     disciplinaInicial
                 );
-                setQuestaoAssuntoId(assuntoInicial);
+                setQuestaoAssuntoId(
+                    assuntoInicial
+                );
 
                 if (/^\d{4}$/.test(savedAno)) {
                     setAnoQuestao(savedAno);
@@ -1247,21 +752,9 @@ export default function NovaQuestaoGeminiLote() {
         );
     }
 
-    async function handleQuestaoDisciplinaChange(
+    function handleQuestaoDisciplinaChange(
         id: string
     ) {
-        if (
-            openStudySession &&
-            openStudySession.disciplina_catalogo_id !== id
-        ) {
-            const podeTrocar =
-                await confirmarTrocaDeClassificacao(
-                    "a Disciplina"
-                );
-
-            if (!podeTrocar) return;
-        }
-
         setQuestaoDisciplinaId(id);
         setQuestaoAssuntoId("");
 
@@ -1275,25 +768,12 @@ export default function NovaQuestaoGeminiLote() {
             ""
         );
 
-        setStudyMessage("");
         setQuestõesLimparDepoisDaClassificacao();
     }
 
-    async function handleQuestaoAssuntoChange(
+    function handleQuestaoAssuntoChange(
         id: string
     ) {
-        if (
-            openStudySession &&
-            openStudySession.assunto_catalogo_id !== id
-        ) {
-            const podeTrocar =
-                await confirmarTrocaDeClassificacao(
-                    "o Assunto"
-                );
-
-            if (!podeTrocar) return;
-        }
-
         setQuestaoAssuntoId(id);
 
         salvarPreferenciaCatalogo(
@@ -1301,7 +781,6 @@ export default function NovaQuestaoGeminiLote() {
             id
         );
 
-        setStudyMessage("");
         setQuestõesLimparDepoisDaClassificacao();
     }
 
@@ -2684,11 +2163,11 @@ Retorne SOMENTE JSON válido:
 
                             <select
                                 value={questaoDisciplinaId}
-                                onChange={(e) => {
-                                    void handleQuestaoDisciplinaChange(
+                                onChange={(e) =>
+                                    handleQuestaoDisciplinaChange(
                                         e.target.value
-                                    );
-                                }}
+                                    )
+                                }
                                 className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                             >
                                 <option value="">
@@ -2714,11 +2193,11 @@ Retorne SOMENTE JSON válido:
                             <select
                                 value={questaoAssuntoId}
                                 disabled={!questaoDisciplinaId}
-                                onChange={(e) => {
-                                    void handleQuestaoAssuntoChange(
+                                onChange={(e) =>
+                                    handleQuestaoAssuntoChange(
                                         e.target.value
-                                    );
-                                }}
+                                    )
+                                }
                                 className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none disabled:opacity-50 focus:ring-2 focus:ring-primary/30"
                             >
                                 <option value="">
@@ -2798,167 +2277,8 @@ Retorne SOMENTE JSON válido:
                 </section>
 
                 <section className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                            <h2 className="text-base font-semibold">
-                                2. Tempo de estudo
-                            </h2>
-
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                O cronômetro usa automaticamente a mesma
-                                Disciplina e o mesmo Assunto selecionados em
-                                “1. Classificação da questão”. Não é necessário
-                                classificar duas vezes.
-                            </p>
-                        </div>
-
-                        <a
-                            href="/tempo-de-estudo"
-                            className="text-xs font-medium text-primary hover:underline"
-                        >
-                            Ver histórico de tempo
-                        </a>
-                    </div>
-
-                    {studyError && (
-                        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                            {studyError}
-                        </div>
-                    )}
-
-                    {studyMessage && (
-                        <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-                            {studyMessage}
-                        </div>
-                    )}
-
-                    {openStudySession ? (
-                        <div className="mt-5 rounded-2xl border border-green-300 bg-green-50/70 p-5">
-                            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                                <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <span className="relative flex h-3 w-3">
-                                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-50" />
-                                            <span className="relative inline-flex h-3 w-3 rounded-full bg-green-600" />
-                                        </span>
-
-                                        <span className="text-xs font-semibold uppercase tracking-wider text-green-700">
-                                            Estudo em andamento
-                                        </span>
-                                    </div>
-
-                                    <div className="mt-3 text-lg font-semibold text-foreground">
-                                        {studyMateriaNome ||
-                                            disciplinaCatalogoSelecionada?.nome ||
-                                            "Disciplina da sessão"}
-                                    </div>
-
-                                    <div className="mt-1 text-sm text-muted-foreground">
-                                        {studyAssuntoNome ||
-                                            assuntoCatalogoSelecionado?.nome ||
-                                            "Assunto da sessão"}
-                                    </div>
-
-                                    <div className="mt-2 text-xs text-muted-foreground">
-                                        Iniciado em{" "}
-                                        {new Date(
-                                            openStudySession.started_at
-                                        ).toLocaleString("pt-BR")}
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col items-stretch gap-3 sm:items-end">
-                                    <div className="font-mono text-4xl font-bold tabular-nums text-foreground">
-                                        {formatarDuracao(
-                                            studyElapsedSec
-                                        )}
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            void encerrarEstudo(false)
-                                        }
-                                        disabled={studyActionLoading}
-                                        className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        {studyActionLoading
-                                            ? "Finalizando..."
-                                            : "Finalizar estudo"}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="mt-4 rounded-xl border border-green-200 bg-white/60 px-4 py-3 text-xs text-green-800">
-                                A sessão está vinculada ao catálogo canônico.
-                                Se você tentar trocar a Disciplina ou o Assunto
-                                no bloco 1, a página pedirá para finalizar o
-                                cronômetro antes da alteração.
-                            </div>
-
-                            {!sessaoCorrespondeClassificacao && (
-                                <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-                                    Existe uma sessão antiga ou reaproveitada
-                                    cuja classificação não corresponde aos
-                                    seletores atuais. Finalize essa sessão antes
-                                    de alterar ou processar uma nova
-                                    classificação.
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="mt-5 rounded-2xl border border-border bg-background p-5">
-                            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                                <div className="min-w-0">
-                                    <div className="text-sm font-semibold">
-                                        {disciplinaCatalogoSelecionada?.nome ||
-                                            "Selecione uma Disciplina no bloco 1"}
-                                    </div>
-
-                                    <div className="mt-1 text-sm text-muted-foreground">
-                                        {assuntoCatalogoSelecionado?.nome ||
-                                            "Selecione um Assunto no bloco 1"}
-                                    </div>
-
-                                    <p className="mt-3 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                                        Ao iniciar, uma sessão é criada em{" "}
-                                        <code>study_sessions</code> usando
-                                        diretamente{" "}
-                                        <code>
-                                            disciplina_catalogo_id
-                                        </code>{" "}
-                                        e{" "}
-                                        <code>
-                                            assunto_catalogo_id
-                                        </code>
-                                        .
-                                    </p>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        void iniciarEstudo()
-                                    }
-                                    disabled={
-                                        studyActionLoading ||
-                                        !questaoDisciplinaId ||
-                                        !questaoAssuntoId
-                                    }
-                                    className="shrink-0 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {studyActionLoading
-                                        ? "Iniciando..."
-                                        : "Iniciar estudo"}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </section>
-
-                <section className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm">
                     <h2 className="text-base font-semibold">
-                        3. Adicione as questões
+                        2. Adicione as questões
                     </h2>
 
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -3098,7 +2418,7 @@ QUESTÃO 4 ...
                     <section className="space-y-5">
                         <div>
                             <h2 className="text-lg font-semibold">
-                                4. Preencha, revise e informe o resultado
+                                3. Preencha, revise e informe o resultado
                             </h2>
 
                             <p className="mt-1 text-sm text-muted-foreground">
