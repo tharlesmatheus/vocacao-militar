@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { ComentariosQuestao } from "./ComentariosQuestao";
 
 /* ===================== UI ===================== */
 function TesouraIcon({ className = "" }: { className?: string }) {
@@ -703,10 +704,23 @@ export function QuestionCard(props: QuestionCardProps) {
                     {effectiveBusy.ACERTOS ? "Salvando..." : effectiveStatus.ACERTOS ? "✓ Acertos" : "+ Acertos"}
                 </button>
 
-                {/* ... (comentários/compartilhar/erro iguais) */}
+                <button
+                    type="button"
+                    onClick={() => setShowComentarios((v) => !v)}
+                    className="font-bold py-2 px-4 rounded-xl text-sm transition border bg-transparent text-foreground border-border hover:bg-muted"
+                    aria-expanded={showComentarios}
+                >
+                    {showComentarios ? "Ocultar comentários" : "Ver comentários"}
+                </button>
             </div>
 
-            {showResult && selected && (
+            {showComentarios && (
+                <div className="mb-4">
+                    <ComentariosQuestao questaoId={id} />
+                </div>
+            )}
+
+            {showResult && selected && explanation?.trim() && (
                 <div className="bg-green-100/60 rounded-lg p-4 mt-2 text-green-900 text-sm">
                     <span className="font-bold text-green-700">Explicação:</span>
                     <p className="mt-1">{explanation}</p>

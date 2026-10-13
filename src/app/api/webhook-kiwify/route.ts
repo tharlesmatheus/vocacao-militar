@@ -2,245 +2,203 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+/*
+ * Webhook da Kiwify -> tabela planos.
+ *
+ * Cadastro na Kiwify (Apps > Webhooks):
+ *   URL:    https://<seu-dominio>/api/webhook-kiwify
+ *   Token:  o mesmo valor da variável KIWIFY_TOKEN na Vercel
+ *   Eventos: compra_aprovada, compra_recusada, compra_reembolsada, chargeback,
+ *            subscription_canceled, subscription_late, subscription_renewed
+ *
+ * Regras de acesso (ver public.assinatura_ativa_de no banco):
+ *   - aprovada/renovada  -> ativo até access_until
+ *   - atrasada           -> pendente, mantém o acesso até access_until
+ *   - cancelada          -> inativo, mantém o acesso até o fim do período pago
+ *   - reembolso/chargeback -> inativo e acesso cortado na hora
+ *   - recusada           -> só registra (uma tentativa recusada não derruba plano ativo)
+ *
+ * Confiabilidade:
+ *   - Idempotência pelo hash do corpo: reenvio idêntico da Kiwify é ignorado.
+ *   - Eventos fora de ordem (mais antigos que o último aplicado) não sobrescrevem o plano,
+ *     exceto reembolso e chargeback, que sempre valem.
+ *   - Se der erro ao gravar, o evento é desfeito e respondemos 500 para a Kiwify reenviar.
+ */
+
 const KIWIFY_TOKEN = process.env.KIWIFY_TOKEN;
+const DIAS_PADRAO_PERIODO = 35; // usado só se a Kiwify não informar a data do próximo pagamento
 
-type PlanoStatus = "ativo" | "inativo" | "pendente";
+type Payload = Record<string, any>;
 
-type KiwifyPayload = {
-    webhook_event_type?: string;
-    order_status?: string;
-    order_id?: string;
-    subscription_id?: string;
-    next_payment?: string;
-    access_until?: string;
-    amount?: number | string;
-    net_amount?: number | string;
-    total?: number | string;
-    order_amount?: number | string;
-    product_amount?: number | string;
-    paid_amount?: number | string;
-    price?: number | string;
-    amount_paid?: number | string;
-    amount_liquid?: number | string;
-    valor_pago?: number | string;
-    valor_liquido?: number | string;
-    Customer?: {
-        email?: string;
-    };
-    Subscription?: {
-        subscription_id?: string;
-        next_payment?: string;
-        access_until?: string;
-    };
-    Commissions?: {
-        charge_amount?: number | string;
-        net_amount?: number | string;
-    };
-    Product?: {
-        price?: number | string;
-    };
+type Plano = {
+    email: string;
+    status: string | null;
+    access_until: string | null;
+    ultimo_evento_em: string | null;
 };
 
-function parseKiwifyDate(value?: string | null) {
-    if (!value) return null;
-    const d = new Date(value);
+const EVENTOS_DEFINITIVOS = new Set(["compra_reembolsada", "chargeback"]);
+
+function data(valor: unknown): string | null {
+    if (!valor || typeof valor !== "string") return null;
+    const d = new Date(valor.includes("T") || valor.includes("Z") ? valor : valor.replace(" ", "T"));
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-function parseMoney(value: unknown): number | null {
-    if (value === null || value === undefined || value === "") return null;
-
-    if (typeof value === "number") {
-        return Number.isFinite(value) ? value : null;
-    }
-
-    if (typeof value === "string") {
-        const cleaned = value.replace(",", ".").replace(/[^\d.-]/g, "");
-        if (!cleaned) return null;
-
-        const parsed = Number(cleaned);
-        return Number.isNaN(parsed) ? null : parsed;
-    }
-
-    return null;
-}
-
-function pickFirstMoney(...values: unknown[]): number | null {
-    for (const value of values) {
-        const parsed = parseMoney(value);
-        if (parsed !== null) return parsed;
+function dinheiro(...valores: unknown[]): number | null {
+    for (const v of valores) {
+        if (typeof v === "number" && Number.isFinite(v)) return v;
+        if (typeof v === "string") {
+            const n = Number(v.replace(",", ".").replace(/[^\d.-]/g, ""));
+            if (v.trim() && Number.isFinite(n)) return n;
+        }
     }
     return null;
 }
 
-function getEventStatus(event: string, orderStatus?: string | null): PlanoStatus | null {
-    switch (event) {
-        case "compra_aprovada":
-            return orderStatus === "paid" || !orderStatus ? "ativo" : "pendente";
-
-        case "subscription_renewed":
-            return "ativo";
-
-        case "subscription_late":
-            return "pendente";
-
-        case "subscription_canceled":
-        case "compra_reembolsada":
-        case "chargeback":
-        case "compra_recusada":
-            return "inativo";
-
-        default:
-            return null;
-    }
-}
-
-function safeEqualHex(a: string, b: string) {
+function assinaturaValida(rawBody: string, assinatura: string, token: string) {
+    const esperada = crypto.createHmac("sha1", token).update(rawBody).digest("hex");
     try {
-        const bufA = Buffer.from(a, "hex");
-        const bufB = Buffer.from(b, "hex");
-        return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+        const a = Buffer.from(assinatura, "hex");
+        const b = Buffer.from(esperada, "hex");
+        return a.length === b.length && crypto.timingSafeEqual(a, b);
     } catch {
         return false;
     }
 }
 
+function json(corpo: unknown, status: number) {
+    return NextResponse.json(corpo, { status, headers: { "Cache-Control": "no-store" } });
+}
+
 export async function POST(req: NextRequest) {
+    if (!KIWIFY_TOKEN) {
+        console.error("KIWIFY_TOKEN não configurado");
+        return json({ message: "Configuração inválida" }, 500);
+    }
+
+    const rawBody = await req.text();
+    const assinatura = new URL(req.url).searchParams.get("signature") || "";
+    if (!assinatura || !assinaturaValida(rawBody, assinatura, KIWIFY_TOKEN)) {
+        return json({ message: "Assinatura inválida" }, 401);
+    }
+
+    let p: Payload;
     try {
-        if (!KIWIFY_TOKEN) {
-            console.error("KIWIFY_TOKEN não configurado");
-            return NextResponse.json({ message: "Configuração inválida" }, { status: 500 });
-        }
+        const parsed = JSON.parse(rawBody);
+        p = (parsed?.body || parsed) as Payload;
+    } catch {
+        return json({ message: "JSON inválido" }, 400);
+    }
 
-        const { searchParams } = new URL(req.url);
-        const signature = searchParams.get("signature") || "";
+    const evento = String(p.webhook_event_type ?? "").trim();
+    const email = String(p.Customer?.email ?? "").trim().toLowerCase();
+    if (!evento || !email) return json({ message: "Evento ou e-mail ausente" }, 400);
 
-        const rawBody = await req.text();
+    const orderId = String(p.order_id ?? "").trim() || null;
+    const subscriptionId = String(p.subscription_id ?? p.Subscription?.id ?? p.Subscription?.subscription_id ?? "").trim() || null;
+    const orderStatus = String(p.order_status ?? "").trim() || null;
+    const quando = data(p.updated_at) || data(p.approved_date) || data(p.created_at) || new Date().toISOString();
 
-        const expectedSignature = crypto
-            .createHmac("sha1", KIWIFY_TOKEN)
-            .update(rawBody)
-            .digest("hex");
+    // 1) Idempotência: o mesmo corpo reenviado é ignorado.
+    const eventKey = crypto.createHash("sha256").update(rawBody).digest("hex");
+    const { error: erroEvento } = await supabaseAdmin.from("kiwify_events").insert({
+        event_key: eventKey,
+        order_id: orderId,
+        subscription_id: subscriptionId,
+        event: evento,
+        email,
+        payload: p,
+    });
+    if (erroEvento) {
+        if (erroEvento.code === "23505") return json({ message: "Evento já processado" }, 200);
+        console.error("Erro ao registrar evento Kiwify:", erroEvento.message);
+        return json({ message: "Erro ao registrar evento" }, 500);
+    }
 
-        if (!signature || !safeEqualHex(signature, expectedSignature)) {
-            return NextResponse.json({ message: "Assinatura inválida" }, { status: 401 });
-        }
+    const finalizar = async (aplicado: boolean, motivo: string) => {
+        await supabaseAdmin.from("kiwify_events").update({ aplicado, motivo }).eq("event_key", eventKey);
+        return json({ message: motivo }, 200);
+    };
 
-        let payload: KiwifyPayload;
-        try {
-            const parsed = JSON.parse(rawBody);
-            payload = ((parsed as any)?.body || parsed) as KiwifyPayload;
-        } catch {
-            return NextResponse.json({ message: "JSON inválido" }, { status: 400 });
-        }
-
-        const event = payload.webhook_event_type?.trim();
-        const email = payload.Customer?.email?.trim().toLowerCase() || null;
-        const orderStatus = payload.order_status?.trim() || null;
-        const orderId = payload.order_id?.trim() || null;
-        const subscriptionId =
-            payload.subscription_id?.trim() ||
-            payload.Subscription?.subscription_id?.trim() ||
-            null;
-
-        if (!event || !email) {
-            return NextResponse.json(
-                { message: "Evento ou email ausente" },
-                { status: 400 }
-            );
-        }
-
-        const status = getEventStatus(event, orderStatus);
-        if (!status) {
-            return NextResponse.json({ message: "Evento ignorado" }, { status: 200 });
-        }
-
-        // Idempotência: usa order_id quando existir; senão usa subscription_id + event
-        const uniqueEventKey =
-            orderId || (subscriptionId ? `${subscriptionId}:${event}` : `${email}:${event}`);
-
-        const { error: idempotencyError } = await supabaseAdmin
-            .from("kiwify_events")
-            .insert([
-                {
-                    event_key: uniqueEventKey,
-                    order_id: orderId,
-                    subscription_id: subscriptionId,
-                    event,
-                    email,
-                },
-            ]);
-
-        if (idempotencyError) {
-            return NextResponse.json(
-                { message: "Evento duplicado (ignorado)" },
-                { status: 200 }
-            );
-        }
-
-        const nextPaymentIso = parseKiwifyDate(
-            payload.next_payment || payload.Subscription?.next_payment || null
-        );
-
-        const accessUntilIso = parseKiwifyDate(
-            payload.access_until || payload.Subscription?.access_until || null
-        );
-
-        const valorPago = pickFirstMoney(
-            payload.valor_liquido,
-            payload.amount_liquid,
-            payload.net_amount,
-            payload.Commissions?.net_amount,
-            payload.valor_pago,
-            payload.paid_amount,
-            payload.amount_paid,
-            payload.amount,
-            payload.total,
-            payload.order_amount,
-            payload.product_amount,
-            payload.price,
-            payload.Product?.price,
-            payload.Commissions?.charge_amount
-        );
-
-        const planoPayload = {
-            email,
-            status,
-            subscription_id: subscriptionId,
-            proximo_pagamento: nextPaymentIso,
-            access_until: accessUntilIso,
-            valor_pago: valorPago,
-            updated_at: new Date().toISOString(),
-        };
-
-        const { error: upsertError } = await supabaseAdmin
+    try {
+        const { data: atual } = await supabaseAdmin
             .from("planos")
-            .upsert([planoPayload], { onConflict: "email" });
+            .select("email,status,access_until,ultimo_evento_em")
+            .eq("email", email)
+            .maybeSingle<Plano>();
 
-        if (upsertError) {
-            console.error("Erro ao atualizar plano:", upsertError.message);
-            return NextResponse.json(
-                { message: "Erro ao atualizar plano" },
-                { status: 500 }
-            );
+        // 2) Eventos fora de ordem não sobrescrevem um estado mais novo.
+        if (!EVENTOS_DEFINITIVOS.has(evento) && atual?.ultimo_evento_em && quando < atual.ultimo_evento_em) {
+            return await finalizar(false, "Evento mais antigo que o último aplicado");
         }
 
-        return NextResponse.json({ message: "OK" }, { status: 200 });
-    } catch (error) {
-        console.error("Erro inesperado no webhook Kiwify:", error);
-        return NextResponse.json({ message: "Erro interno" }, { status: 500 });
+        const proximo = data(p.next_payment) || data(p.Subscription?.next_payment) || null;
+        const ate = data(p.access_until) || data(p.Subscription?.access_until) || proximo;
+        const periodoPadrao = new Date(Date.now() + DIAS_PADRAO_PERIODO * 86400_000).toISOString();
+
+        let status: string;
+        let accessUntil: string | null;
+
+        switch (evento) {
+            case "compra_aprovada":
+                if (orderStatus && orderStatus !== "paid") return await finalizar(false, `Pedido ${orderStatus}`);
+                status = "ativo";
+                accessUntil = ate || periodoPadrao;
+                break;
+            case "subscription_renewed":
+                status = "ativo";
+                accessUntil = ate || periodoPadrao;
+                break;
+            case "subscription_late":
+                status = "pendente";
+                accessUntil = atual?.access_until ?? ate;
+                break;
+            case "subscription_canceled":
+                status = "inativo";
+                accessUntil = ate || atual?.access_until || null; // acesso até o fim do período pago
+                break;
+            case "compra_reembolsada":
+            case "chargeback":
+                status = "inativo";
+                accessUntil = new Date().toISOString(); // corta na hora
+                break;
+            case "compra_recusada":
+                return await finalizar(false, "Pagamento recusado registrado (plano não alterado)");
+            default:
+                return await finalizar(false, "Evento ignorado");
+        }
+
+        const { data: userId } = await supabaseAdmin.rpc("usuario_id_por_email", { p_email: email });
+
+        const { error: erroPlano } = await supabaseAdmin.from("planos").upsert(
+            [{
+                email,
+                user_id: userId ?? null,
+                status,
+                subscription_id: subscriptionId,
+                proximo_pagamento: proximo,
+                access_until: accessUntil,
+                valor_pago: dinheiro(
+                    p.Commissions?.charge_amount, p.charge_amount, p.amount, p.total, p.Product?.price
+                ),
+                ultimo_evento: evento,
+                ultimo_evento_em: quando,
+                updated_at: new Date().toISOString(),
+            }],
+            { onConflict: "email" }
+        );
+        if (erroPlano) throw new Error(erroPlano.message);
+
+        return await finalizar(true, "OK");
+    } catch (e) {
+        console.error("Erro ao aplicar evento Kiwify:", e);
+        // Desfaz o registro para que o reenvio da Kiwify seja processado.
+        await supabaseAdmin.from("kiwify_events").delete().eq("event_key", eventKey);
+        return json({ message: "Erro interno" }, 500);
     }
 }
 
 export async function GET() {
-    return new NextResponse(
-        JSON.stringify({ message: "Método não permitido" }),
-        {
-            status: 405,
-            headers: {
-                "Content-Type": "application/json",
-                Allow: "POST",
-            },
-        }
-    );
+    return json({ message: "Método não permitido" }, 405);
 }

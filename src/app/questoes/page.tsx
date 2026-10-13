@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import { supabase } from "@/lib/supabaseClient";
 import { QuestionFilters } from "@/components/QuestionFilters";
 import { QuestionsList } from "@/components/QuestionsList";
+import { useAssinatura } from "@/lib/useAssinatura";
 
 type Filters = Parameters<
     NonNullable<React.ComponentProps<typeof QuestionFilters>["onFiltrar"]>
@@ -15,6 +17,7 @@ export default function QuestoesPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<Filters>(() => ({} as Filters));
+    const assinaturaAtiva = useAssinatura();
 
     useEffect(() => {
         let mounted = true;
@@ -55,6 +58,17 @@ export default function QuestoesPage() {
                     <span>/</span>
                     <span className="text-foreground">Questões</span>
                 </div>
+
+                {assinaturaAtiva === false && (
+                    <section className="rounded-2xl border border-primary/30 bg-primary/10 p-5 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <span className="text-foreground">
+                            O banco de questões e os comentários fazem parte da assinatura. Sem ela, aparecem só as questões cadastradas por você.
+                        </span>
+                        <Link href="/perfil" className="bg-primary text-primary-foreground font-semibold px-4 py-2 rounded-lg text-center whitespace-nowrap">
+                            Assinar agora
+                        </Link>
+                    </section>
+                )}
 
                 <section className="card">
                     <QuestionFilters onFiltrar={(f) => setFilters(f)} />

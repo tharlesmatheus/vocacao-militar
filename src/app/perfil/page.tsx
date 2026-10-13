@@ -316,21 +316,8 @@ export default function ContaPage() {
 
             const normalizedEmail = user.email.trim().toLowerCase();
 
-            const { error: upsertErr } = await supabase.from("planos").upsert(
-                [
-                    {
-                        email: normalizedEmail,
-                        status: "pendente",
-                        updated_at: new Date().toISOString(),
-                    },
-                ],
-                { onConflict: "email" }
-            );
-
-            if (upsertErr) {
-                console.warn("Falha ao registrar status pendente:", upsertErr.message);
-            }
-
+            // O plano é criado/atualizado pelo webhook da Kiwify depois do pagamento.
+            // Use o MESMO e-mail da conta no checkout para a assinatura ser vinculada.
             window.location.assign(
                 `${CHECKOUT_URL}?email=${encodeURIComponent(normalizedEmail)}`
             );

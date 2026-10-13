@@ -40,24 +40,7 @@ export default function AdminLogin() {
             return;
         }
 
-        // 3. Garante que existe um registro de plano para esse usuário
-        const { data: plano } = await supabase
-            .from("planos")
-            .select("id")
-            .eq("user_id", user.id)
-            .single();
-
-        if (!plano) {
-            await supabase
-                .from("planos")
-                .insert([{
-                    user_id: user.id,
-                    email: user.email,
-                    status: "inativo",
-                }]);
-        }
-
-        // 4. Libera acesso
+        // 3. Libera acesso (a tabela planos só é alterada pelo webhook da Kiwify)
         router.push("/admin");
     }
 
