@@ -25,7 +25,8 @@ export default function AdminDashboard() {
     useEffect(() => {
         async function checkAuth() {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user || !user.user_metadata?.is_admin) {
+            // app_metadata só pode ser alterado pelo servidor; user_metadata o próprio usuário altera.
+            if (!user || user.app_metadata?.is_admin !== true) {
                 await supabase.auth.signOut();
                 router.replace("/admin/login");
                 return;

@@ -292,12 +292,10 @@ export default function CadernosPageGeral() {
                 if (allIds.length) {
                     for (const part of chunk(allIds, 500)) {
                         const { data: qsMin, error: qsMinErr } = await supabase
-                            .from("questoes")
+                            .rpc("questoes_por_ids", { p_ids: part })
                             .select(
                                 "id,questao_disciplina_id,questao_assunto_id,disciplina,assunto"
-                            )
-                            .eq("user_id", uid)
-                            .in("id", part);
+                            );
 
                         if (qsMinErr) throw qsMinErr;
 
@@ -474,11 +472,10 @@ export default function CadernosPageGeral() {
 
         // ✅ pega completo só o necessário da página
         const { data, error } = await supabase
-            .from("questoes")
+            .rpc("questoes_por_ids", { p_ids: slice })
             .select(
                 "id, questao_disciplina_id, questao_assunto_id, instituicao, cargo, disciplina, assunto, modalidade, banca, enunciado, alternativas, correta, explicacao, comentarios, erros, created_at"
-            )
-            .in("id", slice);
+            );
 
         if (error) throw error;
 

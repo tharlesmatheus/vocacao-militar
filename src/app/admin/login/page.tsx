@@ -27,7 +27,7 @@ export default function AdminLogin() {
 
         // 2. Verifica CPF e is_admin
         const user = data.user;
-        if (!user.user_metadata?.is_admin) {
+        if (user.app_metadata?.is_admin !== true) {
             setErro("Acesso restrito ao administrador.");
             await supabase.auth.signOut();
             return;

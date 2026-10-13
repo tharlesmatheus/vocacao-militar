@@ -1,5 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+
+// A rota /api/admin-users exige o token do administrador logado.
+async function cabecalhos(): Promise<Record<string, string>> {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token ?? "";
+    return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+}
 
 export default function ClientesList() {
     const [clientes, setClientes] = useState<any[]>([]);
@@ -13,8 +21,14 @@ export default function ClientesList() {
     async function fetchClientes() {
         setLoading(true);
         setMsg("");
-        const resp = await fetch("/api/admin-users");
+        const resp = await fetch("/api/admin-users", { headers: await cabecalhos() });
         const data = await resp.json();
+        if (!resp.ok) {
+            setMsg(data?.error || "Erro ao carregar clientes.");
+            setClientes([]);
+            setLoading(false);
+            return;
+        }
         setClientes(data);
         setLoading(false);
     }
@@ -32,7 +46,7 @@ export default function ClientesList() {
         setMsg("");
         const res = await fetch("/api/admin-users", {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: await cabecalhos(),
             body: JSON.stringify({
                 id: cliente.id,
                 user_metadata: editData,
@@ -52,7 +66,7 @@ export default function ClientesList() {
         setMsg("");
         const res = await fetch("/api/admin-users", {
             method: "DELETE",
-            headers: { "Content-Type": "application/json" },
+            headers: await cabecalhos(),
             body: JSON.stringify({ id: cliente.id }),
         });
         const { error } = await res.json();

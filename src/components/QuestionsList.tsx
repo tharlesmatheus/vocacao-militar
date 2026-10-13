@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { QuestionCard } from "./QuestionCard";
 import { Pagination } from "./Pagination";
 import { supabase } from "../lib/supabaseClient";
 
 /* ========== Tipos ========== */
 type Filters = {
+    origem?: string;
     instituicao?: string;
     cargo?: string;
     disciplina?: string;
@@ -61,6 +62,8 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
     const [page, setPage] = useState(1);
     const [perPage, setPerPage] = useState(3);
     const [loading, setLoading] = useState(true);
+    const [total, setTotal] = useState(0);
+    const [erroLista, setErroLista] = useState("");
 
     // auth / cadernos
     const [userId, setUserId] = useState<string | null>(null);
@@ -87,75 +90,56 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
         };
     }, []);
 
-    // Carrega questões do banco ao montar e quando filtros mudam.
-    // "Excluir respondidas" usa question_attempts, que é a fonte real
-    // do histórico de respostas usado pela página de Estatísticas.
+    // Volta para a primeira página quando os filtros mudam.
     useEffect(() => {
+        setPage(1);
+    }, [filters]);
+
+    /*
+     * Busca SÓ a página atual no banco (minhas questões + banco de questões).
+     * Com dezenas de milhares de questões no acervo, não dá para baixar tudo
+     * e paginar no navegador. O RLS decide o que cada aluno pode ver;
+     * "Excluir respondidas" é resolvido no banco com question_attempts.
+     */
+    useEffect(() => {
+        if (!userId) return;
         let cancelled = false;
 
         (async () => {
             setLoading(true);
-            setPage(1);
+            setErroLista("");
 
             try {
-                let query = supabase.from("questoes").select("*");
-
-                // Se já conhecemos o usuário, restringimos explicitamente.
-                // O RLS continua sendo a proteção principal no banco.
-                if (userId) {
-                    query = query.eq("user_id", userId);
-                }
-
-                // Aplica os filtros visuais (exceto excluirRespondidas).
-                Object.entries(filters).forEach(([key, value]) => {
-                    if (value && key !== "excluirRespondidas") {
-                        query = query.eq(key, value as string);
-                    }
-                });
-
-                const { data, error } = await query.order("created_at", {
-                    ascending: false,
+                const ou = (v?: string) => (v && v.trim() ? v : null);
+                const { data, error } = await supabase.rpc("listar_questoes", {
+                    p_origem: ou(filters.origem),
+                    p_instituicao: ou(filters.instituicao),
+                    p_cargo: ou(filters.cargo),
+                    p_disciplina: ou(filters.disciplina),
+                    p_assunto: ou(filters.assunto),
+                    p_modalidade: ou(filters.modalidade),
+                    p_banca: ou(filters.banca),
+                    p_excluir_respondidas: !!filters.excluirRespondidas,
+                    p_limite: perPage,
+                    p_offset: (page - 1) * perPage,
                 });
 
                 if (error) throw error;
 
-                let rows = (data ?? []) as Questao[];
-
-                /*
-                 * Não dependemos mais de questoes.respondida.
-                 * Uma questão é considerada respondida quando existe
-                 * pelo menos uma linha em question_attempts para o usuário.
-                 */
-                if (filters.excluirRespondidas && userId && rows.length) {
-                    const respondidas = new Set<string>();
-                    const ids = rows.map((q) => q.id);
-
-                    for (const ch of chunkArray(ids, 200)) {
-                        const { data: attempts, error: attemptsError } =
-                            await supabase
-                                .from("question_attempts")
-                                .select("questao_id")
-                                .eq("user_id", userId)
-                                .in("questao_id", ch);
-
-                        if (attemptsError) throw attemptsError;
-
-                        for (const row of attempts ?? []) {
-                            if (row.questao_id) {
-                                respondidas.add(String(row.questao_id));
-                            }
-                        }
-                    }
-
-                    rows = rows.filter((q) => !respondidas.has(q.id));
-                }
+                const resultado = (data ?? {}) as { total?: number; itens?: Questao[] };
 
                 if (!cancelled) {
-                    setQuestoes(rows);
+                    setQuestoes(resultado.itens ?? []);
+                    setTotal(resultado.total ?? 0);
                 }
-            } catch {
+            } catch (e: any) {
                 if (!cancelled) {
                     setQuestoes([]);
+                    setTotal(0);
+                    setErroLista(
+                        "Não foi possível carregar as questões" +
+                        (e?.message ? `: ${e.message}` : ".")
+                    );
                 }
             } finally {
                 if (!cancelled) {
@@ -167,7 +151,7 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
         return () => {
             cancelled = true;
         };
-    }, [filters, userId]);
+    }, [filters, userId, page, perPage]);
 
     // Atualiza erros localmente sem refetch
     const handleNotificarErro = (questaoId: string, erroText: string) => {
@@ -186,10 +170,8 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
         );
     };
 
-    // Paginação
-    const start = (page - 1) * perPage;
-    const end = start + perPage;
-    const paginated = useMemo(() => questoes.slice(start, end), [questoes, start, end]);
+    // A paginação é feita no banco: "questoes" já é a página atual.
+    const paginated = questoes;
 
     // Carrega status de cadernos para as questões visíveis na página (rápido e barato)
     useEffect(() => {
@@ -361,7 +343,7 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                     </span>
                     <div className="flex items-center gap-4">
                         <span className="text-muted-foreground text-xs">
-                            Mostrando {paginated.length} de {questoes.length} questões
+                            Mostrando {paginated.length} de {total.toLocaleString("pt-BR")} questões
                         </span>
                         <select
                             className="bg-muted border border-border rounded px-3 py-1 text-xs text-foreground"
@@ -377,6 +359,10 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                         </select>
                     </div>
                 </div>
+
+                {erroLista && (
+                    <div className="text-red-600 text-sm mb-4">{erroLista}</div>
+                )}
 
                 {cadernoError && (
                     <div className="text-red-600 text-sm mb-4">{cadernoError}</div>
@@ -442,7 +428,7 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                     )}
                 </div>
 
-                <Pagination total={questoes.length} perPage={perPage} page={page} setPage={setPage} />
+                <Pagination total={total} perPage={perPage} page={page} setPage={setPage} />
             </div>
         </div>
     );

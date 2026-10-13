@@ -684,12 +684,10 @@ export default function RevisaoPage() {
                 if (!lote.length) continue;
 
                 const { data, error } = await supabase
-                    .from("questoes")
+                    .rpc("questoes_por_ids", { p_ids: lote })
                     .select(
                         "id,questao_disciplina_id,questao_assunto_id,materia_id,assunto_id,disciplina,assunto,instituicao,cargo,banca,modalidade,enunciado,alternativas,correta,explicacao,created_at"
-                    )
-                    .eq("user_id", uid)
-                    .in("id", lote);
+                    );
 
                 if (error) throw error;
 

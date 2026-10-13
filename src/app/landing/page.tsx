@@ -1549,10 +1549,8 @@ Retorne SOMENTE JSON válido:
                 data: questoesData,
                 error: questoesError,
             } = await supabase
-                .from("questoes")
-                .select("id,questao_disciplina_id,questao_assunto_id,materia_id,assunto_id")
-                .eq("user_id", userId)
-                .in("id", lote);
+                .rpc("questoes_por_ids", { p_ids: lote })
+                .select("id,questao_disciplina_id,questao_assunto_id,materia_id,assunto_id");
 
             if (questoesError) {
                 throw new Error(

@@ -2,7 +2,8 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-interface Filters {
+export interface Filters {
+    origem?: string; // "" = todas | "USUARIO" = minhas | "ACERVO" = acervo da plataforma
     instituicao?: string;
     cargo?: string;
     disciplina?: string;
@@ -16,71 +17,108 @@ interface QuestionFiltersProps {
     onFiltrar?: (filters: Filters) => void;
 }
 
+type Opcoes = {
+    instituicoes: string[];
+    cargos: string[];
+    bancas: string[];
+    disciplinas: string[];
+    modalidades: string[];
+    assuntos: string[];
+};
+
+const OPCOES_VAZIAS: Opcoes = {
+    instituicoes: [],
+    cargos: [],
+    bancas: [],
+    disciplinas: [],
+    modalidades: [],
+    assuntos: [],
+};
+
+const FILTROS_VAZIOS: Filters = {
+    origem: "",
+    instituicao: "",
+    cargo: "",
+    disciplina: "",
+    assunto: "",
+    modalidade: "",
+    banca: "",
+    excluirRespondidas: false,
+};
+
+const selectClass =
+    "w-full bg-muted border border-border rounded-lg px-4 py-3 text-foreground text-base focus:ring-2 focus:ring-primary outline-none shadow-sm transition";
+
+const ou = (v?: string) => (v && v.trim() ? v : null);
+
 export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
-    // Estados para listas únicas
-    const [instituicoes, setInstituicoes] = useState<string[]>([]);
-    const [cargos, setCargos] = useState<string[]>([]);
-    const [disciplinas, setDisciplinas] = useState<string[]>([]);
-    const [assuntos, setAssuntos] = useState<string[]>([]);
-    const [modalidades, setModalidades] = useState<string[]>([]);
-    const [bancas, setBancas] = useState<string[]>([]);
+    const [opcoes, setOpcoes] = useState<Opcoes>(OPCOES_VAZIAS);
     const [loading, setLoading] = useState(false);
+    const [erro, setErro] = useState("");
+    const [selected, setSelected] = useState<Filters>(FILTROS_VAZIOS);
 
-    // Estado dos filtros
-    const [selected, setSelected] = useState<Filters>({
-        instituicao: "",
-        cargo: "",
-        disciplina: "",
-        assunto: "",
-        modalidade: "",
-        banca: "",
-        excluirRespondidas: false,
-    });
-
-    // Buscar opções únicas no banco
+    /*
+     * As opções vêm do banco já agregadas (valores distintos), em vez de
+     * baixar todas as questões. Cargos dependem da instituição e assuntos
+     * dependem da disciplina: o acervo tem milhares de assuntos.
+     */
     useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            const { data, error } = await supabase
-                .from("questoes")
-                .select("instituicao, cargo, disciplina, assunto, modalidade, banca");
+        let cancelado = false;
 
-            if (!data || error) {
-                setLoading(false);
-                return;
+        (async () => {
+            setLoading(true);
+            setErro("");
+
+            const { data, error } = await supabase.rpc("opcoes_filtro_questoes", {
+                p_origem: ou(selected.origem),
+                p_instituicao: ou(selected.instituicao),
+                p_disciplina: ou(selected.disciplina),
+            });
+
+            if (cancelado) return;
+
+            if (error) {
+                setErro("Não foi possível carregar os filtros.");
+                setOpcoes(OPCOES_VAZIAS);
+            } else {
+                setOpcoes({ ...OPCOES_VAZIAS, ...((data ?? {}) as Partial<Opcoes>) });
             }
 
-            // Função para pegar valores distintos
-            const getDistinct = (field: keyof Filters) =>
-                Array.from(
-                    new Set(
-                        data
-                            .map((q: any) => q[field])
-                            .filter((v: string) => !!v)
-                    )
-                );
-
-            setInstituicoes(getDistinct("instituicao"));
-            setCargos(getDistinct("cargo"));
-            setDisciplinas(getDistinct("disciplina"));
-            setAssuntos(getDistinct("assunto"));
-            setModalidades(getDistinct("modalidade"));
-            setBancas(getDistinct("banca"));
             setLoading(false);
+        })();
+
+        return () => {
+            cancelado = true;
         };
-        fetchData();
-    }, []);
+    }, [selected.origem, selected.instituicao, selected.disciplina]);
 
     function handleChange(
         e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>
     ) {
         const { name, value, type } = e.target;
-        setSelected((prev) => ({
-            ...prev,
-            [name]: type === "checkbox"
-                ? (e.target as HTMLInputElement).checked
-                : value,
-        }));
+
+        setSelected((prev) => {
+            const next: Filters = {
+                ...prev,
+                [name]: type === "checkbox"
+                    ? (e.target as HTMLInputElement).checked
+                    : value,
+            };
+
+            // Filtros dependentes: trocar o "pai" limpa o "filho".
+            if (name === "instituicao") next.cargo = "";
+            if (name === "disciplina") next.assunto = "";
+            if (name === "origem") {
+                next.instituicao = "";
+                next.cargo = "";
+                next.disciplina = "";
+                next.assunto = "";
+                next.banca = "";
+                next.modalidade = "";
+            }
+
+            return next;
+        });
     }
 
     function handleFiltrar(e: React.FormEvent) {
@@ -89,16 +127,37 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
     }
 
     function handleLimpar() {
-        setSelected({
-            instituicao: "",
-            cargo: "",
-            disciplina: "",
-            assunto: "",
-            modalidade: "",
-            banca: "",
-            excluirRespondidas: false,
-        });
+        setSelected(FILTROS_VAZIOS);
         onFiltrar?.({});
+    }
+
+    function campo(
+        name: keyof Filters,
+        label: string,
+        lista: string[],
+        opts: { placeholder?: string; disabled?: boolean } = {}
+    ) {
+        return (
+            <div>
+                <label className="block mb-2 text-sm font-medium text-muted-foreground">
+                    {label}
+                </label>
+                <select
+                    name={name}
+                    className={selectClass}
+                    value={(selected[name] as string) ?? ""}
+                    onChange={handleChange}
+                    disabled={loading || opts.disabled}
+                >
+                    <option value="">{opts.placeholder ?? "Selecione"}</option>
+                    {lista.map((nome) => (
+                        <option key={nome} value={nome}>
+                            {nome}
+                        </option>
+                    ))}
+                </select>
+            </div>
+        );
     }
 
     return (
@@ -107,126 +166,38 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"
                 onSubmit={handleFiltrar}
             >
-                {/* Instituição */}
+                {/* Origem */}
                 <div>
                     <label className="block mb-2 text-sm font-medium text-muted-foreground">
-                        Instituição
+                        Origem
                     </label>
                     <select
-                        name="instituicao"
-                        className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-foreground text-base focus:ring-2 focus:ring-primary outline-none shadow-sm transition"
-                        value={selected.instituicao}
+                        name="origem"
+                        className={selectClass}
+                        value={selected.origem ?? ""}
                         onChange={handleChange}
                         disabled={loading}
                     >
-                        <option value="">Selecione</option>
-                        {instituicoes.map((nome) => (
-                            <option key={nome} value={nome}>
-                                {nome}
-                            </option>
-                        ))}
+                        <option value="">Todas</option>
+                        <option value="ACERVO">Banco de questões</option>
+                        <option value="USUARIO">Minhas questões</option>
                     </select>
                 </div>
-                {/* Cargo */}
-                <div>
-                    <label className="block mb-2 text-sm font-medium text-muted-foreground">
-                        Cargo
-                    </label>
-                    <select
-                        name="cargo"
-                        className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-foreground text-base focus:ring-2 focus:ring-primary outline-none shadow-sm transition"
-                        value={selected.cargo}
-                        onChange={handleChange}
-                        disabled={loading}
-                    >
-                        <option value="">Selecione</option>
-                        {cargos.map((nome) => (
-                            <option key={nome} value={nome}>
-                                {nome}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                {/* Disciplina */}
-                <div>
-                    <label className="block mb-2 text-sm font-medium text-muted-foreground">
-                        Disciplina
-                    </label>
-                    <select
-                        name="disciplina"
-                        className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-foreground text-base focus:ring-2 focus:ring-primary outline-none shadow-sm transition"
-                        value={selected.disciplina}
-                        onChange={handleChange}
-                        disabled={loading}
-                    >
-                        <option value="">Selecione</option>
-                        {disciplinas.map((nome) => (
-                            <option key={nome} value={nome}>
-                                {nome}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                {/* Assunto */}
-                <div>
-                    <label className="block mb-2 text-sm font-medium text-muted-foreground">
-                        Assunto
-                    </label>
-                    <select
-                        name="assunto"
-                        className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-foreground text-base focus:ring-2 focus:ring-primary outline-none shadow-sm transition"
-                        value={selected.assunto}
-                        onChange={handleChange}
-                        disabled={loading}
-                    >
-                        <option value="">Selecione</option>
-                        {assuntos.map((nome) => (
-                            <option key={nome} value={nome}>
-                                {nome}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                {/* Modalidade */}
-                <div>
-                    <label className="block mb-2 text-sm font-medium text-muted-foreground">
-                        Modalidade
-                    </label>
-                    <select
-                        name="modalidade"
-                        className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-foreground text-base focus:ring-2 focus:ring-primary outline-none shadow-sm transition"
-                        value={selected.modalidade}
-                        onChange={handleChange}
-                        disabled={loading}
-                    >
-                        <option value="">Selecione</option>
-                        {modalidades.map((nome) => (
-                            <option key={nome} value={nome}>
-                                {nome}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                {/* Banca */}
-                <div>
-                    <label className="block mb-2 text-sm font-medium text-muted-foreground">
-                        Banca
-                    </label>
-                    <select
-                        name="banca"
-                        className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-foreground text-base focus:ring-2 focus:ring-primary outline-none shadow-sm transition"
-                        value={selected.banca}
-                        onChange={handleChange}
-                        disabled={loading}
-                    >
-                        <option value="">Selecione</option>
-                        {bancas.map((nome) => (
-                            <option key={nome} value={nome}>
-                                {nome}
-                            </option>
-                        ))}
-                    </select>
-                </div>
+
+                {campo("instituicao", "Instituição", opcoes.instituicoes)}
+                {campo("cargo", "Cargo", opcoes.cargos)}
+                {campo("banca", "Banca", opcoes.bancas)}
+                {campo("disciplina", "Disciplina", opcoes.disciplinas)}
+                {campo("assunto", "Assunto", opcoes.assuntos, {
+                    placeholder: selected.disciplina ? "Selecione" : "Escolha a disciplina primeiro",
+                    disabled: !selected.disciplina,
+                })}
+                {campo("modalidade", "Modalidade", opcoes.modalidades)}
+
+                {erro && (
+                    <div className="col-span-full text-sm text-red-600">{erro}</div>
+                )}
+
                 {/* Excluir Questões Respondidas */}
                 <div className="col-span-full mt-2">
                     <fieldset className="flex items-center gap-4 border border-border bg-muted rounded-xl px-4 py-3">
@@ -245,6 +216,7 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                         </label>
                     </fieldset>
                 </div>
+
                 {/* Botões */}
                 <div className="col-span-full flex flex-wrap gap-3 mt-4 justify-end">
                     <button
