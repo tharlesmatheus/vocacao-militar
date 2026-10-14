@@ -754,7 +754,7 @@ export default function FlashcardsPage() {
             <button
                 type="button"
                 onClick={onClick}
-                className="flex flex-col items-center rounded-2xl border border-border bg-card p-6 text-center transition hover:shadow-md"
+                className="flex flex-col items-center rounded-xl border border-border bg-card p-6 text-center transition hover:shadow-md"
             >
                 <div className="mb-4 rounded-xl bg-primary/10 p-4 text-primary">
                     <Brain size={26} />
@@ -781,7 +781,7 @@ export default function FlashcardsPage() {
 
     if (loading) {
         return (
-            <main className="flex min-h-[60vh] items-center justify-center px-4">
+            <div className="flex min-h-[60vh] items-center justify-center px-4">
                 <div className="flex flex-col items-center gap-3">
                     <Brain
                         size={30}
@@ -791,7 +791,7 @@ export default function FlashcardsPage() {
                         Carregando flashcards...
                     </span>
                 </div>
-            </main>
+            </div>
         );
     }
 
@@ -800,18 +800,14 @@ export default function FlashcardsPage() {
      * ---------------------------------------------------------------------- */
 
     return (
-        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 md:py-10">
-            <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex w-full flex-col gap-6">
+            <header className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-end md:justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                        <Brain size={24} />
-                    </div>
-
                     <div>
-                        <h1 className="text-2xl font-semibold">
+                        <h1 className="text-3xl font-extrabold text-foreground">
                             Meus Flashcards
                         </h1>
-                        <p className="mt-0.5 text-sm text-muted-foreground">
+                        <p className="mt-1.5 text-sm text-muted-foreground">
                             Organização única por disciplina e assunto do catálogo canônico.
                         </p>
                     </div>
@@ -849,7 +845,7 @@ export default function FlashcardsPage() {
                         onClick={() => {
                             window.location.href = "/revisao";
                         }}
-                        className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 font-medium transition hover:bg-muted"
+                        className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 font-medium transition hover:bg-muted"
                     >
                         <RotateCcw size={17} />
                         Revisar
@@ -858,7 +854,7 @@ export default function FlashcardsPage() {
                     <button
                         type="button"
                         onClick={abrirNovoFlashcard}
-                        className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-medium text-primary-foreground transition hover:opacity-90"
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 font-medium text-primary-foreground transition hover:opacity-90"
                     >
                         <Plus size={18} />
                         Novo flashcard
@@ -1003,7 +999,7 @@ export default function FlashcardsPage() {
                         <button
                             type="button"
                             onClick={abrirNovoFlashcard}
-                            className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
+                            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
                         >
                             <Plus size={16} />
                             Novo neste assunto
@@ -1021,7 +1017,7 @@ export default function FlashcardsPage() {
                             {flashcardsFiltrados.map((card, index) => (
                                 <article
                                     key={card.id}
-                                    className={`rounded-2xl border bg-card p-5 ${card.active
+                                    className={`rounded-xl border bg-card p-5 ${card.active
                                             ? "border-border"
                                             : "border-border opacity-60"
                                         }`}
@@ -1132,7 +1128,7 @@ export default function FlashcardsPage() {
                         onClick={fecharModal}
                     />
 
-                    <div className="relative z-[101] max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-card shadow-xl">
+                    <div className="relative z-[101] max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border bg-card shadow-xl">
                         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card px-5 py-4">
                             <div>
                                 <h2 className="text-lg font-semibold">
@@ -1256,7 +1252,7 @@ export default function FlashcardsPage() {
                                 type="button"
                                 onClick={fecharModal}
                                 disabled={saving}
-                                className="rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
+                                className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
                             >
                                 Cancelar
                             </button>
@@ -1265,7 +1261,7 @@ export default function FlashcardsPage() {
                                 type="button"
                                 onClick={() => void salvarFlashcard()}
                                 disabled={saving}
-                                className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                                className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
                             >
                                 {saving
                                     ? "Salvando..."
@@ -1277,7 +1273,7 @@ export default function FlashcardsPage() {
                     </div>
                 </div>
             )}
-        </main>
+        </div>
     );
 }
 
@@ -1295,7 +1291,7 @@ function EmptyState({
     onCreate: () => void;
 }) {
     return (
-        <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
+        <div className="rounded-xl border border-dashed border-border bg-card px-6 py-14 text-center">
             <Brain className="mx-auto text-muted-foreground" size={34} />
 
             <h2 className="mt-4 font-semibold">{title}</h2>
@@ -1307,7 +1303,7 @@ function EmptyState({
             <button
                 type="button"
                 onClick={onCreate}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+                className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
             >
                 <Plus size={17} />
                 Novo flashcard

@@ -213,7 +213,7 @@ if (typeof window !== "undefined") service();
 function ModalContainer({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
     return (
         <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center px-4">
-            <div className="bg-card text-foreground rounded-2xl border border-border shadow-xl w-full max-w-xl relative">
+            <div className="bg-card text-foreground rounded-xl border border-border shadow-xl w-full max-w-xl relative">
                 <button
                     className="absolute top-2 right-2 rounded p-2 hover:bg-muted text-muted-foreground"
                     onClick={onClose}

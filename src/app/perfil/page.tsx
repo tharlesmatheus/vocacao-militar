@@ -331,23 +331,17 @@ export default function ContaPage() {
 
     if (loading) {
         return (
-            <main className="min-h-screen flex items-center justify-center px-4">
+            <div className="min-h-screen flex items-center justify-center px-4">
                 <span className="text-lg text-foreground">Carregando...</span>
-            </main>
+            </div>
         );
     }
 
     return (
-        <main className="w-full px-4 sm:px-6 lg:px-8 py-6 md:py-10">
-            <div className="mx-auto w-full max-w-5xl flex flex-col gap-6">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="text-primary">⌂</span>
-                    <span>/</span>
-                    <span className="text-foreground">Conta</span>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+        <div className="w-full">
+            <div className="flex w-full flex-col gap-6">
+                <div className="flex flex-col gap-1.5 border-b border-border pb-5">
+                    <h1 className="text-3xl font-extrabold text-foreground">
                         Minha Conta
                     </h1>
                     <p className="text-sm text-muted-foreground">
@@ -356,7 +350,7 @@ export default function ContaPage() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <section className="lg:col-span-2 rounded-2xl border border-border bg-card shadow-sm">
+                    <section className="lg:col-span-2 rounded-xl border border-border bg-card shadow-sm">
                         <form onSubmit={handleSalvarPerfil} className="p-6">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-center gap-2">
@@ -533,7 +527,7 @@ export default function ContaPage() {
                         </form>
                     </section>
 
-                    <aside className="rounded-2xl border border-border bg-card shadow-sm p-6">
+                    <aside className="rounded-xl border border-border bg-card shadow-sm p-6">
                         <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-2">
                                 <Star className="w-5 h-5 text-primary" />
@@ -630,7 +624,7 @@ export default function ContaPage() {
                     </aside>
                 </div>
 
-                <section className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
+                <section className="mt-6 rounded-xl border border-border bg-card p-6 shadow-sm">
                     <h2 className="text-lg font-bold text-foreground">Lembretes no celular</h2>
                     <p className="mb-4 text-sm text-muted-foreground">
                         Um aviso por dia, de manhã, quando você tiver revisões para fazer. Ative em cada aparelho que você usa.
@@ -638,6 +632,6 @@ export default function ContaPage() {
                     <BotaoLembretes />
                 </section>
             </div>
-        </main>
+        </div>
     );
 }

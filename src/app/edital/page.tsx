@@ -240,7 +240,7 @@ function TokenModal({
             {/* painel */}
             <div
                 className={`relative z-[101] w-full ${wide ? "max-w-5xl" : "max-w-2xl"
-                    } max-h-[90vh] overflow-hidden rounded-2xl bg-card text-foreground border border-border shadow-xl`}
+                    } max-h-[90vh] overflow-hidden rounded-xl bg-card text-foreground border border-border shadow-xl`}
             >
                 <div className="flex items-center justify-between px-5 py-4 border-b border-border rounded-t-2xl">
                     <h2 className="text-lg font-semibold">{title}</h2>
@@ -536,11 +536,11 @@ export default function EditalPage() {
     }
 
     return (
-        <div className="mx-auto max-w-6xl p-4 text-foreground">
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex w-full flex-col gap-6 text-foreground">
+            <div className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold">Edital</h1>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <h1 className="text-3xl font-extrabold text-foreground">Edital</h1>
+                    <p className="mt-1.5 text-sm text-muted-foreground">
                         O progresso também é atualizado automaticamente pelas revisões concluídas.
                     </p>
                 </div>

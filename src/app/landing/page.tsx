@@ -2027,17 +2027,17 @@ Retorne SOMENTE JSON válido:
 
     if (loadingInicial) {
         return (
-            <main className="min-h-[60vh] flex items-center justify-center px-4">
+            <div className="min-h-[60vh] flex items-center justify-center px-4">
                 <span className="text-sm text-muted-foreground">
                     Carregando...
                 </span>
-            </main>
+            </div>
         );
     }
 
     return (
-        <main className="w-full px-4 sm:px-6 lg:px-8 py-6 md:py-10">
-            <div className="mx-auto max-w-5xl space-y-6">
+        <div className="w-full">
+            <div className="flex w-full flex-col gap-6">
                 <header>
                     <h1 className="text-2xl font-bold text-foreground">
                         Lançar Questões
@@ -2061,7 +2061,7 @@ Retorne SOMENTE JSON válido:
                     </div>
                 )}
 
-                <section className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm">
+                <section className="rounded-xl border border-border bg-card p-5 sm:p-6 shadow-sm">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                             <h2 className="text-base font-semibold">
@@ -2076,7 +2076,7 @@ Retorne SOMENTE JSON válido:
 
                         <a
                             href="/catalogo"
-                            className="shrink-0 rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold text-primary hover:bg-muted"
+                            className="shrink-0 rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-primary hover:bg-muted"
                         >
                             Administrar catálogos
                         </a>
@@ -2290,7 +2290,7 @@ Retorne SOMENTE JSON válido:
                     )}
                 </section>
 
-                <section className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm">
+                <section className="rounded-xl border border-border bg-card p-5 sm:p-6 shadow-sm">
                     <h2 className="text-base font-semibold">
                         2. Adicione as questões
                     </h2>
@@ -2357,7 +2357,7 @@ QUESTÃO 4 ...
                                     type="button"
                                     onClick={handleProcessarLote}
                                     disabled={!podeProcessar}
-                                    className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {processando
                                         ? "Processando com IA..."
@@ -2370,7 +2370,7 @@ QUESTÃO 4 ...
                             </div>
                         </>
                     ) : (
-                        <div className="mt-4 rounded-2xl border border-border bg-background p-4 sm:p-5">
+                        <div className="mt-4 rounded-xl border border-border bg-background p-4 sm:p-5">
                             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                     <div className="text-sm font-semibold text-foreground">
@@ -2385,7 +2385,7 @@ QUESTÃO 4 ...
                                     type="button"
                                     onClick={adicionarQuestaoManual}
                                     disabled={!podeAdicionarManual}
-                                    className="shrink-0 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="shrink-0 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     + Adicionar questão manual
                                 </button>
@@ -2401,7 +2401,7 @@ QUESTÃO 4 ...
                 </section>
 
                 {falhasProcessamento.length > 0 && (
-                    <section className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5">
+                    <section className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5">
                         <h2 className="font-semibold text-amber-900 dark:text-amber-300">
                             Falhas no processamento
                         </h2>
@@ -2450,7 +2450,7 @@ QUESTÃO 4 ...
                                 return (
                                     <article
                                         key={q.localId}
-                                        className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm"
+                                        className="rounded-xl border border-border bg-card p-5 sm:p-6 shadow-sm"
                                     >
                                         <div className="flex items-start justify-between gap-4">
                                             <div>
@@ -2690,7 +2690,7 @@ QUESTÃO 4 ...
                                                             }
                                                         )
                                                     }
-                                                    className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${q.resultado ===
+                                                    className={`rounded-lg border px-4 py-3 text-sm font-semibold transition ${q.resultado ===
                                                         "ERRO"
                                                         ? "border-red-500 bg-red-500/10 text-red-700 dark:text-red-300"
                                                         : "border-border hover:bg-muted"
@@ -2710,7 +2710,7 @@ QUESTÃO 4 ...
                                                             }
                                                         )
                                                     }
-                                                    className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${q.resultado ===
+                                                    className={`rounded-lg border px-4 py-3 text-sm font-semibold transition ${q.resultado ===
                                                         "ACERTO"
                                                         ? "border-green-500 bg-green-500/10 text-green-700 dark:text-green-300"
                                                         : "border-border hover:bg-muted"
@@ -2823,7 +2823,7 @@ QUESTÃO 4 ...
                                         </label>
 
                                         {q.criarFlashcard && (
-                                            <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+                                            <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
                                                 <div>
                                                     <div className="text-sm font-semibold text-foreground">
                                                         Flashcard
@@ -2906,12 +2906,12 @@ QUESTÃO 4 ...
 
                                                 {q.flashcardGerando && (
                                                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                        <div className="min-h-[180px] animate-pulse rounded-2xl border border-border bg-card p-5">
+                                                        <div className="min-h-[180px] animate-pulse rounded-xl border border-border bg-card p-5">
                                                             <div className="h-3 w-16 rounded bg-muted" />
                                                             <div className="mt-6 h-4 w-full rounded bg-muted" />
                                                             <div className="mt-2 h-4 w-4/5 rounded bg-muted" />
                                                         </div>
-                                                        <div className="min-h-[180px] animate-pulse rounded-2xl border border-border bg-card p-5">
+                                                        <div className="min-h-[180px] animate-pulse rounded-xl border border-border bg-card p-5">
                                                             <div className="h-3 w-16 rounded bg-muted" />
                                                             <div className="mt-6 h-4 w-full rounded bg-muted" />
                                                             <div className="mt-2 h-4 w-3/4 rounded bg-muted" />
@@ -2937,7 +2937,7 @@ QUESTÃO 4 ...
                                                             {q.flashcardFrente.trim() &&
                                                                 q.flashcardVerso.trim() && (
                                                                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                        <div className="min-h-[190px] rounded-2xl border border-border bg-card p-5 shadow-sm">
+                                                                        <div className="min-h-[190px] rounded-xl border border-border bg-card p-5 shadow-sm">
                                                                             <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
                                                                                 Frente
                                                                             </div>
@@ -2945,7 +2945,7 @@ QUESTÃO 4 ...
                                                                                 {q.flashcardFrente}
                                                                             </div>
                                                                         </div>
-                                                                        <div className="min-h-[190px] rounded-2xl border border-border bg-card p-5 shadow-sm">
+                                                                        <div className="min-h-[190px] rounded-xl border border-border bg-card p-5 shadow-sm">
                                                                             <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">
                                                                                 Verso
                                                                             </div>
@@ -3027,7 +3027,7 @@ QUESTÃO 4 ...
                                                                         !q.flashcardFrente.trim() ||
                                                                         !q.flashcardVerso.trim()
                                                                     }
-                                                                    className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${q.flashcardConfirmado
+                                                                    className={`shrink-0 rounded-lg px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${q.flashcardConfirmado
                                                                         ? "border border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300"
                                                                         : "bg-primary text-primary-foreground hover:opacity-90"
                                                                         }`}
@@ -3047,7 +3047,7 @@ QUESTÃO 4 ...
                             }
                         )}
 
-                        <div className="sticky bottom-4 z-20 rounded-2xl border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
+                        <div className="sticky bottom-4 z-20 rounded-xl border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                 <div className="text-sm">
                                     <span className="font-semibold">
@@ -3065,7 +3065,7 @@ QUESTÃO 4 ...
                                         handleSalvarTodas
                                     }
                                     disabled={!podeSalvar}
-                                    className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {salvando
                                         ? "Salvando..."
@@ -3084,7 +3084,7 @@ QUESTÃO 4 ...
                 )}
 
                 {resultadoSalvamento.length > 0 && (
-                    <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+                    <section className="rounded-xl border border-border bg-card p-5 sm:p-6">
                         <h2 className="font-semibold">
                             Resultado do salvamento
                         </h2>
@@ -3119,6 +3119,6 @@ QUESTÃO 4 ...
                     Supabase • cadastro manual disponível • IA opcional via Gemini
                 </footer>
             </div>
-        </main>
+        </div>
     );
 }

@@ -576,29 +576,25 @@ export default function CatalogosQuestoesPage() {
 
     if (loading) {
         return (
-            <main className="min-h-[60vh] flex items-center justify-center px-4">
+            <div className="min-h-[60vh] flex items-center justify-center px-4">
                 <span className="text-sm text-muted-foreground">
                     Carregando catálogos de questões...
                 </span>
-            </main>
+            </div>
         );
     }
 
     return (
-        <main className="w-full px-4 py-6 sm:px-6 lg:px-8 md:py-10">
-            <div className="mx-auto max-w-7xl space-y-6">
-                <header>
+        <div className="w-full">
+            <div className="flex w-full flex-col gap-6">
+                <header className="border-b border-border pb-5">
                     <div className="flex items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                            <Layers3 size={22} />
-                        </div>
-
                         <div>
-                            <h1 className="text-2xl font-bold">
+                            <h1 className="text-3xl font-extrabold text-foreground">
                                 Catálogos de Questões
                             </h1>
 
-                            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                            <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
                                 Cadastre aqui as categorias usadas pelo banco de
                                 questões. A tela de inserir questões deve apenas
                                 selecionar estes registros; ela não deve criar
@@ -609,19 +605,19 @@ export default function CatalogosQuestoesPage() {
                 </header>
 
                 {error && (
-                    <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+                    <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
                         {error}
                     </div>
                 )}
 
                 {message && (
-                    <div className="rounded-2xl border border-green-500/40 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-300">
+                    <div className="rounded-xl border border-green-500/40 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-300">
                         {message}
                     </div>
                 )}
 
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-                    <aside className="h-fit rounded-3xl border border-border bg-card p-3 shadow-sm">
+                    <aside className="h-fit rounded-xl border border-border bg-card p-3 shadow-sm">
                         <div className="space-y-1">
                             {TABS.map((item) => {
                                 const Icon = item.icon;
@@ -632,7 +628,7 @@ export default function CatalogosQuestoesPage() {
                                         key={item.id}
                                         type="button"
                                         onClick={() => setTab(item.id)}
-                                        className={`w-full rounded-2xl px-3 py-3 text-left transition ${selected
+                                        className={`w-full rounded-xl px-3 py-3 text-left transition ${selected
                                                 ? "bg-primary text-primary-foreground"
                                                 : "hover:bg-muted"
                                             }`}
@@ -665,7 +661,7 @@ export default function CatalogosQuestoesPage() {
                     </aside>
 
                     <section className="space-y-5">
-                        <div className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
+                        <div className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
                             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                                 <div>
                                     <h2 className="text-lg font-semibold">
@@ -824,7 +820,7 @@ export default function CatalogosQuestoesPage() {
                             </div>
                         </div>
 
-                        <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+                        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                             <div className="flex items-center justify-between border-b border-border px-5 py-4 sm:px-6">
                                 <div>
                                     <div className="font-semibold">
@@ -960,7 +956,7 @@ export default function CatalogosQuestoesPage() {
                     </section>
                 </div>
             </div>
-        </main>
+        </div>
     );
 }
 

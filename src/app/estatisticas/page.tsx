@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { DesempenhoMeta } from "@/components/painel/DesempenhoMeta";
+import { SeletorSegmentado } from "@/components/app/Pagina";
 import {
     ResponsiveContainer,
     AreaChart,
@@ -1576,46 +1577,32 @@ export default function EstatisticasPage() {
     }
 
     return (
-        <div className="mx-auto max-w-6xl space-y-6 px-3 py-6 sm:px-6">
-            <DesempenhoMeta />
-            <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex w-full flex-col gap-6">
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-end md:justify-between">
                     <div>
-                        <h1 className="text-2xl font-semibold">Estatísticas</h1>
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        <h1 className="text-3xl font-extrabold text-foreground">Estatísticas</h1>
+                        <p className="mt-1.5 text-sm text-muted-foreground">
                             Período: {periodoAtual}
                         </p>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                        {(["7", "30", "90"] as const).map((n) => (
-                            <button
-                                key={n}
-                                type="button"
-                                onClick={() => selecionarPreset(n)}
-                                className={`rounded-lg border px-3 py-1.5 text-sm transition ${periodMode === n
-                                    ? "border-primary bg-primary text-primary-foreground"
-                                    : "border-border bg-card hover:bg-muted"
-                                    }`}
-                            >
-                                {n} dias
-                            </button>
-                        ))}
-
-                        <button
-                            type="button"
-                            onClick={() => selecionarPreset("all")}
-                            className={`rounded-lg border px-3 py-1.5 text-sm transition ${periodMode === "all"
-                                ? "border-primary bg-primary text-primary-foreground"
-                                : "border-border bg-card hover:bg-muted"
-                                }`}
-                        >
-                            Todo o período
-                        </button>
-                    </div>
+                    <SeletorSegmentado
+                        rotulo="Período"
+                        opcoes={[
+                            { id: "7", nome: "7 dias" },
+                            { id: "30", nome: "30 dias" },
+                            { id: "90", nome: "90 dias" },
+                            { id: "all", nome: "Tudo" },
+                        ]}
+                        valor={periodMode as string}
+                        aoMudar={(id) => selecionarPreset(id as "7" | "30" | "90" | "all")}
+                    />
                 </div>
 
-                <div className="rounded-2xl border border-border bg-card p-4">
+                <DesempenhoMeta />
+
+                <div className="rounded-xl border border-border bg-card p-4">
                     <div className="flex flex-wrap items-end gap-3">
                         <label className="flex flex-col gap-1">
                             <span className="text-xs text-muted-foreground">
@@ -1668,7 +1655,7 @@ export default function EstatisticasPage() {
                 </div>
             </div>
 
-            <div className="flex flex-wrap gap-3 rounded-2xl border border-border bg-card p-4">
+            <div className="flex flex-wrap gap-3 rounded-xl border border-border bg-card p-4">
                 <div className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground">Disciplina</span>
                     <select
@@ -1755,7 +1742,7 @@ export default function EstatisticasPage() {
                 </div>
             )}
 
-            <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="rounded-xl border border-border bg-card p-4">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <h2 className="font-semibold">
                         Evolução diária {materiaId || assuntoId ? "(filtrado)" : "(geral)"}
@@ -1782,12 +1769,12 @@ export default function EstatisticasPage() {
                                     />
                                 </linearGradient>
                                 <linearGradient id="gQst" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
-                                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                                    <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.4} />
+                                    <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
                                 </linearGradient>
                                 <linearGradient id="gRev" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.35} />
-                                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                    <stop offset="5%" stopColor="#818cf8" stopOpacity={0.35} />
+                                    <stop offset="95%" stopColor="#818cf8" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
 
@@ -1803,10 +1790,10 @@ export default function EstatisticasPage() {
                             />
                             <Tooltip
                                 contentStyle={{
-                                    background: "var(--muted)",
+                                    background: "var(--popover)",
                                     border: "1px solid var(--border)",
                                     color: "var(--foreground)",
-                                    borderRadius: 12,
+                                    borderRadius: 8,
                                 }}
                             />
                             <Area
@@ -1821,7 +1808,7 @@ export default function EstatisticasPage() {
                                 type="monotone"
                                 dataKey="questoes"
                                 name="Questões"
-                                stroke="#22c55e"
+                                stroke="#22d3ee"
                                 fill="url(#gQst)"
                                 strokeWidth={2}
                             />
@@ -1829,7 +1816,7 @@ export default function EstatisticasPage() {
                                 type="monotone"
                                 dataKey="revisoes"
                                 name="Revisões"
-                                stroke="#8b5cf6"
+                                stroke="#818cf8"
                                 fill="url(#gRev)"
                                 strokeWidth={2}
                             />
@@ -1945,7 +1932,7 @@ function Panel({
     children: React.ReactNode;
 }) {
     return (
-        <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="rounded-xl border border-border bg-card p-4">
             <h3 className="mb-2 font-semibold">{title}</h3>
             {children}
         </div>
@@ -2015,7 +2002,7 @@ function TinyBarH({
                         dataKey="valor"
                         barSize={12}
                         radius={[0, 8, 8, 0]}
-                        fill={percent ? "var(--primary)" : "#60a5fa"}
+                        fill={percent ? "var(--primary)" : "var(--muted-foreground)"}
                     />
                 </BarChart>
             </ResponsiveContainer>

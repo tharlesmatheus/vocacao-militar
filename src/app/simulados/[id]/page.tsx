@@ -168,13 +168,13 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
 
     if (erro) {
         return (
-            <main className="mx-auto max-w-3xl px-4 py-10">
+            <div className="w-full py-10">
                 <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">{erro}</p>
                 <Link href="/simulados" className="mt-4 inline-block text-sm text-primary underline">Voltar aos simulados</Link>
-            </main>
+            </div>
         );
     }
-    if (!dados) return <main className="px-4 py-10 text-center text-muted-foreground">Carregando simulado…</main>;
+    if (!dados) return <div className="px-4 py-10 text-center text-muted-foreground">Carregando simulado…</div>;
 
     // ======================== RESULTADO ========================
     if (dados.simulado.finalizado_em) {
@@ -186,9 +186,9 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
     const pouco = restante !== null && restante < 300;
 
     return (
-        <main className="w-full px-3 pb-24 pt-4 sm:px-6">
-            <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
-                <div className="sticky top-0 z-20 -mx-3 flex items-center justify-between gap-3 border-b border-border bg-background/95 px-3 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+        <div className="w-full pb-24">
+            <div className="flex w-full flex-col gap-4">
+                <div className="sticky top-0 z-20 flex items-center justify-between gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur">
                     <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-foreground">{dados.simulado.titulo}</div>
                         <div className="text-xs text-muted-foreground">{respondidas}/{dados.simulado.total} respondidas</div>
@@ -269,13 +269,13 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
                     )}
                 </div>
             </div>
-        </main>
+        </div>
     );
 }
 
 function ResultadoView({ dados, resultado }: { dados: DadosSimulado; resultado: Resultado | null }) {
     const [soErros, setSoErros] = useState(false);
-    if (!resultado) return <main className="px-4 py-10 text-center text-muted-foreground">Calculando resultado…</main>;
+    if (!resultado) return <div className="px-4 py-10 text-center text-muted-foreground">Calculando resultado…</div>;
 
     const respostas = dados.simulado.respostas ?? {};
     const nota = Number(resultado.nota);
@@ -283,8 +283,8 @@ function ResultadoView({ dados, resultado }: { dados: DadosSimulado; resultado: 
     const questoes = dados.questoes.filter((q) => !soErros || respostas[q.id] !== q.correta);
 
     return (
-        <main className="w-full px-4 py-6 sm:px-6 md:py-10">
-            <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+        <div className="w-full">
+            <div className="flex w-full flex-col gap-6">
                 <Link href="/simulados" className="text-sm text-muted-foreground underline">← Simulados</Link>
 
                 <section className="relative overflow-hidden rounded-lg border border-border bg-card p-6 shadow-sm">
@@ -382,6 +382,6 @@ function ResultadoView({ dados, resultado }: { dados: DadosSimulado; resultado: 
                     })}
                 </section>
             </div>
-        </main>
+        </div>
     );
 }

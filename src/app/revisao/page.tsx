@@ -1448,24 +1448,24 @@ export default function RevisaoPage() {
 
     if (loading) {
         return (
-            <main className="min-h-[60vh] flex items-center justify-center px-4">
+            <div className="min-h-[60vh] flex items-center justify-center px-4">
                 <span className="text-sm text-muted-foreground">
                     Carregando Centro de Revisões...
                 </span>
-            </main>
+            </div>
         );
     }
 
     return (
-        <main className="w-full px-4 sm:px-6 lg:px-8 py-6 md:py-10">
-            <div className="mx-auto max-w-6xl space-y-6">
-                <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="w-full">
+            <div className="flex w-full flex-col gap-6">
+                <header className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-end md:justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold">
+                        <h1 className="text-3xl font-extrabold text-foreground">
                             Centro de Revisões
                         </h1>
 
-                        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                        <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
                             Revise Cadernos de Erros, Flashcards e Resumos
                             com revisão espaçada. O tempo gasto em cada item
                             entra automaticamente no tempo de estudo da
@@ -1479,7 +1479,7 @@ export default function RevisaoPage() {
                             setDraftSettings(settings);
                             setConfigOpen(true);
                         }}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold hover:bg-muted"
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-semibold hover:bg-muted"
                     >
                         <Settings size={17} />
                         Configurar intervalos
@@ -1595,7 +1595,7 @@ export default function RevisaoPage() {
                             />
                         </section>
 
-                        <section className="rounded-2xl border border-border bg-card p-5">
+                        <section className="rounded-xl border border-border bg-card p-5">
                             <div className="flex items-center gap-2 font-semibold">
                                 <Clock size={17} />
                                 Como funciona a agenda
@@ -1623,7 +1623,7 @@ export default function RevisaoPage() {
                                     "CADERNO_DISCIPLINAS"
                                 );
                             }}
-                            className="rounded-2xl border border-border bg-card p-6 text-left transition hover:bg-muted/40"
+                            className="rounded-xl border border-border bg-card p-6 text-left transition hover:bg-muted/40"
                         >
                             <ListOrdered
                                 size={28}
@@ -1648,7 +1648,7 @@ export default function RevisaoPage() {
                                     )
                                 )
                             }
-                            className="rounded-2xl border border-border bg-card p-6 text-left transition hover:bg-muted/40"
+                            className="rounded-xl border border-border bg-card p-6 text-left transition hover:bg-muted/40"
                         >
                             <Shuffle
                                 size={28}
@@ -1688,7 +1688,7 @@ export default function RevisaoPage() {
                                                 "CADERNO_ASSUNTOS"
                                             );
                                         }}
-                                        className="rounded-2xl border border-border bg-card p-5 text-left hover:bg-muted/40"
+                                        className="rounded-xl border border-border bg-card p-5 text-left hover:bg-muted/40"
                                     >
                                         <div className="font-semibold">
                                             {disciplina.nome}
@@ -1728,7 +1728,7 @@ export default function RevisaoPage() {
                                                 assunto.id
                                             )
                                         }
-                                        className="rounded-2xl border border-border bg-card p-5 text-left hover:bg-muted/40"
+                                        className="rounded-xl border border-border bg-card p-5 text-left hover:bg-muted/40"
                                     >
                                         <div className="font-semibold">
                                             {assunto.nome}
@@ -1776,7 +1776,7 @@ export default function RevisaoPage() {
                         }
                     />
 
-                    <div className="relative z-[101] max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-border bg-card shadow-2xl">
+                    <div className="relative z-[101] max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-border bg-card shadow-2xl">
                         <div className="flex items-center justify-between border-b border-border px-5 py-4">
                             <div>
                                 <h2 className="text-lg font-semibold">
@@ -1810,7 +1810,7 @@ export default function RevisaoPage() {
                             ).map((method) => (
                                 <div
                                     key={method}
-                                    className="rounded-2xl border border-border p-4"
+                                    className="rounded-xl border border-border p-4"
                                 >
                                     <h3 className="font-semibold">
                                         {methodLabel(method)}
@@ -1918,7 +1918,7 @@ export default function RevisaoPage() {
                                 onClick={
                                     salvarConfiguracoes
                                 }
-                                className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                                className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
                             >
                                 {saving
                                     ? "Salvando..."
@@ -1928,7 +1928,7 @@ export default function RevisaoPage() {
                     </div>
                 </div>
             )}
-        </main>
+        </div>
     );
 }
 
@@ -1951,7 +1951,7 @@ function MethodCard({
         <button
             type="button"
             onClick={onClick}
-            className="rounded-2xl border border-border bg-card p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            className="rounded-xl border border-border bg-card p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         >
             <div className="flex items-start justify-between gap-4">
                 <div className="rounded-xl bg-primary/10 p-3 text-primary">
@@ -1985,7 +1985,7 @@ function MethodCard({
 
 function EmptyState({ text }: { text: string }) {
     return (
-        <div className="mt-4 rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+        <div className="mt-4 rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
             {text}
         </div>
     );
@@ -2020,7 +2020,7 @@ function ActivityArea({
 
     if (!item) {
         return (
-            <section className="mx-auto max-w-2xl rounded-2xl border border-border bg-card p-10 text-center">
+            <section className="mx-auto max-w-2xl rounded-xl border border-border bg-card p-10 text-center">
                 <CheckCircle2
                     size={48}
                     className="mx-auto text-green-600 dark:text-green-400"
@@ -2038,7 +2038,7 @@ function ActivityArea({
                 <button
                     type="button"
                     onClick={onExit}
-                    className="mt-6 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground"
+                    className="mt-6 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground"
                 >
                     Voltar ao Centro de Revisões
                 </button>
@@ -2143,7 +2143,7 @@ function FlashcardActivity({
     onFinish: (result: ReviewResult) => Promise<void>;
 }) {
     return (
-        <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <div className="p-7 sm:p-10">
                 <div className="mb-6 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
                     <Brain size={16} />
@@ -2175,7 +2175,7 @@ function FlashcardActivity({
                             Verso
                         </div>
 
-                        <div className="rounded-2xl bg-muted/50 p-5">
+                        <div className="rounded-xl bg-muted/50 p-5">
                             <p className="whitespace-pre-wrap leading-relaxed">
                                 {item.flashcard.verso}
                             </p>
@@ -2245,7 +2245,7 @@ function CadernoActivity({
         respondeu && selected === correta;
 
     return (
-        <div className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
             <div className="text-xs font-semibold uppercase tracking-wide text-primary">
                 Questão do Caderno de Erros
             </div>
@@ -2302,7 +2302,7 @@ function CadernoActivity({
 
             {respondeu && (
                 <div
-                    className={`mt-6 rounded-2xl border p-5 ${acertou
+                    className={`mt-6 rounded-xl border p-5 ${acertou
                         ? "border-green-500/40 bg-green-500/10"
                         : "border-red-500/40 bg-red-500/10"
                         }`}
@@ -2334,7 +2334,7 @@ function CadernoActivity({
                                     : "ERRO"
                             )
                         }
-                        className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                        className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
                     >
                         {saving
                             ? "Salvando revisão..."
@@ -2356,7 +2356,7 @@ function ResumoActivity({
     onFinish: (result: ReviewResult) => Promise<void>;
 }) {
     return (
-        <div className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
             <div className="text-xs font-semibold uppercase tracking-wide text-primary">
                 Revisão de resumo
             </div>
@@ -2365,7 +2365,7 @@ function ResumoActivity({
                 {item.resumo.titulo}
             </h2>
 
-            <div className="mt-6 rounded-2xl bg-muted/40 p-5">
+            <div className="mt-6 rounded-xl bg-muted/40 p-5">
                 <div className="whitespace-pre-wrap text-sm leading-7">
                     {item.resumo.conteudo ||
                         "Este resumo não possui conteúdo."}
@@ -2378,7 +2378,7 @@ function ResumoActivity({
                 onClick={() =>
                     onFinish("CONCLUIDO")
                 }
-                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
             >
                 <CheckCircle2 size={18} />
                 {saving

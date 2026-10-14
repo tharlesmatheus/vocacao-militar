@@ -680,7 +680,7 @@ export default function ResumosPage() {
             <button
                 type="button"
                 onClick={onClick}
-                className="flex flex-col items-center rounded-2xl border border-border bg-card p-6 text-center transition hover:shadow-md"
+                className="flex flex-col items-center rounded-xl border border-border bg-card p-6 text-center transition hover:shadow-md"
             >
                 <div className="mb-4 rounded-xl bg-red-500 p-4 text-white">
                     <BookOpen size={26} />
@@ -697,19 +697,19 @@ export default function ResumosPage() {
 
     if (loading) {
         return (
-            <main className="flex min-h-[60vh] items-center justify-center px-4">
+            <div className="flex min-h-[60vh] items-center justify-center px-4">
                 <div className="text-sm text-muted-foreground">
                     Carregando resumos...
                 </div>
-            </main>
+            </div>
         );
     }
 
     return (
-        <main className="mx-auto max-w-6xl p-4 sm:p-6">
-            <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex w-full flex-col gap-6">
+            <header className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold">
+                    <h1 className="text-3xl font-extrabold text-foreground">
                         Meus Resumos
                     </h1>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -758,7 +758,7 @@ export default function ResumosPage() {
                     <button
                         type="button"
                         onClick={abrirNovoResumo}
-                        className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-medium text-primary-foreground"
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 font-medium text-primary-foreground"
                     >
                         <Plus size={18} />
                         Novo resumo
@@ -901,7 +901,7 @@ export default function ResumosPage() {
                         <button
                             type="button"
                             onClick={abrirNovoResumo}
-                            className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
+                            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
                         >
                             <Plus size={16} />
                             Novo neste assunto
@@ -993,7 +993,7 @@ export default function ResumosPage() {
                         onClick={() => setViewer(null)}
                     />
 
-                    <div className="relative z-[101] max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-border bg-card shadow-xl">
+                    <div className="relative z-[101] max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-border bg-card shadow-xl">
                         <div className="sticky top-0 flex items-start justify-between gap-4 border-b border-border bg-card px-5 py-4">
                             <div>
                                 <h2 className="text-xl font-semibold">
@@ -1031,7 +1031,7 @@ export default function ResumosPage() {
                                 onClick={() =>
                                     abrirEditarResumo(viewer)
                                 }
-                                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+                                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
                             >
                                 <Pencil size={16} />
                                 Editar
@@ -1050,7 +1050,7 @@ export default function ResumosPage() {
                         onClick={fecharModal}
                     />
 
-                    <div className="relative z-[101] max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-border bg-card shadow-xl">
+                    <div className="relative z-[101] max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-border bg-card shadow-xl">
                         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-card px-5 py-4">
                             <div>
                                 <h2 className="text-lg font-semibold">
@@ -1174,7 +1174,7 @@ export default function ResumosPage() {
                                 type="button"
                                 onClick={fecharModal}
                                 disabled={saving}
-                                className="rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
+                                className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
                             >
                                 Cancelar
                             </button>
@@ -1183,7 +1183,7 @@ export default function ResumosPage() {
                                 type="button"
                                 onClick={() => void salvarResumo()}
                                 disabled={saving}
-                                className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                                className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
                             >
                                 {saving
                                     ? "Salvando..."
@@ -1195,7 +1195,7 @@ export default function ResumosPage() {
                     </div>
                 </div>
             )}
-        </main>
+        </div>
     );
 }
 
@@ -1209,7 +1209,7 @@ function EmptyState({
     onCreate: () => void;
 }) {
     return (
-        <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
+        <div className="rounded-xl border border-dashed border-border bg-card px-6 py-14 text-center">
             <BookOpen
                 className="mx-auto text-muted-foreground"
                 size={34}
@@ -1224,7 +1224,7 @@ function EmptyState({
             <button
                 type="button"
                 onClick={onCreate}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+                className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
             >
                 <Plus size={17} />
                 Novo resumo

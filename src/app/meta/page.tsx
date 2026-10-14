@@ -75,8 +75,8 @@ function EscolherMeta() {
     if (carregando) return <div className="animate-pulse text-muted-foreground">Carregando…</div>;
 
     return (
-        <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-            <header className="flex flex-col gap-2">
+        <div className="flex w-full flex-col gap-6">
+            <header className="flex flex-col gap-2 border-b border-border pb-5">
                 <span className="inline-flex w-fit items-center gap-2 rounded-md bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary">
                     <Crosshair className="h-4 w-4" aria-hidden /> {primeiroAcesso ? "Primeiro passo" : "Minha meta"}
                 </span>
@@ -203,10 +203,10 @@ function EscolherMeta() {
 
 export default function MetaPage() {
     return (
-        <main className="w-full px-4 py-6 sm:px-6 md:py-10 lg:px-8">
+        <div className="w-full">
             <Suspense fallback={<div className="animate-pulse text-muted-foreground">Carregando…</div>}>
                 <EscolherMeta />
             </Suspense>
-        </main>
+        </div>
     );
 }

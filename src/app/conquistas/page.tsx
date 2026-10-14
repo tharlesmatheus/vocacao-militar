@@ -278,21 +278,21 @@ export default function ConquistasPage() {
 
     if (loading) {
         return (
-            <main className="mx-auto flex min-h-[60vh] max-w-7xl items-center justify-center px-4">
+            <div className="flex min-h-[60vh] items-center justify-center">
                 <div className="text-center">
                     <RefreshCw className="mx-auto h-7 w-7 animate-spin text-primary" />
                     <p className="mt-3 text-sm text-muted-foreground">
                         Carregando sua evolução...
                     </p>
                 </div>
-            </main>
+            </div>
         );
     }
 
     if (!dashboard) {
         return (
-            <main className="mx-auto max-w-4xl px-4 py-10">
-                <div className="rounded-2xl border border-border bg-card p-6">
+            <div className="w-full py-10">
+                <div className="rounded-xl border border-border bg-card p-6">
                     <h1 className="text-xl font-semibold">Patentes e conquistas</h1>
                     <p className="mt-2 text-sm text-destructive">
                         {error || "Não foi possível carregar os dados."}
@@ -300,13 +300,13 @@ export default function ConquistasPage() {
                     <button
                         type="button"
                         onClick={() => load(false)}
-                        className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 font-semibold text-primary-foreground"
+                        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground"
                     >
                         <RefreshCw size={16} />
                         Tentar novamente
                     </button>
                 </div>
-            </main>
+            </div>
         );
     }
 
@@ -318,15 +318,15 @@ export default function ConquistasPage() {
         : 0;
 
     return (
-        <main className="mx-auto w-full max-w-7xl px-3 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <div className="flex flex-col gap-6">
-                <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="w-full">
+            <div className="flex w-full flex-col gap-6">
+                <header className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-end md:justify-between">
                     <div>
-                        <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                            <Trophy size={18} />
+                        <div className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                            <Trophy size={14} />
                             Patentes e conquistas
                         </div>
-                        <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">
+                        <h1 className="text-3xl font-extrabold text-foreground">
                             Evolução de {userName}
                         </h1>
                         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
@@ -339,7 +339,7 @@ export default function ConquistasPage() {
                         type="button"
                         onClick={() => load(true)}
                         disabled={refreshing}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-50"
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-50"
                     >
                         <RefreshCw
                             size={16}
@@ -356,10 +356,10 @@ export default function ConquistasPage() {
                 )}
 
                 <section className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-                    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-6">
+                    <div className="rounded-xl border border-border bg-card p-5 shadow-sm lg:col-span-6">
                         <div className="flex items-start justify-between gap-4">
                             <div className="flex items-center gap-4">
-                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+                                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-muted">
                                     <Medal
                                         className={`h-8 w-8 ${rankTone[dashboard.rank.current.title] ??
                                             "text-primary"
@@ -405,7 +405,7 @@ export default function ConquistasPage() {
                         </div>
                     </div>
 
-                    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-3">
+                    <div className="rounded-xl border border-border bg-card p-5 shadow-sm lg:col-span-3">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -425,7 +425,7 @@ export default function ConquistasPage() {
                         </p>
                     </div>
 
-                    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-3">
+                    <div className="rounded-xl border border-border bg-card p-5 shadow-sm lg:col-span-3">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             Conquistas
                         </p>
@@ -445,7 +445,7 @@ export default function ConquistasPage() {
                 </section>
 
                 <section className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-                    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-8">
+                    <div className="rounded-xl border border-border bg-card p-5 shadow-sm lg:col-span-8">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <div className="flex items-center gap-2">
@@ -503,7 +503,7 @@ export default function ConquistasPage() {
                         </div>
                     </div>
 
-                    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm lg:col-span-4">
+                    <div className="rounded-xl border border-border bg-card p-5 shadow-sm lg:col-span-4">
                         <div className="flex items-center gap-2">
                             <Star className="h-5 w-5 text-amber-500" />
                             <h2 className="font-semibold">Próxima conquista</h2>
@@ -553,7 +553,7 @@ export default function ConquistasPage() {
                     </div>
                 </section>
 
-                <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                         <div>
                             <h2 className="text-lg font-semibold">Conquistas</h2>
@@ -603,7 +603,7 @@ export default function ConquistasPage() {
                         {filteredAchievements.map((item: GamificationAchievement) => (
                             <article
                                 key={item.code}
-                                className={`relative rounded-2xl border p-5 transition ${item.unlocked
+                                className={`relative rounded-xl border p-5 transition ${item.unlocked
                                     ? "border-border bg-background shadow-sm"
                                     : "border-border/80 bg-muted/30"
                                     }`}
@@ -664,7 +664,7 @@ export default function ConquistasPage() {
                     )}
                 </section>
 
-                <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
                     <div className="flex items-center gap-2">
                         <Sparkles className="h-5 w-5 text-primary" />
                         <h2 className="text-lg font-semibold">Atividade de XP</h2>
@@ -709,6 +709,6 @@ export default function ConquistasPage() {
                     </div>
                 </section>
             </div>
-        </main>
+        </div>
     );
 }

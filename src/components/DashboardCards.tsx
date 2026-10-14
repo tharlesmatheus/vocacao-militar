@@ -11,7 +11,7 @@ export function DashboardCards() {
             {items.map((i) => (
                 <div
                     key={i.title}
-                    className="bg-[#23293a] dark:bg-white rounded-2xl px-9 py-7 shadow-lg border border-[#232939]/40 dark:border-[#e3e8f3] flex flex-col gap-1"
+                    className="bg-[#23293a] dark:bg-white rounded-xl px-9 py-7 shadow-lg border border-[#232939]/40 dark:border-[#e3e8f3] flex flex-col gap-1"
                 >
                     <span className="text-[#b1bad3] dark:text-[#a8b1c6] text-base">{i.title}</span>
                     <span className="text-3xl font-extrabold text-white dark:text-[#232939]">{i.value}</span>

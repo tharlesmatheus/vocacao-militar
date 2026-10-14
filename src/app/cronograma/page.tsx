@@ -833,28 +833,28 @@ export default function CronogramaPage() {
 
     if (loading) {
         return (
-            <main className="flex min-h-[60vh] items-center justify-center px-4">
+            <div className="flex min-h-[60vh] items-center justify-center px-4">
                 <div className="text-sm text-muted-foreground">
                     Carregando cronograma...
                 </div>
-            </main>
+            </div>
         );
     }
 
     return (
-        <main className="mx-auto w-full max-w-[1600px] space-y-6 px-3 py-6 sm:px-6 lg:py-8">
-            <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex w-full flex-col gap-6">
+            <header className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                        <CalendarRange size={18} />
+                    <div className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                        <CalendarRange size={14} />
                         Cronograma por ciclos
                     </div>
 
-                    <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">
+                    <h1 className="text-3xl font-extrabold text-foreground">
                         Tabela de estudo
                     </h1>
 
-                    <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                    <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
                         Sem segunda, terça ou quarta. Cada coluna é um ciclo de estudo e usa somente disciplinas e assuntos do catálogo canônico.
                     </p>
                 </div>
@@ -870,7 +870,7 @@ export default function CronogramaPage() {
                     <button
                         type="button"
                         onClick={addCycle}
-                        className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
+                        className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
                     >
                         <Plus size={16} />
                         Adicionar ciclo
@@ -879,7 +879,7 @@ export default function CronogramaPage() {
                     <button
                         type="button"
                         onClick={clearSchedule}
-                        className="rounded-xl border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
+                        className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
                     >
                         Limpar blocos
                     </button>
@@ -898,7 +898,7 @@ export default function CronogramaPage() {
                 </div>
             )}
 
-            <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div className="mb-3">
                     <h2 className="font-semibold">
                         Adicionar bloco ao cronograma
@@ -1001,7 +1001,7 @@ export default function CronogramaPage() {
                 </div>
             </section>
 
-            <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+            <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                 <div className="flex flex-col gap-2 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h2 className="font-semibold">
@@ -1205,6 +1205,6 @@ export default function CronogramaPage() {
             <p className="text-xs leading-relaxed text-muted-foreground">
                 O cronograma apenas organiza sua sequência de estudo. Ele não cria disciplinas nem assuntos: toda classificação vem do catálogo canônico em /catalogo.
             </p>
-        </main>
+        </div>
     );
 }

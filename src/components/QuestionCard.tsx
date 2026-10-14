@@ -531,7 +531,7 @@ export function QuestionCard(props: QuestionCardProps) {
 
             <div className="flex flex-wrap gap-2 mb-4">
                 <button
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-5 rounded-xl text-sm transition"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-5 rounded-lg text-sm transition"
                     onClick={async () => {
                         if (!selected || showResult || registrandoResposta) {
                             return;
@@ -679,7 +679,7 @@ export function QuestionCard(props: QuestionCardProps) {
                     type="button"
                     onClick={() => toggleLocal("ERROS")}
                     disabled={effectiveBusy.ERROS}
-                    className={`font-bold py-2 px-4 rounded-xl text-sm transition border
+                    className={`font-bold py-2 px-4 rounded-lg text-sm transition border
             ${effectiveStatus.ERROS
                             ? "bg-red-600 text-white border-red-600 hover:bg-red-700"
                             : "bg-transparent text-red-600 dark:text-red-400 border-red-500/40 hover:bg-red-500/10"
@@ -693,7 +693,7 @@ export function QuestionCard(props: QuestionCardProps) {
                     type="button"
                     onClick={() => toggleLocal("ACERTOS")}
                     disabled={effectiveBusy.ACERTOS}
-                    className={`font-bold py-2 px-4 rounded-xl text-sm transition border
+                    className={`font-bold py-2 px-4 rounded-lg text-sm transition border
             ${effectiveStatus.ACERTOS
                             ? "bg-green-600 text-white border-green-600 hover:bg-green-700"
                             : "bg-transparent text-green-700 dark:text-green-300 border-green-500/40 hover:bg-green-500/10"
@@ -708,7 +708,7 @@ export function QuestionCard(props: QuestionCardProps) {
                 <button
                     type="button"
                     onClick={() => setShowComentarios((v) => !v)}
-                    className="font-bold py-2 px-4 rounded-xl text-sm transition border bg-transparent text-foreground border-border hover:bg-muted"
+                    className="font-bold py-2 px-4 rounded-lg text-sm transition border bg-transparent text-foreground border-border hover:bg-muted"
                     aria-expanded={showComentarios}
                 >
                     {showComentarios ? "Ocultar comentários" : "Ver comentários"}

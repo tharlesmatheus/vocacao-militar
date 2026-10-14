@@ -125,14 +125,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <main
               className={
                 showChrome
-                  ? "w-full px-3 sm:px-4 md:px-8 py-5 md:py-8"
+                  ? "w-full px-4 pb-16 pt-6 sm:px-6 md:pt-8 lg:px-8"
                   : isPublicRoute
                     ? "w-full"
                     : "min-h-screen flex items-center justify-center bg-muted w-full px-4"
               }
             >
               {showChrome ? (
-                <div className="mx-auto w-full max-w-7xl">{children}</div>
+                // Largura ÚNICA das páginas logadas. As páginas não definem largura nem
+                // margem externa própria (ver components/app/Pagina.tsx).
+                <div className="mx-auto w-full max-w-6xl">{children}</div>
               ) : (
                 children
               )}

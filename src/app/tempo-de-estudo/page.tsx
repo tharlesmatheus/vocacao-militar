@@ -18,6 +18,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { ResponsiveContainer, PieChart, Pie, Tooltip, Cell } from "recharts";
+import { Play, Square } from "lucide-react";
+import { CabecalhoPagina, Pagina, Painel, SeletorSegmentado, Vazio } from "@/components/app/Pagina";
+import { corGrafico } from "@/lib/coresGrafico";
 
 /* =========================
  * Tipos
@@ -38,54 +41,9 @@ type OpenSession = {
 type RangeKey = "dia" | "semana" | "mes" | "ano" | "tudo";
 
 /* =========================
- * Paleta e helpers de cor
+ * Cores: paleta do tema (lib/coresGrafico), atribuída pela posição no ranking.
+ * Antes a cor saía de um hash do nome e duas disciplinas podiam ficar iguais.
  * ========================= */
-
-/**
- * Paleta “bonita” e bem contrastante (sem depender de libs).
- * - Escolhida para boa distinção visual no gráfico (inclusive em telas pequenas).
- * - Mantém cores estáveis ao longo do tempo.
- */
-const COLOR_PALETTE = [
-    "#6366F1", // indigo
-    "#22C55E", // green
-    "#F97316", // orange
-    "#06B6D4", // cyan
-    "#A855F7", // purple
-    "#EF4444", // red
-    "#F59E0B", // amber
-    "#3B82F6", // blue
-    "#10B981", // emerald
-    "#EC4899", // pink
-    "#14B8A6", // teal
-    "#8B5CF6", // violet
-    "#84CC16", // lime
-    "#0EA5E9", // sky
-    "#E11D48", // rose
-] as const;
-
-/**
- * Hash simples e determinístico para associar uma cor estável ao texto.
- * - Evita que a mesma disciplina mude de cor ao atualizar/paginar.
- * - Não precisa de dependências.
- */
-function hashStringToInt(input: string): number {
-    let h = 0;
-    for (let i = 0; i < input.length; i++) {
-        h = (h * 31 + input.charCodeAt(i)) >>> 0; // >>>0 garante inteiro não-negativo (uint32)
-    }
-    return h;
-}
-
-/**
- * Retorna uma cor consistente para um nome.
- * - Usa a paleta e o hash para distribuir as cores.
- */
-function colorForName(name: string): string {
-    const idx = hashStringToInt(name || "SEM_NOME") % COLOR_PALETTE.length;
-    return COLOR_PALETTE[idx];
-}
-
 /* =========================
  * Helpers gerais
  * ========================= */
@@ -380,7 +338,9 @@ export default function TempoDeEstudoPage() {
      */
     const colorMap = useMemo(() => {
         const map: Record<string, string> = {};
-        for (const s of slices) map[s.name] = colorForName(s.name);
+        slices.forEach((s, i) => {
+            map[s.name] = corGrafico(i);
+        });
         return map;
     }, [slices]);
 
@@ -480,45 +440,32 @@ export default function TempoDeEstudoPage() {
         }
     }
 
+    const PERIODOS: { id: RangeKey; nome: string }[] = [
+        { id: "dia", nome: "Dia" },
+        { id: "semana", nome: "Semana" },
+        { id: "mes", nome: "Mês" },
+        { id: "ano", nome: "Ano" },
+        { id: "tudo", nome: "Tudo" },
+    ];
+    const nomePeriodo: Record<RangeKey, string> = { dia: "Hoje", semana: "Esta semana", mes: "Este mês", ano: "Este ano", tudo: "Todo o período" };
+    const campoClass =
+        "w-full rounded-lg border border-border bg-muted px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary disabled:opacity-60";
+
     return (
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-                <h1 className="text-2xl font-semibold">Tempo de estudo</h1>
+        <Pagina>
+            <CabecalhoPagina
+                titulo="Tempo de estudo"
+                descricao="Cronometre suas sessões por disciplina e veja onde o seu tempo está indo."
+                acoes={<SeletorSegmentado rotulo="Período" opcoes={PERIODOS} valor={range} aoMudar={setRange} />}
+            />
 
-                <div className="flex gap-2">
-                    {(
-                        [
-                            ["dia", "Dia"],
-                            ["semana", "Semana"],
-                            ["mes", "Mês"],
-                            ["ano", "Ano"],
-                            ["tudo", "Tudo"],
-                        ] as const
-                    ).map(([k, label]) => (
-                        <button
-                            key={k}
-                            onClick={() => setRange(k)}
-                            className={`px-3 py-1.5 rounded-lg border ${range === k
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-card border-border"
-                                }`}
-                            disabled={loading}
-                        >
-                            {label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* BLOCO: iniciar/controle */}
-            <div className="rounded-2xl bg-card border border-border p-4 space-y-3">
-                <div className="text-sm font-semibold">Registro</div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-1">
-                        <span className="text-xs text-muted-foreground">Disciplina</span>
+            {/* Registro da sessão */}
+            <Painel titulo="Registrar sessão" descricao="Escolha a disciplina (e o assunto, se quiser) e inicie o cronômetro.">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-muted-foreground">Disciplina</span>
                         <select
-                            className="bg-muted border border-border rounded-lg px-3 py-2 text-sm"
+                            className={campoClass}
                             value={materiaId}
                             onChange={(e) => {
                                 setMateriaId(e.target.value);
@@ -533,92 +480,98 @@ export default function TempoDeEstudoPage() {
                                 </option>
                             ))}
                         </select>
-                    </div>
+                    </label>
 
-                    <div className="flex flex-col gap-1">
-                        <span className="text-xs text-muted-foreground">Conteúdo / Assunto</span>
+                    <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-muted-foreground">Assunto (opcional)</span>
                         <select
-                            className="bg-muted border border-border rounded-lg px-3 py-2 text-sm"
+                            className={campoClass}
                             value={assuntoId}
                             onChange={(e) => setAssuntoId(e.target.value)}
                             disabled={loading || !assuntosFiltrados.length || !!openSession}
                         >
-                            <option value="">Selecione</option>
+                            <option value="">{materiaId && !assuntosFiltrados.length ? "Sem assuntos cadastrados" : "Selecione"}</option>
                             {assuntosFiltrados.map((a) => (
                                 <option key={a.id} value={a.id}>
                                     {a.nome}
                                 </option>
                             ))}
                         </select>
-                    </div>
+                    </label>
                 </div>
 
-                {/* Status sessão aberta */}
                 {openSession ? (
-                    <div className="rounded-xl border border-border bg-muted p-3 flex flex-wrap items-center justify-between gap-3">
-                        <div className="min-w-[240px]">
-                            <div className="text-sm font-semibold">Sessão em andamento</div>
-                            <div className="text-xs text-muted-foreground">
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-primary/40 bg-primary/10 p-4">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+                                <span className="h-2 w-2 animate-pulse rounded-full bg-primary" aria-hidden /> Em andamento
+                            </div>
+                            <div className="mt-1 truncate text-sm text-foreground">
                                 {openSession.disciplina_catalogo_id ? matName[openSession.disciplina_catalogo_id] : "Sem disciplina"}
                                 {openSession.assunto_catalogo_id ? ` • ${assName[openSession.assunto_catalogo_id] ?? "Assunto"}` : ""}
                             </div>
                         </div>
-
-                        <div className="text-lg font-extrabold tracking-tight">{fmtHMSFull(openElapsedSec)}</div>
-
+                        <div className="font-mono text-3xl font-extrabold tabular-nums tracking-tight text-foreground">{fmtHMSFull(openElapsedSec)}</div>
                         <button
-                            className="px-5 py-2 rounded-xl bg-destructive text-destructive-foreground font-semibold"
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-lg bg-destructive px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
                             onClick={handleStop}
                             disabled={loading}
                         >
-                            Parar e salvar
+                            <Square className="h-4 w-4" aria-hidden /> Parar e salvar
                         </button>
                     </div>
                 ) : (
-                    <button
-                        className="px-6 py-3 rounded-2xl bg-primary text-primary-foreground font-semibold disabled:opacity-60"
-                        onClick={handleStart}
-                        disabled={loading || !materiaId}
-                        title="Inicia o cronômetro na disciplina/assunto selecionados"
-                    >
-                        Iniciar atividade
-                    </button>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                            onClick={handleStart}
+                            disabled={loading || !materiaId}
+                        >
+                            <Play className="h-4 w-4" aria-hidden /> Iniciar cronômetro
+                        </button>
+                        {!materiaId && !loading && <span className="text-xs text-muted-foreground">Escolha a disciplina para começar.</span>}
+                    </div>
                 )}
 
-                {erro && <div className="text-destructive text-sm">{erro}</div>}
-                {loading && <div className="text-muted-foreground text-sm">Carregando…</div>}
-            </div>
+                {erro && <div className="mt-3 text-sm text-red-600 dark:text-red-400">{erro}</div>}
+            </Painel>
 
-            {/* BLOCO: gráfico pizza */}
-            <div className="rounded-2xl bg-card border border-border p-4">
-                <div className="flex items-center justify-between mb-2">
-                    <h2 className="font-semibold">Todas as disciplinas</h2>
-                    <span className="text-xs text-muted-foreground">{range.toUpperCase()}</span>
-                </div>
-
-                {!slices.length ? (
-                    <div className="text-sm text-muted-foreground">Sem dados para o período selecionado.</div>
+            {/* Distribuição do tempo */}
+            <Painel
+                titulo="Tempo por disciplina"
+                descricao={nomePeriodo[range]}
+                acoes={
+                    <div className="text-right">
+                        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total</div>
+                        <div className="text-2xl font-extrabold tabular-nums tracking-tight text-foreground">{fmtHMSFull(totalSeconds)}</div>
+                    </div>
+                }
+            >
+                {loading && !slices.length ? (
+                    <div className="h-48 animate-pulse rounded-lg bg-muted" />
+                ) : !slices.length ? (
+                    <Vazio titulo="Nenhuma sessão neste período" texto="Inicie o cronômetro acima ou escolha outro período." />
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                        <div className="h-64">
+                    <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-[240px_1fr]">
+                        <div className="mx-auto h-56 w-56">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
                                         data={slices}
                                         dataKey="seconds"
                                         nameKey="name"
-                                        outerRadius={90}
-                                        innerRadius={45}
-                                        paddingAngle={2}
-                                        // Pequena borda para separar melhor as fatias (fica mais bonito e legível)
+                                        outerRadius={100}
+                                        innerRadius={68}
+                                        paddingAngle={slices.length > 1 ? 2 : 0}
                                         stroke="var(--card)"
                                         strokeWidth={2}
                                     >
                                         {slices.map((s) => (
-                                            <Cell key={s.name} fill={colorMap[s.name] ?? "#94A3B8"} />
+                                            <Cell key={s.name} fill={colorMap[s.name]} />
                                         ))}
                                     </Pie>
-
                                     <Tooltip
                                         formatter={(v: any, _n: any, p: any) => {
                                             const sec = Number(v ?? 0);
@@ -626,59 +579,44 @@ export default function TempoDeEstudoPage() {
                                             return [`${fmtHMSFull(sec)} (${pct}%)`, p?.payload?.name ?? "Item"];
                                         }}
                                         contentStyle={{
-                                            background: "var(--muted)",
+                                            background: "var(--popover)",
                                             border: "1px solid var(--border)",
                                             color: "var(--foreground)",
-                                            borderRadius: 12,
+                                            borderRadius: 8,
                                         }}
                                     />
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>
 
-                        <div className="space-y-3">
-                            <div className="text-center text-3xl font-extrabold tracking-tight">
-                                {fmtHMSFull(totalSeconds)}
-                            </div>
-
-                            {/* Lista/legenda com cor por disciplina */}
-                            <div className="space-y-2">
-                                {slices.map((s) => {
-                                    const pct = totalSeconds ? Math.round((s.seconds / totalSeconds) * 100) : 0;
-                                    const color = colorMap[s.name] ?? "#94A3B8";
-
-                                    return (
-                                        <div
-                                            key={s.name}
-                                            className="flex items-center justify-between rounded-xl border border-border bg-muted px-3 py-2"
-                                        >
-                                            <div className="min-w-0 flex items-center gap-2">
-                                                {/* “bolinha”/badge de cor */}
-                                                <span
-                                                    className="inline-block h-3 w-3 rounded-full shrink-0"
-                                                    style={{ backgroundColor: color }}
-                                                    aria-hidden="true"
-                                                />
-
-                                                <div className="min-w-0">
-                                                    <div className="font-medium truncate">{s.name}</div>
-                                                    <div className="text-xs text-muted-foreground">{pct}%</div>
-                                                </div>
-                                            </div>
-
-                                            <div className="font-semibold">{fmtHMSFull(s.seconds)}</div>
+                        {/* Barras: mais fáceis de comparar que as fatias */}
+                        <ul className="flex flex-col gap-3">
+                            {slices.map((s) => {
+                                const pct = totalSeconds ? (s.seconds / totalSeconds) * 100 : 0;
+                                return (
+                                    <li key={s.name}>
+                                        <div className="mb-1 flex items-baseline justify-between gap-3 text-sm">
+                                            <span className="flex min-w-0 items-center gap-2">
+                                                <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: colorMap[s.name] }} aria-hidden />
+                                                <span className="truncate font-medium text-foreground">{s.name}</span>
+                                            </span>
+                                            <span className="shrink-0 tabular-nums text-muted-foreground">
+                                                <strong className="font-semibold text-foreground">{fmtHMSFull(s.seconds)}</strong> • {Math.round(pct)}%
+                                            </span>
                                         </div>
-                                    );
-                                })}
-                            </div>
-
-                            <div className="text-xs text-muted-foreground">
-                                * Inclui a sessão em andamento (se houver), somando em tempo real.
-                            </div>
-                        </div>
+                                        <div className="h-2 w-full rounded-full bg-muted">
+                                            <div className="h-2 rounded-full" style={{ width: `${Math.max(pct, 1)}%`, backgroundColor: colorMap[s.name] }} />
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                        </ul>
                     </div>
                 )}
-            </div>
-        </div>
+                {openSession && slices.length > 0 && (
+                    <p className="mt-4 text-xs text-muted-foreground">Inclui a sessão em andamento, somando em tempo real.</p>
+                )}
+            </Painel>
+        </Pagina>
     );
 }

@@ -98,11 +98,11 @@ export default function SimuladosPage() {
     const feitos = (lista ?? []).filter((s) => s.finalizado_em);
 
     return (
-        <main className="w-full px-4 py-6 sm:px-6 md:py-10 lg:px-8">
-            <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-                <header>
+        <div className="w-full">
+            <div className="flex w-full flex-col gap-6">
+                <header className="border-b border-border pb-5">
                     <h1 className="text-3xl font-extrabold text-foreground">Simulados</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
                         Prova cronometrada, sem gabarito durante a prova. No fim você vê a nota, os erros por disciplina e
                         como foi em relação aos outros alunos que fizeram o mesmo tipo de simulado.
                     </p>
@@ -220,6 +220,6 @@ export default function SimuladosPage() {
                     </ul>
                 </section>
             </div>
-        </main>
+        </div>
     );
 }

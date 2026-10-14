@@ -167,7 +167,7 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
     }
 
     return (
-        <div className="bg-card border border-border rounded-2xl shadow-sm p-6 md:p-8 my-2 max-w-full">
+        <div className="max-w-full rounded-xl border border-border bg-card p-5 shadow-sm">
             <form
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"
                 onSubmit={handleFiltrar}

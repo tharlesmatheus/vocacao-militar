@@ -35,6 +35,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { usePerfilAluno } from "@/lib/perfilAluno";
+import { corGrafico } from "@/lib/coresGrafico";
+import { SeletorSegmentado } from "@/components/app/Pagina";
 import { CartaoMeta } from "@/components/painel/CartaoMeta";
 import { BoasVindas } from "@/components/painel/BoasVindas";
 import { ResponsiveContainer, PieChart, Pie, Tooltip, Cell } from "recharts";
@@ -139,37 +141,6 @@ type OpenSession = {
 };
 
 type RangeKey = "dia" | "semana" | "mes" | "ano" | "tudo";
-
-const COLOR_PALETTE = [
-  "#6366F1", // indigo
-  "#22C55E", // green
-  "#F97316", // orange
-  "#06B6D4", // cyan
-  "#A855F7", // purple
-  "#EF4444", // red
-  "#F59E0B", // amber
-  "#3B82F6", // blue
-  "#10B981", // emerald
-  "#EC4899", // pink
-  "#14B8A6", // teal
-  "#8B5CF6", // violet
-  "#84CC16", // lime
-  "#0EA5E9", // sky
-  "#E11D48", // rose
-] as const;
-
-function hashStringToInt(input: string): number {
-  let h = 0;
-  for (let i = 0; i < input.length; i++) {
-    h = (h * 31 + input.charCodeAt(i)) >>> 0;
-  }
-  return h;
-}
-
-function colorForName(name: string): string {
-  const idx = hashStringToInt(name || "SEM_NOME") % COLOR_PALETTE.length;
-  return COLOR_PALETTE[idx];
-}
 
 function fmtHMSFull(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -865,7 +836,10 @@ export default function DashboardHome() {
 
   const colorMap = useMemo(() => {
     const map: Record<string, string> = {};
-    for (const s of slices) map[s.name] = colorForName(s.name);
+    // Cor pela posição no ranking (paleta do tema): nunca repete entre disciplinas.
+    slices.forEach((s, i) => {
+      map[s.name] = corGrafico(i);
+    });
     return map;
   }, [slices]);
 
@@ -947,18 +921,18 @@ export default function DashboardHome() {
 
   if (loading) {
     return (
-      <main className="min-h-[100dvh] flex items-center justify-center px-4">
+      <div className="min-h-[100dvh] flex items-center justify-center px-4">
         <span className="text-lg text-foreground">Carregando...</span>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="w-full px-4 sm:px-6 lg:px-8 py-6">
-      <div className="mx-auto w-full max-w-6xl space-y-5">
+    <div className="w-full">
+      <div className="flex w-full flex-col gap-6">
         {/* HEADER */}
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+        <div className="border-b border-border pb-5">
+          <h1 className="text-3xl font-extrabold text-foreground">
             Olá{userName ? `, ${userName}` : ""}.
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">Cada questão resolvida te deixa mais perto da farda.</p>
@@ -972,13 +946,13 @@ export default function DashboardHome() {
         )}
 
         {/* DATA / HORA */}
-        <div className="w-full rounded-2xl border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground shadow-sm flex items-center justify-center sm:justify-start gap-2">
+        <div className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground shadow-sm flex items-center justify-center sm:justify-start gap-2">
           <CalendarIcon className="h-4 w-4 text-primary" />
           <span className="capitalize">{dateTimePillText}</span>
         </div>
 
         {/* META DIÁRIA */}
-        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -1020,7 +994,7 @@ export default function DashboardHome() {
                 <Link
                   key={goal.label}
                   href={goal.href}
-                  className="rounded-2xl border border-border bg-background p-4 transition hover:bg-muted/40"
+                  className="rounded-xl border border-border bg-background p-4 transition hover:bg-muted/40"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
@@ -1119,7 +1093,7 @@ export default function DashboardHome() {
         </div>
 
         {/* ESTATÍSTICAS (compacto/alinhado) */}
-        <section className="rounded-2xl bg-card border border-border p-4 shadow-sm">
+        <section className="rounded-xl bg-card border border-border p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="text-base font-extrabold text-foreground">Suas Estatísticas</div>
@@ -1128,7 +1102,7 @@ export default function DashboardHome() {
 
             <Link
               href="/estatisticas"
-              className="shrink-0 inline-flex items-center gap-1.5 rounded-xl border border-border bg-muted px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted/70 transition"
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted/70 transition"
             >
               Detalhes
               <ArrowUpRight className="h-4 w-4" />
@@ -1143,7 +1117,7 @@ export default function DashboardHome() {
               return (
                 <div
                   key={c.label}
-                  className="rounded-2xl border border-border bg-background px-3.5 py-3 shadow-sm"
+                  className="rounded-xl border border-border bg-background px-3.5 py-3 shadow-sm"
                 >
                   <div className="flex items-center gap-3">
                     <div
@@ -1173,38 +1147,29 @@ export default function DashboardHome() {
         </section>
 
         {/* TEMPO DE ESTUDO (pizza + lista) */}
-        <section className="rounded-2xl bg-card border border-border p-4 shadow-sm">
+        <section className="rounded-xl bg-card border border-border p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="min-w-0">
               <div className="text-base font-extrabold text-foreground">Tempo de estudo</div>
               <div className="text-xs text-muted-foreground">Por matéria</div>
             </div>
 
-            <div className="flex gap-2 flex-wrap">
-              {(
-                [
-                  ["dia", "Dia"],
-                  ["semana", "Semana"],
-                  ["mes", "Mês"],
-                  ["ano", "Ano"],
-                  ["tudo", "Tudo"],
-                ] as const
-              ).map(([k, label]) => (
-                <button
-                  key={k}
-                  onClick={() => setRange(k)}
-                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold ${range === k ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border"
-                    }`}
-                  disabled={tdeLoading}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <SeletorSegmentado
+              rotulo="Período"
+              opcoes={[
+                { id: "dia", nome: "Dia" },
+                { id: "semana", nome: "Semana" },
+                { id: "mes", nome: "Mês" },
+                { id: "ano", nome: "Ano" },
+                { id: "tudo", nome: "Tudo" },
+              ]}
+              valor={range}
+              aoMudar={(id) => setRange(id as RangeKey)}
+            />
           </div>
 
           {/* BLOCO: iniciar/controle (compacto) */}
-          <div className="mt-4 rounded-2xl border border-border bg-background p-4 space-y-3">
+          <div className="mt-4 rounded-xl border border-border bg-background p-4 space-y-3">
             <div className="text-sm font-semibold">Registro</div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1259,7 +1224,7 @@ export default function DashboardHome() {
                 <div className="text-lg font-extrabold tracking-tight">{fmtHMSFull(openElapsedSec)}</div>
 
                 <button
-                  className="px-5 py-2 rounded-xl bg-destructive text-destructive-foreground font-semibold"
+                  className="px-5 py-2 rounded-lg bg-destructive text-destructive-foreground font-semibold"
                   onClick={handleStop}
                   disabled={tdeLoading}
                 >
@@ -1268,7 +1233,7 @@ export default function DashboardHome() {
               </div>
             ) : (
               <button
-                className="px-6 py-3 rounded-2xl bg-primary text-primary-foreground font-semibold disabled:opacity-60"
+                className="px-6 py-3 rounded-lg bg-primary text-primary-foreground font-semibold disabled:opacity-60"
                 onClick={handleStart}
                 disabled={tdeLoading || !materiaId}
               >
@@ -1363,6 +1328,6 @@ export default function DashboardHome() {
           </div>
         </section>
       </div>
-    </main>
+    </div>
   );
 }

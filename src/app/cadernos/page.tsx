@@ -576,16 +576,13 @@ export default function CadernosPageGeral() {
 
     /* ===================== UI ===================== */
     return (
-        <div className="max-w-6xl mx-auto px-4 py-10">
+        <div className="flex w-full flex-col gap-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
-                <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                        <BookIcon className="w-6 h-6" />
-                    </div>
+            <div className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-end md:justify-between">
+                <div className="min-w-0">
                     <div>
-                        <h1 className="text-2xl font-extrabold text-foreground">Meus Cadernos</h1>
-                        <p className="text-sm text-muted-foreground">
+                        <h1 className="text-3xl font-extrabold text-foreground">Meus Cadernos</h1>
+                        <p className="mt-1.5 text-sm text-muted-foreground">
                             Organize suas questões. As revisões efetivas acontecem no Centro de Revisões.
                         </p>
                     </div>
@@ -596,14 +593,14 @@ export default function CadernosPageGeral() {
                     onClick={() => {
                         window.location.href = "/revisao";
                     }}
-                    className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                    className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
                 >
                     Ir para Revisões
                 </button>
             </div>
 
             {!userId && !loading && (
-                <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+                <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
                     <p className="text-sm text-muted-foreground">Você precisa estar logado para acessar seus cadernos.</p>
                 </div>
             )}
@@ -614,9 +611,9 @@ export default function CadernosPageGeral() {
             {userId && step === "home" && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* ERROS */}
-                    <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+                    <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
                         <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center text-white">
+                            <div className="w-12 h-12 rounded-xl bg-red-500 flex items-center justify-center text-white">
                                 <XIcon className="w-7 h-7" />
                             </div>
                             <div>
@@ -677,9 +674,9 @@ export default function CadernosPageGeral() {
                     </div>
 
                     {/* ACERTOS */}
-                    <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+                    <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
                         <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center text-white">
+                            <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-white">
                                 <CheckIcon className="w-7 h-7" />
                             </div>
                             <div>
@@ -746,7 +743,7 @@ export default function CadernosPageGeral() {
                 <div className="flex items-start justify-between gap-4 mb-6">
                     <div className="flex items-start gap-3">
                         <div
-                            className={`w-11 h-11 rounded-2xl flex items-center justify-center text-white ${tipoSelecionado === "ERROS" ? "bg-red-500" : "bg-emerald-500"
+                            className={`w-11 h-11 rounded-xl flex items-center justify-center text-white ${tipoSelecionado === "ERROS" ? "bg-red-500" : "bg-emerald-500"
                                 }`}
                         >
                             <span className="text-xl font-extrabold">{tipoSelecionado === "ERROS" ? "×" : "✓"}</span>
@@ -784,7 +781,7 @@ export default function CadernosPageGeral() {
                                     setDisciplinaSelecionada(null);
                                     setAssuntoSelecionado(null);
                                 }}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-card hover:bg-muted transition text-sm font-semibold"
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card hover:bg-muted transition text-sm font-semibold"
                             >
                                 <ArrowLeftIcon className="w-5 h-5" /> Voltar
                             </button>
@@ -798,7 +795,7 @@ export default function CadernosPageGeral() {
                                     setAssuntoSelecionado(null);
                                     setAssuntos([]);
                                 }}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-card hover:bg-muted transition text-sm font-semibold"
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card hover:bg-muted transition text-sm font-semibold"
                             >
                                 <ArrowLeftIcon className="w-5 h-5" /> Disciplinas
                             </button>
@@ -812,14 +809,14 @@ export default function CadernosPageGeral() {
                                     setQuestoes([]);
                                     setIdsCache([]);
                                 }}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-card hover:bg-muted transition text-sm font-semibold"
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card hover:bg-muted transition text-sm font-semibold"
                             >
                                 <ArrowLeftIcon className="w-5 h-5" /> Assuntos
                             </button>
                         )}
 
                         {(step === "disciplinas" || step === "assuntos") && (
-                            <div className="flex items-center gap-2 bg-muted rounded-2xl p-2 border border-border">
+                            <div className="flex items-center gap-2 bg-muted rounded-xl p-2 border border-border">
                                 <button onClick={() => setMode("grid")} className="outline-none">
                                     <GridIcon active={mode === "grid"} />
                                 </button>
@@ -843,10 +840,10 @@ export default function CadernosPageGeral() {
                                     <button
                                         key={d.disciplina}
                                         onClick={() => entrarAssuntos(d.disciplina)}
-                                        className="text-left bg-card border border-border rounded-2xl p-6 shadow-sm hover:shadow-md transition block"
+                                        className="text-left bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition block"
                                     >
                                         <div
-                                            className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS"
+                                            className={`w-12 h-12 rounded-xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS"
                                                 ? "bg-red-500/10 text-red-600 dark:text-red-400"
                                                 : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                                                 }`}
@@ -888,7 +885,7 @@ export default function CadernosPageGeral() {
                                 <button
                                     key={d.disciplina}
                                     onClick={() => entrarAssuntos(d.disciplina)}
-                                    className="bg-card border border-border rounded-2xl p-6 shadow-sm hover:shadow-md transition flex items-center justify-between text-left"
+                                    className="bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition flex items-center justify-between text-left"
                                 >
                                     <div>
                                         <div className="text-base font-bold text-foreground">{d.disciplina}</div>
@@ -923,10 +920,10 @@ export default function CadernosPageGeral() {
                                     <button
                                         key={a.assunto}
                                         onClick={() => entrarQuestoes(a.assunto)}
-                                        className="text-left bg-card border border-border rounded-2xl p-6 shadow-sm hover:shadow-md transition block"
+                                        className="text-left bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition block"
                                     >
                                         <div
-                                            className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS"
+                                            className={`w-12 h-12 rounded-xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS"
                                                 ? "bg-red-500/10 text-red-600 dark:text-red-400"
                                                 : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                                                 }`}
@@ -968,7 +965,7 @@ export default function CadernosPageGeral() {
                                 <button
                                     key={a.assunto}
                                     onClick={() => entrarQuestoes(a.assunto)}
-                                    className="bg-card border border-border rounded-2xl p-6 shadow-sm hover:shadow-md transition flex items-center justify-between text-left"
+                                    className="bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition flex items-center justify-between text-left"
                                 >
                                     <div>
                                         <div className="text-base font-bold text-foreground">{a.assunto}</div>
@@ -994,7 +991,7 @@ export default function CadernosPageGeral() {
 
             {/* QUESTÕES */}
             {userId && step === "questoes" && (
-                <div className="bg-card rounded-2xl p-6 sm:p-8 shadow-sm border border-border">
+                <div className="bg-card rounded-xl p-6 sm:p-8 shadow-sm border border-border">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border pb-3 mb-6">
                         <span className="text-sm font-medium text-muted-foreground tracking-tight">Questões do caderno</span>
 
