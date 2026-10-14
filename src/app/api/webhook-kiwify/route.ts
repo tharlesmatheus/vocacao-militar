@@ -39,10 +39,40 @@ type Plano = {
 
 const EVENTOS_DEFINITIVOS = new Set(["compra_reembolsada", "chargeback"]);
 
+// A Kiwify envia o tipo do evento em inglês no corpo (ex.: "order_approved"),
+// embora o painel mostre os nomes em português. Aceitamos os dois.
+const ALIASES_EVENTO: Record<string, string> = {
+    order_approved: "compra_aprovada",
+    order_paid: "compra_aprovada",
+    order_refunded: "compra_reembolsada",
+    refunded: "compra_reembolsada",
+    order_rejected: "compra_recusada",
+    order_refused: "compra_recusada",
+    chargeback: "chargeback",
+    order_chargeback: "chargeback",
+    subscription_canceled: "subscription_canceled",
+    subscription_cancelled: "subscription_canceled",
+    subscription_late: "subscription_late",
+    subscription_renewed: "subscription_renewed",
+};
+
 function data(valor: unknown): string | null {
     if (!valor || typeof valor !== "string") return null;
-    const d = new Date(valor.includes("T") || valor.includes("Z") ? valor : valor.replace(" ", "T"));
+    const v = valor.trim();
+    // "2026-10-14 02:26" (sem fuso) vem no horário de Brasília; ISO com Z/offset é usado como está.
+    const iso = /[T].*(Z|[+-]\d{2}:?\d{2})$/.test(v)
+        ? v
+        : /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(v)
+            ? v.replace(" ", "T") + (v.length === 16 ? ":00" : "") + "-03:00"
+            : v;
+    const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** A Kiwify manda valores em centavos (ex.: charge_amount 2580 = R$ 25,80). */
+function centavosParaReais(...valores: unknown[]): number | null {
+    const v = dinheiro(...valores);
+    return v === null ? null : Math.round(v) / 100;
 }
 
 function dinheiro(...valores: unknown[]): number | null {
@@ -91,7 +121,8 @@ export async function POST(req: NextRequest) {
         return json({ message: "JSON inválido" }, 400);
     }
 
-    const evento = String(p.webhook_event_type ?? "").trim();
+    const eventoBruto = String(p.webhook_event_type ?? "").trim().toLowerCase();
+    const evento = ALIASES_EVENTO[eventoBruto] ?? eventoBruto;
     const email = String(p.Customer?.email ?? "").trim().toLowerCase();
     if (!evento || !email) return json({ message: "Evento ou e-mail ausente" }, 400);
 
@@ -106,7 +137,7 @@ export async function POST(req: NextRequest) {
         event_key: eventKey,
         order_id: orderId,
         subscription_id: subscriptionId,
-        event: evento,
+        event: eventoBruto, // guarda o nome original enviado pela Kiwify
         email,
         payload: p,
     });
@@ -179,9 +210,7 @@ export async function POST(req: NextRequest) {
                 subscription_id: subscriptionId,
                 proximo_pagamento: proximo,
                 access_until: accessUntil,
-                valor_pago: dinheiro(
-                    p.Commissions?.charge_amount, p.charge_amount, p.amount, p.total, p.Product?.price
-                ),
+                valor_pago: centavosParaReais(p.Commissions?.charge_amount, p.Commissions?.product_base_price),
                 ultimo_evento: evento,
                 ultimo_evento_em: quando,
                 updated_at: new Date().toISOString(),

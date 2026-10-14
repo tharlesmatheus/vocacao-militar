@@ -84,9 +84,11 @@ as $$
       join auth.users u on u.id = p_user
       where (p.user_id = p_user or lower(p.email) = lower(u.email))
         and (
-          -- ativo: vale até access_until + 3 dias de tolerância para a renovação chegar
-          (p.status = 'ativo' and (p.access_until is null or p.access_until > now() - interval '3 days'))
-          -- cancelado/atrasado: vale até o fim do período já pago
+          -- ativo/atrasado: vale até access_until + 7 dias. Cobre as 2 retentativas
+          -- da Kiwify no Pix Automático (3 em 3 dias); se a última falhar, ela
+          -- cancela e chega subscription_canceled.
+          (p.status in ('ativo', 'pendente') and (p.access_until is null or p.access_until > now() - interval '7 days'))
+          -- cancelado: vale até o fim do período já pago
           or p.access_until > now()
         )
     )
