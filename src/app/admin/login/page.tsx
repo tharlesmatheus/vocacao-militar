@@ -45,8 +45,8 @@ export default function AdminLogin() {
     }
 
     return (
-        <div className="w-full h-screen flex items-center justify-center bg-[#f3f6fa]">
-            <form className="bg-white p-8 rounded-2xl shadow-md max-w-sm w-full space-y-6" onSubmit={handleLogin}>
+        <div className="w-full h-screen flex items-center justify-center bg-muted">
+            <form className="bg-card p-8 rounded-2xl shadow-md max-w-sm w-full space-y-6" onSubmit={handleLogin}>
                 <h1 className="text-2xl font-bold text-center">Login Admin</h1>
                 <input
                     type="email"
@@ -74,7 +74,7 @@ export default function AdminLogin() {
                     maxLength={14}
                 />
                 {erro && <div className="text-red-500 text-sm text-center">{erro}</div>}
-                <button type="submit" className="w-full bg-blue-600 text-white font-bold rounded py-2 hover:bg-blue-700 transition">Entrar</button>
+                <button type="submit" className="w-full bg-primary text-primary-foreground font-bold rounded py-2 hover:bg-primary/90 transition">Entrar</button>
             </form>
         </div>
     );

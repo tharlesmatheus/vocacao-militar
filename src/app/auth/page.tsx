@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { ShieldCheck } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient"; // ajuste o caminho se necessário!
 
 export default function AuthPage() {
@@ -64,22 +65,24 @@ export default function AuthPage() {
     }
 
     return (
-        <div className="flex min-h-screen bg-[#f8fafc] items-center justify-center px-4">
-            <div className="bg-white shadow-xl border border-[#e3e8f3] rounded-2xl p-8 max-w-xs w-full flex flex-col items-center">
+        <div className="flex min-h-screen bg-background items-center justify-center px-4">
+            <div className="relative bg-card shadow-xl border border-border rounded-lg p-8 max-w-xs w-full flex flex-col items-center overflow-hidden">
+                <span aria-hidden className="absolute inset-x-0 top-0 h-[3px] bg-primary" />
                 <div className="mb-6 text-center">
-                    <div className="text-2xl font-black text-[#232939] mb-1">Vocação Militar</div>
-                    <div className="text-xs text-[#7b8bb0]">Acesse sua conta</div>
+                    <ShieldCheck className="mx-auto mb-2 h-10 w-10 text-primary" aria-hidden />
+                    <div className="font-titulo text-3xl font-extrabold uppercase tracking-wide text-foreground mb-1">Vocação <span className="text-primary">Militar</span></div>
+                    <div className="text-xs text-muted-foreground">Acesse sua conta</div>
                 </div>
                 <div className="flex w-full mb-4">
                     <button
                         className={`flex-1 py-2 rounded-l-xl font-bold text-sm transition 
-                            ${mode === "login" ? "bg-[#6a88d7] text-white" : "bg-[#f3f6fa] text-[#232939]"}`}
+                            ${mode === "login" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}
                         onClick={() => setMode("login")}
                         type="button"
                     >Entrar</button>
                     <button
                         className={`flex-1 py-2 rounded-r-xl font-bold text-sm transition 
-                            ${mode === "register" ? "bg-[#6a88d7] text-white" : "bg-[#f3f6fa] text-[#232939]"}`}
+                            ${mode === "register" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}
                         onClick={() => setMode("register")}
                         type="button"
                     >Cadastrar</button>
@@ -93,7 +96,7 @@ export default function AuthPage() {
                             type="text"
                             required
                             placeholder="Nome completo"
-                            className="px-4 py-2 rounded border border-[#e3e8f3] bg-[#f9fafb] outline-none text-sm"
+                            className="px-4 py-2 rounded border border-border bg-muted outline-none text-sm"
                             value={nome}
                             onChange={e => setNome(e.target.value)}
                         />
@@ -102,7 +105,7 @@ export default function AuthPage() {
                         type="email"
                         required
                         placeholder="Email"
-                        className="px-4 py-2 rounded border border-[#e3e8f3] bg-[#f9fafb] outline-none text-sm"
+                        className="px-4 py-2 rounded border border-border bg-muted outline-none text-sm"
                         value={email}
                         onChange={e => setEmail(e.target.value)}
                     />
@@ -110,13 +113,13 @@ export default function AuthPage() {
                         type="password"
                         required
                         placeholder="Senha"
-                        className="px-4 py-2 rounded border border-[#e3e8f3] bg-[#f9fafb] outline-none text-sm"
+                        className="px-4 py-2 rounded border border-border bg-muted outline-none text-sm"
                         value={senha}
                         onChange={e => setSenha(e.target.value)}
                     />
                     <button
                         type="submit"
-                        className="w-full mt-2 py-2 bg-[#6a88d7] hover:bg-[#5272b4] text-white font-bold rounded-lg shadow transition"
+                        className="w-full mt-2 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-lg shadow transition"
                         disabled={loading}
                     >
                         {loading ? "Aguarde..." : mode === "login" ? "Entrar" : "Cadastrar"}
@@ -125,7 +128,7 @@ export default function AuthPage() {
                 <button
                     type="button"
                     onClick={handleLoginGoogle}
-                    className="w-full mt-2 py-2 bg-[#efefef] hover:bg-[#e2e2e2] text-[#232939] font-bold rounded-lg shadow flex items-center justify-center gap-2 transition"
+                    className="w-full mt-2 py-2 border border-border bg-muted hover:bg-muted/70 text-foreground font-bold rounded-lg shadow flex items-center justify-center gap-2 transition"
                     disabled={loading}
                 >
                     <svg viewBox="0 0 48 48" className="w-5 h-5" style={{ marginRight: 6 }}>
@@ -138,7 +141,7 @@ export default function AuthPage() {
                     </svg>
                     Entrar com Google
                 </button>
-                <div className="mt-5 text-xs text-[#7b8bb0] text-center">
+                <div className="mt-5 text-xs text-muted-foreground text-center">
                     Ao entrar, você concorda com nossos <a href="/termos" className="underline">Termos de Uso</a> e a{" "}
                     <a href="/privacidade" className="underline">Política de Privacidade</a>
                 </div>

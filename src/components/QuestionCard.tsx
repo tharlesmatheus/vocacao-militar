@@ -443,7 +443,7 @@ export function QuestionCard(props: QuestionCardProps) {
     }
 
     return (
-        <div className="bg-card rounded-2xl p-7 mb-6 shadow border border-border max-w-6xl w-full mx-auto transition-all font-inter relative">
+        <div className="relative mx-auto mb-6 w-full max-w-6xl rounded-lg border border-border border-l-4 border-l-primary bg-card p-5 shadow-sm transition-all sm:p-7">
             {feedbackMsg && (
                 <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground rounded-lg px-6 py-3 text-sm shadow-lg z-[200]">
                     {feedbackMsg}
@@ -451,7 +451,7 @@ export function QuestionCard(props: QuestionCardProps) {
             )}
 
             {cadernoMsg && (
-                <div className="mb-4 text-sm text-red-600">{cadernoMsg}</div>
+                <div className="mb-4 text-sm text-red-600 dark:text-red-400">{cadernoMsg}</div>
             )}
 
             <div className="flex flex-wrap gap-2 mb-5">
@@ -479,7 +479,7 @@ export function QuestionCard(props: QuestionCardProps) {
                     if (showResult) {
                         if (isSelected && selected !== correct)
                             btnClass += " bg-destructive/10 border-destructive text-destructive";
-                        else if (isCorrect) btnClass += " bg-green-100/60 border-green-300 text-green-900";
+                        else if (isCorrect) btnClass += " bg-green-500/10 border-green-500/40 text-green-900 dark:text-green-300";
                         else btnClass += " bg-card border-border";
                     } else if (isSelected) {
                         btnClass += " bg-primary/10 border-primary text-foreground";
@@ -681,7 +681,7 @@ export function QuestionCard(props: QuestionCardProps) {
                     className={`font-bold py-2 px-4 rounded-xl text-sm transition border
             ${effectiveStatus.ERROS
                             ? "bg-red-600 text-white border-red-600 hover:bg-red-700"
-                            : "bg-transparent text-red-600 border-red-200 hover:bg-red-50"
+                            : "bg-transparent text-red-600 dark:text-red-400 border-red-500/40 hover:bg-red-500/10"
                         }`}
                     title={effectiveStatus.ERROS ? "Remover do Caderno de Erros" : "Adicionar ao Caderno de Erros"}
                 >
@@ -695,7 +695,7 @@ export function QuestionCard(props: QuestionCardProps) {
                     className={`font-bold py-2 px-4 rounded-xl text-sm transition border
             ${effectiveStatus.ACERTOS
                             ? "bg-green-600 text-white border-green-600 hover:bg-green-700"
-                            : "bg-transparent text-green-700 border-green-200 hover:bg-green-50"
+                            : "bg-transparent text-green-700 dark:text-green-300 border-green-500/40 hover:bg-green-500/10"
                         }`}
                     title={
                         effectiveStatus.ACERTOS ? "Remover do Caderno de Acertos" : "Adicionar ao Caderno de Acertos"
@@ -721,8 +721,8 @@ export function QuestionCard(props: QuestionCardProps) {
             )}
 
             {showResult && selected && explanation?.trim() && (
-                <div className="bg-green-100/60 rounded-lg p-4 mt-2 text-green-900 text-sm">
-                    <span className="font-bold text-green-700">Explicação:</span>
+                <div className="bg-green-500/10 rounded-lg p-4 mt-2 text-green-900 dark:text-green-300 text-sm">
+                    <span className="font-bold text-green-700 dark:text-green-300">Explicação:</span>
                     <p className="mt-1">{explanation}</p>
                 </div>
             )}

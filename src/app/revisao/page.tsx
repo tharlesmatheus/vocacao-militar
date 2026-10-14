@@ -1487,13 +1487,13 @@ export default function RevisaoPage() {
                 </header>
 
                 {erro && (
-                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
                         {erro}
                     </div>
                 )}
 
                 {msg && (
-                    <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                    <div className="rounded-xl border border-green-500/40 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-300">
                         {msg}
                     </div>
                 )}
@@ -1960,8 +1960,8 @@ function MethodCard({
 
                 <div
                     className={`rounded-full px-3 py-1 text-xs font-semibold ${due
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-green-100 text-green-700"
+                        ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                        : "bg-green-500/10 text-green-700 dark:text-green-300"
                         }`}
                 >
                     {due} para hoje
@@ -2023,7 +2023,7 @@ function ActivityArea({
             <section className="mx-auto max-w-2xl rounded-2xl border border-border bg-card p-10 text-center">
                 <CheckCircle2
                     size={48}
-                    className="mx-auto text-green-600"
+                    className="mx-auto text-green-600 dark:text-green-400"
                 />
 
                 <h2 className="mt-4 text-xl font-semibold">
@@ -2192,7 +2192,7 @@ function FlashcardActivity({
                                 onClick={() =>
                                     onFinish("ERRO")
                                 }
-                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-300 bg-red-50 py-3 font-semibold text-red-700 disabled:opacity-50"
+                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/40 bg-red-500/10 py-3 font-semibold text-red-700 dark:text-red-300 disabled:opacity-50"
                             >
                                 <XCircle size={18} />
                                 Errei
@@ -2204,7 +2204,7 @@ function FlashcardActivity({
                                 onClick={() =>
                                     onFinish("ACERTO")
                                 }
-                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-green-300 bg-green-50 py-3 font-semibold text-green-700 disabled:opacity-50"
+                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-green-500/40 bg-green-500/10 py-3 font-semibold text-green-700 dark:text-green-300 disabled:opacity-50"
                             >
                                 <CheckCircle2 size={18} />
                                 Acertei
@@ -2280,9 +2280,9 @@ function CadernoActivity({
                                 setSelectedAnswer(letra)
                             }
                             className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition ${isCorrect
-                                ? "border-green-400 bg-green-50"
+                                ? "border-green-400 bg-green-500/10"
                                 : isWrongSelected
-                                    ? "border-red-400 bg-red-50"
+                                    ? "border-red-400 bg-red-500/10"
                                     : isSelected
                                         ? "border-primary bg-primary/5"
                                         : "border-border hover:bg-muted"
@@ -2303,14 +2303,14 @@ function CadernoActivity({
             {respondeu && (
                 <div
                     className={`mt-6 rounded-2xl border p-5 ${acertou
-                        ? "border-green-200 bg-green-50"
-                        : "border-red-200 bg-red-50"
+                        ? "border-green-500/40 bg-green-500/10"
+                        : "border-red-500/40 bg-red-500/10"
                         }`}
                 >
                     <div
                         className={`font-semibold ${acertou
-                            ? "text-green-700"
-                            : "text-red-700"
+                            ? "text-green-700 dark:text-green-300"
+                            : "text-red-700 dark:text-red-300"
                             }`}
                     >
                         {acertou

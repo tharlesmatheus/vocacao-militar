@@ -64,7 +64,7 @@ function ArrowLeftIcon({ className = "" }: { className?: string }) {
 function GridIcon({ active }: { active: boolean }) {
     return (
         <div
-            className={`w-10 h-10 rounded-xl border flex items-center justify-center ${active ? "bg-white border-border" : "bg-muted border-border"
+            className={`w-10 h-10 rounded-xl border flex items-center justify-center ${active ? "bg-card border-border" : "bg-muted border-border"
                 }`}
         >
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
@@ -80,7 +80,7 @@ function GridIcon({ active }: { active: boolean }) {
 function ListIcon({ active }: { active: boolean }) {
     return (
         <div
-            className={`w-10 h-10 rounded-xl border flex items-center justify-center ${active ? "bg-white border-border" : "bg-muted border-border"
+            className={`w-10 h-10 rounded-xl border flex items-center justify-center ${active ? "bg-card border-border" : "bg-muted border-border"
                 }`}
         >
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
@@ -607,7 +607,7 @@ export default function CadernosPageGeral() {
                 </div>
             )}
 
-            {erro && <div className="mb-6 text-sm text-red-600">{erro}</div>}
+            {erro && <div className="mb-6 text-sm text-red-600 dark:text-red-400">{erro}</div>}
 
             {/* HOME */}
             {userId && step === "home" && (
@@ -634,7 +634,7 @@ export default function CadernosPageGeral() {
                                 <div className="text-xs text-muted-foreground mt-1">Questões</div>
                             </div>
                             <div className="bg-muted rounded-xl p-4 text-center">
-                                <div className="text-xl font-extrabold text-emerald-600">{loading ? "—" : resumos.ERROS.anotadas}</div>
+                                <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{loading ? "—" : resumos.ERROS.anotadas}</div>
                                 <div className="text-xs text-muted-foreground mt-1">Anotadas</div>
                             </div>
                         </div>
@@ -693,11 +693,11 @@ export default function CadernosPageGeral() {
                                 <div className="text-xs text-muted-foreground mt-1">Disciplinas</div>
                             </div>
                             <div className="bg-muted rounded-xl p-4 text-center">
-                                <div className="text-xl font-extrabold text-emerald-600">{loading ? "—" : resumos.ACERTOS.questoes}</div>
+                                <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{loading ? "—" : resumos.ACERTOS.questoes}</div>
                                 <div className="text-xs text-muted-foreground mt-1">Questões</div>
                             </div>
                             <div className="bg-muted rounded-xl p-4 text-center">
-                                <div className="text-xl font-extrabold text-emerald-600">{loading ? "—" : resumos.ACERTOS.anotadas}</div>
+                                <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{loading ? "—" : resumos.ACERTOS.anotadas}</div>
                                 <div className="text-xs text-muted-foreground mt-1">Anotadas</div>
                             </div>
                         </div>
@@ -846,8 +846,8 @@ export default function CadernosPageGeral() {
                                     >
                                         <div
                                             className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS"
-                                                ? "bg-red-500/10 text-red-600"
-                                                : "bg-emerald-500/10 text-emerald-600"
+                                                ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                                                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                                                 }`}
                                         >
                                             <BookIcon className="w-6 h-6" />
@@ -860,7 +860,7 @@ export default function CadernosPageGeral() {
                                                 <div className="text-xs text-muted-foreground">Questões</div>
                                             </div>
                                             <div>
-                                                <div className="text-lg font-extrabold text-emerald-600">{d.anotadas}</div>
+                                                <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{d.anotadas}</div>
                                                 <div className="text-xs text-muted-foreground">Anotadas</div>
                                             </div>
                                         </div>
@@ -899,7 +899,7 @@ export default function CadernosPageGeral() {
                                             <div className="text-xs text-muted-foreground">Questões</div>
                                         </div>
                                         <div className="text-right">
-                                            <div className="text-lg font-extrabold text-emerald-600">{d.anotadas}</div>
+                                            <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{d.anotadas}</div>
                                             <div className="text-xs text-muted-foreground">Anotadas</div>
                                         </div>
                                         <div className="text-muted-foreground">›</div>
@@ -926,8 +926,8 @@ export default function CadernosPageGeral() {
                                     >
                                         <div
                                             className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS"
-                                                ? "bg-red-500/10 text-red-600"
-                                                : "bg-emerald-500/10 text-emerald-600"
+                                                ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                                                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                                                 }`}
                                         >
                                             <BookIcon className="w-6 h-6" />
@@ -940,7 +940,7 @@ export default function CadernosPageGeral() {
                                                 <div className="text-xs text-muted-foreground">Questões</div>
                                             </div>
                                             <div>
-                                                <div className="text-lg font-extrabold text-emerald-600">{a.anotadas}</div>
+                                                <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{a.anotadas}</div>
                                                 <div className="text-xs text-muted-foreground">Anotadas</div>
                                             </div>
                                         </div>
@@ -979,7 +979,7 @@ export default function CadernosPageGeral() {
                                             <div className="text-xs text-muted-foreground">Questões</div>
                                         </div>
                                         <div className="text-right">
-                                            <div className="text-lg font-extrabold text-emerald-600">{a.anotadas}</div>
+                                            <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{a.anotadas}</div>
                                             <div className="text-xs text-muted-foreground">Anotadas</div>
                                         </div>
                                         <div className="text-muted-foreground">›</div>
@@ -1020,7 +1020,7 @@ export default function CadernosPageGeral() {
                     {qLoading ? (
                         <div className="text-muted-foreground py-10 text-center">Carregando questões...</div>
                     ) : questoes.length === 0 ? (
-                        <div className="min-h-[120px] flex items-center justify-center text-[#a8b1c6]">
+                        <div className="min-h-[120px] flex items-center justify-center text-muted-foreground">
                             Nenhuma questão encontrada neste assunto.
                         </div>
                     ) : (

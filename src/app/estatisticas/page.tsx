@@ -1428,19 +1428,19 @@ export default function EstatisticasPage() {
                 label: "Tempo total",
                 value: fmtHMS(tempoTotalSeg),
                 icon: <Clock3 size={20} />,
-                tone: "from-sky-500 to-cyan-500",
+                tone: "text-primary",
             },
             {
                 label: "Sessões",
                 value: sessoes,
                 icon: <Activity size={20} />,
-                tone: "from-violet-500 to-fuchsia-500",
+                tone: "text-primary",
             },
             {
                 label: "Questões",
                 value: questoesTotal,
                 icon: <Target size={20} />,
-                tone: "from-blue-500 to-indigo-500",
+                tone: "text-primary",
                 helper:
                     questoesTotal > 0
                         ? `${questoesCertas} certas • ${questoesErradas} erradas`
@@ -1450,7 +1450,7 @@ export default function EstatisticasPage() {
                 label: "Acertos",
                 value: questoesCertas,
                 icon: <CheckCircle2 size={20} />,
-                tone: "from-emerald-500 to-teal-500",
+                tone: "text-primary",
                 helper:
                     questoesTotal > 0
                         ? `${acertoTotal}% das questões`
@@ -1460,7 +1460,7 @@ export default function EstatisticasPage() {
                 label: "Erros",
                 value: questoesErradas,
                 icon: <XCircle size={20} />,
-                tone: "from-rose-500 to-red-500",
+                tone: "text-primary",
                 helper:
                     questoesTotal > 0
                         ? `${100 - acertoTotal}% das questões`
@@ -1470,7 +1470,7 @@ export default function EstatisticasPage() {
                 label: "Aproveitamento",
                 value: `${acertoTotal}%`,
                 icon: <Percent size={20} />,
-                tone: "from-amber-500 to-orange-500",
+                tone: "text-primary",
                 helper:
                     questoesTotal > 0
                         ? `${questoesCertas}/${questoesTotal} acertos`
@@ -1480,26 +1480,26 @@ export default function EstatisticasPage() {
                 label: "Revisões feitas",
                 value: reviewTotals.total,
                 icon: <RotateCcw size={20} />,
-                tone: "from-indigo-500 to-blue-500",
+                tone: "text-primary",
                 helper: "Caderno + flashcards + resumos",
             },
             {
                 label: "Caderno revisado",
                 value: reviewTotals.caderno,
                 icon: <BookOpenText size={20} />,
-                tone: "from-rose-500 to-red-500",
+                tone: "text-primary",
             },
             {
                 label: "Flashcards revisados",
                 value: reviewTotals.flashcards,
                 icon: <Brain size={20} />,
-                tone: "from-purple-500 to-violet-500",
+                tone: "text-primary",
             },
             {
                 label: "Resumos revisados",
                 value: reviewTotals.resumos,
                 icon: <Layers3 size={20} />,
-                tone: "from-cyan-500 to-sky-500",
+                tone: "text-primary",
             },
         ],
         [
@@ -1721,24 +1721,25 @@ export default function EstatisticasPage() {
                 {cards.map((c) => (
                     <div
                         key={c.label}
-                        className={`rounded-2xl bg-gradient-to-r p-4 text-white shadow-sm ${c.tone}`}
+                        className="relative overflow-hidden rounded-lg border border-border bg-card p-4 shadow-sm"
                     >
-                        <div className="text-sm/5 opacity-90">{c.label}</div>
+                        <span aria-hidden className="absolute inset-x-0 top-0 h-[2px] bg-primary/50" />
+                        <div className="font-titulo text-sm font-semibold uppercase tracking-wider text-muted-foreground">{c.label}</div>
                         <div className="mt-1 flex items-end justify-between gap-3">
-                            <div className="text-2xl font-extrabold tracking-tight">
+                            <div className="text-2xl font-extrabold tracking-tight text-foreground">
                                 {c.value}
                             </div>
-                            <div className="opacity-90">{c.icon}</div>
+                            <div className={c.tone}>{c.icon}</div>
                         </div>
                         {c.helper && (
-                            <div className="mt-1 text-[11px] opacity-80">{c.helper}</div>
+                            <div className="mt-1 text-[11px] text-muted-foreground">{c.helper}</div>
                         )}
                     </div>
                 ))}
             </div>
 
             {reviewWarning && (
-                <div className="rounded-xl border border-amber-300/50 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
                     {reviewWarning}
                 </div>
             )}
@@ -2044,7 +2045,7 @@ function WeakList({
                             Total: {it.total} questões
                         </div>
                     </div>
-                    <span className="ml-3 text-sm font-bold text-red-600">
+                    <span className="ml-3 text-sm font-bold text-red-600 dark:text-red-400">
                         {it.acerto}%
                     </span>
                 </li>

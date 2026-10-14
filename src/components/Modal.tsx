@@ -8,10 +8,10 @@ export default function Modal(
     if (!open) return null;
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-xl rounded-lg bg-white p-4 shadow-lg">
+            <div className="w-full max-w-xl rounded-lg bg-card p-4 shadow-lg">
                 <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-lg font-semibold">{title}</h3>
-                    <button onClick={onClose} className="rounded px-2 py-1 text-sm hover:bg-gray-100">✕</button>
+                    <button onClick={onClose} className="rounded px-2 py-1 text-sm hover:bg-muted">✕</button>
                 </div>
                 {children}
             </div>

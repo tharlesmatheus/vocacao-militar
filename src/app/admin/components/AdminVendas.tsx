@@ -13,15 +13,15 @@ const ABAS: { id: Tipo; nome: string }[] = [
 ];
 
 const corStatus: Record<string, string> = {
-    ativo: "bg-green-100 text-green-800",
-    pendente: "bg-amber-100 text-amber-800",
-    inativo: "bg-gray-200 text-gray-700",
-    convertido: "bg-green-100 text-green-800",
-    checkout: "bg-blue-100 text-blue-800",
+    ativo: "bg-green-500/10 text-green-800 dark:text-green-300",
+    pendente: "bg-amber-500/10 text-amber-800 dark:text-amber-300",
+    inativo: "bg-secondary text-foreground",
+    convertido: "bg-green-500/10 text-green-800 dark:text-green-300",
+    checkout: "bg-primary/10 text-primary",
 };
 
 function Selo({ texto }: { texto: string }) {
-    return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${corStatus[texto] ?? "bg-gray-100 text-gray-700"}`}>{texto}</span>;
+    return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${corStatus[texto] ?? "bg-muted text-foreground"}`}>{texto}</span>;
 }
 
 export default function AdminVendas() {
@@ -48,7 +48,7 @@ export default function AdminVendas() {
                     <button
                         key={a.id}
                         onClick={() => { setTipo(a.id); setPagina(1); }}
-                        className={`${botao} ${tipo === a.id ? "bg-[#6a88d7] text-white" : "bg-[#eef1f7] text-[#232939]"}`}
+                        className={`${botao} ${tipo === a.id ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}
                     >
                         {a.nome}
                     </button>
@@ -58,17 +58,17 @@ export default function AdminVendas() {
                     onSubmit={(e) => { e.preventDefault(); setPagina(1); setFiltro(busca.trim()); }}
                 >
                     <input className={entrada} placeholder="Buscar por e-mail" value={busca} onChange={(e) => setBusca(e.target.value)} />
-                    <button className={`${botao} bg-[#232939] text-white`}>Buscar</button>
+                    <button className={`${botao} bg-foreground text-background`}>Buscar</button>
                 </form>
             </div>
 
-            {erro && <div className="text-red-600">{erro}</div>}
-            {!dados && !erro && <div className="animate-pulse text-[#7b8bb0]">Carregando...</div>}
+            {erro && <div className="text-red-600 dark:text-red-400">{erro}</div>}
+            {!dados && !erro && <div className="animate-pulse text-muted-foreground">Carregando...</div>}
 
             {dados && (
                 <div className={`${cartao} overflow-x-auto p-0`}>
                     <table className="w-full min-w-[720px] text-sm">
-                        <thead className="bg-[#f5f6fa] text-left text-xs uppercase text-[#7b8bb0]">
+                        <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
                             {tipo === "planos" && (
                                 <tr><th className="p-3">E-mail</th><th className="p-3">Situação</th><th className="p-3">Acesso até</th><th className="p-3">Último valor</th><th className="p-3">Último evento</th></tr>
                             )}
@@ -81,38 +81,38 @@ export default function AdminVendas() {
                         </thead>
                         <tbody>
                             {dados.itens.length === 0 && (
-                                <tr><td colSpan={5} className="p-6 text-center text-[#7b8bb0]">Nada encontrado.</td></tr>
+                                <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">Nada encontrado.</td></tr>
                             )}
                             {tipo === "planos" && dados.itens.map((p) => (
-                                <tr key={p.email} className="border-t border-[#eef1f7]">
+                                <tr key={p.email} className="border-t border-border">
                                     <td className="p-3 font-medium">{p.email}</td>
                                     <td className="p-3"><Selo texto={p.status ?? "—"} /></td>
                                     <td className="p-3">{dataCurta(p.access_until)}</td>
                                     <td className="p-3">{reais(p.valor_pago)}</td>
-                                    <td className="p-3 text-[#7b8bb0]">{p.ultimo_evento ?? "—"} • {dataHora(p.ultimo_evento_em)}</td>
+                                    <td className="p-3 text-muted-foreground">{p.ultimo_evento ?? "—"} • {dataHora(p.ultimo_evento_em)}</td>
                                 </tr>
                             ))}
                             {tipo === "leads" && dados.itens.map((l) => (
-                                <tr key={l.id} className="border-t border-[#eef1f7]">
+                                <tr key={l.id} className="border-t border-border">
                                     <td className="p-3 font-medium">{l.nome}</td>
                                     <td className="p-3">
                                         <div>{l.email}</div>
-                                        <div className="text-[#7b8bb0]">
+                                        <div className="text-muted-foreground">
                                             {l.telefone ?? "—"}{l.aceite_contato ? " • aceita contato" : " • sem permissão de contato"}
                                         </div>
                                     </td>
                                     <td className="p-3"><Selo texto={l.status} /></td>
-                                    <td className="p-3 text-[#7b8bb0]">{l.utm?.utm_source ?? l.utm?.src ?? "direto"}</td>
+                                    <td className="p-3 text-muted-foreground">{l.utm?.utm_source ?? l.utm?.src ?? "direto"}</td>
                                     <td className="p-3">{dataHora(l.created_at)}</td>
                                 </tr>
                             ))}
                             {tipo === "eventos" && dados.itens.map((ev) => (
-                                <tr key={ev.id} className={`border-t border-[#eef1f7] ${ev.aplicado === false && !/ignorado|recusado|antigo/i.test(ev.motivo ?? "") ? "bg-red-50" : ""}`}>
+                                <tr key={ev.id} className={`border-t border-border ${ev.aplicado === false && !/ignorado|recusado|antigo/i.test(ev.motivo ?? "") ? "bg-red-500/10" : ""}`}>
                                     <td className="p-3">{dataHora(ev.created_at)}</td>
                                     <td className="p-3 font-mono text-xs">{ev.event}</td>
                                     <td className="p-3">{ev.email}</td>
                                     <td className="p-3">{ev.aplicado ? "sim" : ev.aplicado === false ? "não" : "—"}</td>
-                                    <td className="p-3 text-[#7b8bb0]">{ev.motivo ?? "—"}</td>
+                                    <td className="p-3 text-muted-foreground">{ev.motivo ?? "—"}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -122,9 +122,9 @@ export default function AdminVendas() {
 
             {dados && paginas > 1 && (
                 <div className="flex items-center justify-end gap-2 text-sm">
-                    <button className={`${botao} bg-[#eef1f7]`} disabled={pagina <= 1} onClick={() => setPagina(pagina - 1)}>Anterior</button>
+                    <button className={`${botao} bg-muted`} disabled={pagina <= 1} onClick={() => setPagina(pagina - 1)}>Anterior</button>
                     <span>Página {pagina} de {paginas} • {dados.total.toLocaleString("pt-BR")} registros</span>
-                    <button className={`${botao} bg-[#eef1f7]`} disabled={pagina >= paginas} onClick={() => setPagina(pagina + 1)}>Próxima</button>
+                    <button className={`${botao} bg-muted`} disabled={pagina >= paginas} onClick={() => setPagina(pagina + 1)}>Próxima</button>
                 </div>
             )}
         </div>

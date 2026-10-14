@@ -76,15 +76,15 @@ export default function ClientesList() {
 
     return (
         <div className="max-w-5xl mx-auto">
-            <div className="bg-white rounded-2xl shadow-xl border border-[#e4e8f3] p-7 mt-4">
-                <h2 className="text-xl md:text-2xl font-extrabold text-[#232939] mb-5 text-center">
+            <div className="bg-card rounded-2xl shadow-xl border border-border p-7 mt-4">
+                <h2 className="text-xl md:text-2xl font-extrabold text-foreground mb-5 text-center">
                     Clientes Cadastrados
                 </h2>
-                {msg && <div className="mb-2 text-red-600 text-center">{msg}</div>}
+                {msg && <div className="mb-2 text-red-600 dark:text-red-400 text-center">{msg}</div>}
                 <div className="overflow-x-auto">
                     <table className="w-full min-w-[700px] border-separate border-spacing-0">
                         <thead>
-                            <tr className="bg-[#f3f6fa] text-[#4e5a7b] text-[16px]">
+                            <tr className="bg-muted text-[#4e5a7b] text-[16px]">
                                 <th className="px-4 py-3 font-bold text-left rounded-tl-2xl">Nome</th>
                                 <th className="px-4 py-3 font-bold text-left">E-mail</th>
                                 <th className="px-4 py-3 font-bold text-left">Telefone</th>
@@ -96,20 +96,20 @@ export default function ClientesList() {
                         <tbody>
                             {loading ? (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-8 text-center text-[#a3adc7]">
+                                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                                         Carregando clientes...
                                     </td>
                                 </tr>
                             ) : clientes.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-8 text-center text-[#a3adc7]">
+                                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                                         Nenhum cliente cadastrado.
                                     </td>
                                 </tr>
                             ) : (
                                 clientes.map((cliente) =>
                                     editId === cliente.id ? (
-                                        <tr key={cliente.id} className="bg-[#fffde7] border-b border-[#e4e8f3] last:border-0">
+                                        <tr key={cliente.id} className="bg-[#fffde7] border-b border-border last:border-0">
                                             <td className="px-4 py-3">
                                                 <input
                                                     className="rounded-lg border px-3 py-2 w-full"
@@ -117,7 +117,7 @@ export default function ClientesList() {
                                                     onChange={e => setEditData({ ...editData, nome: e.target.value })}
                                                 />
                                             </td>
-                                            <td className="px-4 py-3 text-[#7b8497]">{cliente.email}</td>
+                                            <td className="px-4 py-3 text-muted-foreground">{cliente.email}</td>
                                             <td className="px-4 py-3">
                                                 <input
                                                     className="rounded-lg border px-3 py-2 w-full"
@@ -132,7 +132,7 @@ export default function ClientesList() {
                                                     onChange={e => setEditData({ ...editData, cpf: e.target.value })}
                                                 />
                                             </td>
-                                            <td className="px-4 py-3 text-[#7b8497]">
+                                            <td className="px-4 py-3 text-muted-foreground">
                                                 {new Date(cliente.created_at).toLocaleDateString()}
                                             </td>
                                             <td className="px-4 py-3 flex gap-2 justify-center">
@@ -140,23 +140,23 @@ export default function ClientesList() {
                                                     onClick={() => handleSave(cliente)}>
                                                     Salvar
                                                 </button>
-                                                <button className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg font-bold hover:bg-gray-400 transition"
+                                                <button className="bg-secondary text-foreground px-4 py-2 rounded-lg font-bold hover:bg-gray-400 transition"
                                                     onClick={() => setEditId(null)}>
                                                     Cancelar
                                                 </button>
                                             </td>
                                         </tr>
                                     ) : (
-                                        <tr key={cliente.id} className="border-b border-[#e4e8f3] last:border-0 hover:bg-[#f7f9fb] transition">
+                                        <tr key={cliente.id} className="border-b border-border last:border-0 hover:bg-muted transition">
                                             <td className="px-4 py-3 font-semibold">{cliente.user_metadata?.nome || "-"}</td>
                                             <td className="px-4 py-3 text-[#3d4762]">{cliente.email}</td>
                                             <td className="px-4 py-3">{cliente.user_metadata?.telefone || "-"}</td>
                                             <td className="px-4 py-3">{cliente.user_metadata?.cpf || "-"}</td>
-                                            <td className="px-4 py-3 text-[#7b8497]">
+                                            <td className="px-4 py-3 text-muted-foreground">
                                                 {new Date(cliente.created_at).toLocaleDateString()}
                                             </td>
                                             <td className="px-4 py-3 flex gap-2 justify-center">
-                                                <button className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 transition"
+                                                <button className="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-bold hover:bg-primary/90 transition"
                                                     onClick={() => handleEdit(cliente)}>
                                                     Editar
                                                 </button>

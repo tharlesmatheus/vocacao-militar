@@ -92,14 +92,14 @@ export default function ContaPage() {
     const badge = (() => {
         if (planoStatus === "ativo") {
             return {
-                klass: "bg-green-100 border border-green-200 text-green-700",
+                klass: "bg-green-500/10 border border-green-500/40 text-green-700 dark:text-green-300",
                 label: "Ativo",
             };
         }
 
         if (planoStatus === "pendente") {
             return {
-                klass: "bg-yellow-100 border border-yellow-300 text-yellow-700",
+                klass: "bg-yellow-500/10 border border-yellow-500/40 text-yellow-700 dark:text-yellow-300",
                 label: "Pendente",
             };
         }
@@ -462,7 +462,7 @@ export default function ContaPage() {
                                     {isGoogleUser ? (
                                         <div className="rounded-xl border border-border bg-muted p-4 text-sm text-muted-foreground">
                                             <div className="flex items-start gap-2">
-                                                <AlertTriangle className="w-5 h-5 mt-0.5 text-yellow-600" />
+                                                <AlertTriangle className="w-5 h-5 mt-0.5 text-yellow-600 dark:text-yellow-400" />
                                                 <div>
                                                     <p className="font-semibold text-foreground">Conta Google</p>
                                                     <p className="mt-1">
@@ -498,13 +498,13 @@ export default function ContaPage() {
                             </div>
 
                             {errPerfil && (
-                                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
                                     {errPerfil}
                                 </div>
                             )}
 
                             {msgPerfil && (
-                                <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                                <div className="mt-4 rounded-xl border border-green-500/40 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-300">
                                     {msgPerfil}
                                 </div>
                             )}
@@ -581,7 +581,7 @@ export default function ContaPage() {
                         </div>
 
                         {errPlano && (
-                            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                            <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
                                 {errPlano}
                             </div>
                         )}

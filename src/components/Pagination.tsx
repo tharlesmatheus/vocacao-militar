@@ -21,7 +21,7 @@ export function Pagination({ total, perPage, page, setPage }: PaginationProps) {
             <button
                 onClick={() => setPage(page - 1)}
                 disabled={page === 1}
-                className="px-3 py-1 rounded-lg border text-xs bg-white text-[#425179] border-[#E3E8F3] disabled:opacity-50"
+                className="px-3 py-1 rounded-lg border text-xs bg-card text-primary border-border disabled:opacity-50"
             >
                 Anterior
             </button>
@@ -31,8 +31,8 @@ export function Pagination({ total, perPage, page, setPage }: PaginationProps) {
                     <button
                         key={p}
                         onClick={() => setPage(p)}
-                        className={`px-3 py-1 rounded-lg border text-xs border-[#E3E8F3]
-              ${p === page ? "bg-[#6a88d7] text-white font-bold" : "bg-white text-[#425179] hover:bg-[#f5f7fa]"}
+                        className={`px-3 py-1 rounded-lg border text-xs border-border
+              ${p === page ? "bg-primary text-primary-foreground font-bold" : "bg-card text-primary hover:bg-muted"}
             `}
                     >
                         {p}
@@ -42,7 +42,7 @@ export function Pagination({ total, perPage, page, setPage }: PaginationProps) {
             <button
                 onClick={() => setPage(page + 1)}
                 disabled={page === pages}
-                className="px-3 py-1 rounded-lg border text-xs bg-white text-[#425179] border-[#E3E8F3] disabled:opacity-50"
+                className="px-3 py-1 rounded-lg border text-xs bg-card text-primary border-border disabled:opacity-50"
             >
                 Próxima
             </button>

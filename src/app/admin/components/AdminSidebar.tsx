@@ -41,17 +41,17 @@ export default function AdminSidebar({
                 aria-hidden="true"
             />
             <aside
-                className={`fixed z-50 top-0 left-0 h-full w-[250px] bg-white border-r shadow-md flex flex-col transition-transform duration-200
+                className={`fixed z-50 top-0 left-0 h-full w-[250px] bg-card border-r shadow-md flex flex-col transition-transform duration-200
           ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
         `}
                 style={{ minHeight: "100vh" }}
             >
                 {/* Logo */}
                 <div className="flex items-center px-7 py-7 gap-3 border-b">
-                    <div className="bg-blue-600 text-white rounded-full w-11 h-11 flex items-center justify-center text-2xl font-bold">
+                    <div className="bg-primary text-primary-foreground rounded-full w-11 h-11 flex items-center justify-center text-2xl font-bold">
                         VM
                     </div>
-                    <span className="text-xl font-extrabold text-[#232939]">Admin</span>
+                    <span className="text-xl font-extrabold text-foreground">Admin</span>
                 </div>
                 {/* Navegação */}
                 <nav className="flex-1 flex flex-col gap-1 mt-6">
@@ -65,8 +65,8 @@ export default function AdminSidebar({
                                 href={link.href}
                                 className={`flex items-center gap-3 px-7 py-2 rounded-lg font-semibold transition
                   ${isActive
-                                        ? "bg-[#e9effd] text-blue-700 shadow"
-                                        : "text-[#232939] hover:bg-[#f2f6fe]"}
+                                        ? "bg-[#e9effd] text-primary shadow"
+                                        : "text-foreground hover:bg-[#f2f6fe]"}
                 `}
                                 onClick={onClose}
                             >
@@ -79,12 +79,12 @@ export default function AdminSidebar({
                 {/* Sair */}
                 <button
                     onClick={handleLogout}
-                    className="flex items-center gap-3 px-7 py-2 rounded-lg font-semibold mt-auto mb-2 bg-[#f8fafd] text-[#232939] hover:bg-red-600 hover:text-white transition"
+                    className="flex items-center gap-3 px-7 py-2 rounded-lg font-semibold mt-auto mb-2 bg-muted text-foreground hover:bg-red-600 hover:text-white transition"
                 >
                     <LogOut className="w-5 h-5" /> Sair
                 </button>
                 {/* Rodapé */}
-                <div className="p-3 text-xs text-[#a3adc7] text-center border-t">
+                <div className="p-3 text-xs text-muted-foreground text-center border-t">
                     &copy; {new Date().getFullYear()} Vocação Militar <br />
                     Área Administrativa
                 </div>

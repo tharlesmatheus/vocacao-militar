@@ -25,7 +25,7 @@ function ConteudoAba() {
     const aba = ABAS[id] ?? ABAS.resumo;
     return (
         <>
-            <h1 className="mb-6 text-2xl font-extrabold text-[#232939] md:text-3xl">{aba.titulo}</h1>
+            <h1 className="mb-6 text-2xl font-extrabold text-foreground md:text-3xl">{aba.titulo}</h1>
             {/* key força remontar ao trocar de aba */}
             <div key={id}>{aba.componente()}</div>
         </>
@@ -53,7 +53,7 @@ export default function AdminDashboard() {
 
     if (!liberado) {
         return (
-            <div className="flex h-screen w-full items-center justify-center bg-[#f3f6fa]">
+            <div className="flex h-screen w-full items-center justify-center bg-muted">
                 <div className="animate-pulse text-xl">Carregando...</div>
             </div>
         );
@@ -62,11 +62,11 @@ export default function AdminDashboard() {
     return (
         <div className="flex min-h-screen w-full flex-col items-center px-2 pb-8">
             <section className="mb-8 mt-8 w-full max-w-6xl flex-1">
-                <Suspense fallback={<div className="animate-pulse text-[#7b8bb0]">Carregando...</div>}>
+                <Suspense fallback={<div className="animate-pulse text-muted-foreground">Carregando...</div>}>
                     <ConteudoAba />
                 </Suspense>
             </section>
-            <footer className="mt-auto w-full pt-4 text-center text-xs text-[#a3adc7]">
+            <footer className="mt-auto w-full pt-4 text-center text-xs text-muted-foreground">
                 &copy; {new Date().getFullYear()} Vocação Militar - Área Administrativa
             </footer>
         </div>

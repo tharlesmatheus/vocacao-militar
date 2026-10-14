@@ -1046,7 +1046,7 @@ export default function FlashcardsPage() {
                                                 )}
 
                                                 {!card.disciplina_catalogo_id && (
-                                                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                                                    <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-300">
                                                         legado mapeado por nome
                                                     </span>
                                                 )}

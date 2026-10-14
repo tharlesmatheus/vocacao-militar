@@ -1102,7 +1102,7 @@ export default function CronogramaPage() {
                                                     <div
                                                         className={`rounded-xl border p-3 ${item.disciplina_id
                                                                 ? "border-border bg-background"
-                                                                : "border-amber-200 bg-amber-50"
+                                                                : "border-amber-500/40 bg-amber-500/10"
                                                             }`}
                                                     >
                                                         <div className="font-semibold leading-snug">
@@ -1114,7 +1114,7 @@ export default function CronogramaPage() {
                                                         </div>
 
                                                         {!item.disciplina_id && (
-                                                            <div className="mt-2 text-[11px] text-amber-700">
+                                                            <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">
                                                                 Registro antigo sem correspondência no catálogo. Você pode removê-lo e adicionar a disciplina canônica correta.
                                                             </div>
                                                         )}

@@ -87,22 +87,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     };
   }, []);
 
-  // ✅ largura real da sidebar no desktop
-  const sidebarWidthClass = sidebarCollapsed ? "md:pl-[88px]" : "md:pl-[260px]";
+  // Largura real da sidebar no desktop. A sidebar só fica fixa a partir de "lg"
+  // (lg:w-20 recolhida, lg:w-[290px] aberta); o recuo precisa ser o mesmo.
+  const sidebarWidthClass = sidebarCollapsed ? "lg:pl-20" : "lg:pl-[290px]";
 
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#0b0b0c" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black" />
         <meta name="apple-mobile-web-app-title" content="Vocação" />
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/png" href="/icons/icon-192x192.png" />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
-        <link rel="mask-icon" href="/icons/safari-pinned-tab.svg" color="#0ea5e9" />
+        <link rel="mask-icon" href="/icons/safari-pinned-tab.svg" color="#f2b705" />
         <meta name="application-name" content="Vocação" />
         <meta
           name="description"
@@ -112,7 +112,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
 
       <body className="bg-background text-foreground font-sans antialiased overflow-x-hidden">
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
           {showChrome && (
             <Sidebar
               collapsed={sidebarCollapsed}

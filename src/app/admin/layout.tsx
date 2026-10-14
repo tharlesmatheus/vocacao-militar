@@ -6,14 +6,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     return (
-        <div className="flex bg-[#f5f6fa] min-h-screen">
+        <div className="flex bg-muted min-h-screen">
             <AdminSidebar open={sidebarOpen} onOpen={() => setSidebarOpen(true)} onClose={() => setSidebarOpen(false)} />
             <div className="flex-1 flex flex-col md:ml-[250px] min-w-0">
                 {/* Header para mobile: botão de menu */}
-                <div className="md:hidden p-3 flex items-center bg-white shadow-sm">
+                <div className="md:hidden p-3 flex items-center bg-card shadow-sm">
                     <button
                         onClick={() => setSidebarOpen(true)}
-                        className="bg-[#eef1f7] px-4 py-2 rounded font-bold border text-[#232939]"
+                        className="bg-muted px-4 py-2 rounded font-bold border text-foreground"
                     >
                         Menu
                     </button>

@@ -198,7 +198,7 @@ export function ComentariosQuestao({ questaoId }: { questaoId: string }) {
                                 <p className="whitespace-pre-line leading-relaxed text-foreground">{c.texto}</p>
                                 <div className="flex gap-3 mt-3 text-xs">
                                     {meu ? (
-                                        <button type="button" onClick={() => excluir(c.id)} className="text-red-600 hover:underline">
+                                        <button type="button" onClick={() => excluir(c.id)} className="text-red-600 dark:text-red-400 hover:underline">
                                             Excluir
                                         </button>
                                     ) : (
@@ -217,8 +217,8 @@ export function ComentariosQuestao({ questaoId }: { questaoId: string }) {
                 </>
             )}
 
-            {aviso && <div className="text-sm text-green-700">{aviso}</div>}
-            {erro && <div className="text-sm text-red-600">{erro}</div>}
+            {aviso && <div className="text-sm text-green-700 dark:text-green-300">{aviso}</div>}
+            {erro && <div className="text-sm text-red-600 dark:text-red-400">{erro}</div>}
 
             {userId && (
                 <form onSubmit={enviar} className="flex flex-col gap-2">

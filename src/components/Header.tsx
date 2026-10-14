@@ -1,42 +1,35 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
 export function Header() {
-    const { theme, setTheme } = useTheme();
+    const { resolvedTheme, setTheme } = useTheme();
+    // O tema só é conhecido no navegador; antes disso o ícone ficaria errado.
+    const [montado, setMontado] = useState(false);
+    useEffect(() => setMontado(true), []);
 
-    function toggleTheme() {
-        setTheme(theme === "dark" ? "light" : "dark");
-    }
+    const escuro = montado ? resolvedTheme === "dark" : true;
 
     return (
-        <header className="w-full max-w-full overflow-x-hidden border-b border-border bg-card">
-            <div className="flex items-center justify-end px-4 py-4">
+        <header className="w-full max-w-full overflow-x-hidden border-b border-border bg-card/80 backdrop-blur">
+            {/* Filete dourado: assinatura visual da marca */}
+            <div aria-hidden className="h-[3px] w-full bg-primary" />
+            <div className="flex items-center justify-end gap-3 px-4 py-3">
+                <span className="mr-auto hidden pl-14 font-titulo text-sm font-semibold uppercase tracking-[0.25em] text-muted-foreground sm:inline lg:pl-0">
+                    Foco • Disciplina • Aprovação
+                </span>
 
-                {/* Toggle modo noturno */}
                 <button
-                    onClick={toggleTheme}
-                    aria-label="Alternar tema"
-                    title="Alternar tema"
-                    className="
-            flex items-center justify-center
-            w-9 h-9
-            rounded-md
-            border border-border
-            bg-muted
-            hover:bg-muted/80
-            transition
-            shrink-0
-          "
+                    type="button"
+                    onClick={() => setTheme(escuro ? "light" : "dark")}
+                    aria-label={escuro ? "Usar tema claro" : "Usar tema escuro"}
+                    title={escuro ? "Usar tema claro" : "Usar tema escuro"}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted transition hover:border-primary hover:text-primary"
                 >
-                    {theme === "dark" ? (
-                        <Sun className="w-4 h-4" />
-                    ) : (
-                        <Moon className="w-4 h-4" />
-                    )}
+                    {escuro ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </button>
-
             </div>
         </header>
     );

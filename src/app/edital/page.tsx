@@ -270,9 +270,9 @@ function ImportanceBadge({
 }) {
     const map = [
         { txt: "Normal", icon: "⚪", className: "text-muted-foreground" },
-        { txt: "Relevante", icon: "⚠️", className: "text-amber-600" },
-        { txt: "Importante", icon: "🚨", className: "text-orange-600" },
-        { txt: "Cai sempre", icon: "🔥", className: "text-red-600" },
+        { txt: "Relevante", icon: "⚠️", className: "text-amber-600 dark:text-amber-400" },
+        { txt: "Importante", icon: "🚨", className: "text-orange-600 dark:text-orange-400" },
+        { txt: "Cai sempre", icon: "🔥", className: "text-red-600 dark:text-red-400" },
     ];
     const cfg = map[level] ?? map[0];
     return (
@@ -607,7 +607,7 @@ export default function EditalPage() {
                         <button
                             onClick={() => setShowOnlyNeverSeen((v) => !v)}
                             className={`rounded px-3 py-2 border border-border ${showOnlyNeverSeen
-                                ? "bg-amber-100 text-amber-700"
+                                ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
                                 : "bg-transparent"
                                 }`}
                             title="Exibir apenas assuntos com 0 vistas"
@@ -618,7 +618,7 @@ export default function EditalPage() {
                         <button
                             onClick={() => setShowGrafico((v) => !v)}
                             className={`rounded px-3 py-2 border border-border ${showGrafico
-                                ? "bg-green-100 text-green-700"
+                                ? "bg-green-500/10 text-green-700 dark:text-green-300"
                                 : "bg-transparent"
                                 }`}
                             title="Ver um resumo por matéria"
@@ -1308,7 +1308,7 @@ function NovoEdital({ onCreated }: { onCreated: (id: string) => void }) {
             </div>
 
             {erro && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
                     {erro}
                 </div>
             )}
@@ -1999,13 +1999,13 @@ function EditarEstrutura({
     return (
         <div className="space-y-5">
             {erro && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
                     {erro}
                 </div>
             )}
 
             {msg && (
-                <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+                <div className="rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-300">
                     {msg}
                 </div>
             )}
@@ -2169,7 +2169,7 @@ function EditarEstrutura({
                         </select>
 
                         {selMateria && !disciplinaCanonicaDaMateria && (
-                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
                                 Essa disciplina existia no edital antes do
                                 catálogo canônico. Ao criar um novo assunto,
                                 ela será automaticamente cadastrada no

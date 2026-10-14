@@ -195,7 +195,7 @@ export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
                 {campo("modalidade", "Modalidade", opcoes.modalidades)}
 
                 {erro && (
-                    <div className="col-span-full text-sm text-red-600">{erro}</div>
+                    <div className="col-span-full text-sm text-red-600 dark:text-red-400">{erro}</div>
                 )}
 
                 {/* Excluir Questões Respondidas */}

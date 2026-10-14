@@ -453,7 +453,6 @@ export default function DashboardHome() {
         subtitle: `${Math.min(questoesHoje, DAILY_GOALS.questoes)}/${DAILY_GOALS.questoes} hoje`,
         href: "/questoes",
         icon: Brain,
-        bg: "from-indigo-500 to-violet-600",
       },
       {
         name: "Resumos",
@@ -463,35 +462,30 @@ export default function DashboardHome() {
         )}/${DAILY_GOALS.resumos} hoje • ${totalResumos} salvos`,
         href: "/resumos",
         icon: FileText,
-        bg: "from-sky-500 to-blue-600",
       },
       {
         name: "Revisão",
         subtitle: `${revisoesPendentes} para hoje • ${revisoesConcluidasHoje} feitas`,
         href: "/revisao",
         icon: History,
-        bg: "from-orange-500 to-amber-500",
       },
       {
         name: "Ciclo de Estudos",
         subtitle: "Continue de onde parou",
         href: "/cronograma",
         icon: CalendarDays,
-        bg: "from-emerald-500 to-teal-600",
       },
       {
         name: "Cadernos",
         subtitle: `${totalCadernos} cadernos`,
         href: "/cadernos",
         icon: BookOpen,
-        bg: "from-rose-500 to-red-600",
       },
       {
         name: "Tempo de estudo",
         subtitle: fmtHMSFull(tempoHojeSeg),
         href: "/tempo-de-estudo",
         icon: Timer,
-        bg: "from-purple-500 to-fuchsia-600",
       },
     ],
     [
@@ -638,28 +632,28 @@ export default function DashboardHome() {
         value: questoesTotal,
         sub: "Respondidas",
         icon: BarChart2,
-        iconBg: "bg-violet-600",
+        iconBg: "bg-primary/10",
       },
       {
         label: "Acerto",
         value: `${taxaAcerto}%`,
         sub: "Média",
         icon: Target,
-        iconBg: "bg-rose-500",
+        iconBg: "bg-primary/10",
       },
       {
         label: "Tempo",
         value: `${tempoMedioSeg || 0}s`,
         sub: "/ questão",
         icon: Timer,
-        iconBg: "bg-sky-600",
+        iconBg: "bg-primary/10",
       },
       {
         label: "Sequência",
         value: String(streakDias),
         sub: "Dias",
         icon: Flame,
-        iconBg: "bg-amber-500",
+        iconBg: "bg-primary/10",
       },
     ],
     [questoesTotal, taxaAcerto, tempoMedioSeg, streakDias]
@@ -956,7 +950,7 @@ export default function DashboardHome() {
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
             Olá{userName ? `, ${userName}` : ""}.
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">Continue sua jornada de estudos</p>
+          <p className="mt-1 text-sm text-muted-foreground">Cada questão resolvida te deixa mais perto da farda.</p>
         </div>
 
         {/* DATA / HORA */}
@@ -971,8 +965,8 @@ export default function DashboardHome() {
             <div>
               <div className="flex items-center gap-2">
                 <Target className="h-5 w-5 text-primary" />
-                <h2 className="text-base font-extrabold text-foreground">
-                  Meta diária
+                <h2 className="font-titulo text-lg font-bold uppercase tracking-wide text-foreground">
+                  Missão do dia
                 </h2>
               </div>
 
@@ -983,7 +977,7 @@ export default function DashboardHome() {
 
             <div className="flex items-center gap-2">
               {metaDiariaConcluida ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-600">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 className="h-4 w-4" />
                   Dia concluído
                 </span>
@@ -1014,7 +1008,7 @@ export default function DashboardHome() {
                     <div className="flex min-w-0 items-center gap-3">
                       <div
                         className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${completed
-                            ? "bg-emerald-500/10 text-emerald-600"
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                             : "bg-primary/10 text-primary"
                           }`}
                       >
@@ -1039,7 +1033,7 @@ export default function DashboardHome() {
                     </div>
 
                     <span
-                      className={`text-sm font-extrabold ${completed ? "text-emerald-600" : "text-foreground"
+                      className={`text-sm font-extrabold ${completed ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"
                         }`}
                     >
                       {Math.round(goal.progress)}%
@@ -1085,19 +1079,19 @@ export default function DashboardHome() {
               <Link
                 key={it.href}
                 href={it.href}
-                className={`relative overflow-hidden rounded-2xl p-4 text-white shadow-sm bg-gradient-to-r ${it.bg}
-                  hover:opacity-[0.96] active:scale-[0.99] transition`}
+                className="group relative overflow-hidden rounded-lg border border-border bg-card p-4 shadow-sm transition hover:border-primary/70 active:scale-[0.99]"
               >
-                <div className="absolute -right-10 -top-10 h-24 w-24 rounded-full bg-white/20" />
-                <div className="absolute right-3 top-3 h-10 w-10 rounded-2xl bg-white/15 flex items-center justify-center">
-                  <Icon className="h-5 w-5 text-white" />
+                {/* filete dourado à esquerda, acende no hover */}
+                <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-primary/40 transition group-hover:bg-primary" />
+                <div className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
+                  <Icon className="h-5 w-5 text-primary" />
                 </div>
 
                 <div className="mt-10">
-                  <div className="text-[15px] font-extrabold leading-tight">
+                  <div className="font-titulo text-lg font-bold uppercase leading-tight tracking-wide text-foreground">
                     {it.name}
                   </div>
-                  <div className="mt-1 text-xs text-white/85">
+                  <div className="mt-1 text-xs text-muted-foreground">
                     {it.subtitle}
                   </div>
                 </div>
@@ -1135,9 +1129,9 @@ export default function DashboardHome() {
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className={`h-11 w-11 rounded-2xl ${c.iconBg} flex items-center justify-center shrink-0`}
+                      className={`h-11 w-11 rounded-md ${c.iconBg} flex items-center justify-center shrink-0`}
                     >
-                      <Icon className="h-5 w-5 text-white" />
+                      <Icon className="h-5 w-5 text-primary" />
                     </div>
 
                     <div className="min-w-0 flex-1">

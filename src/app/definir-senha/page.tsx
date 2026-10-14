@@ -104,7 +104,7 @@ export default function DefinirSenhaPage() {
                         value={confirmacao}
                         onChange={(e) => setConfirmacao(e.target.value)}
                     />
-                    {erro && <p className="text-sm text-red-600">{erro}</p>}
+                    {erro && <p className="text-sm text-red-600 dark:text-red-400">{erro}</p>}
                     <button
                         type="submit"
                         disabled={salvando}
@@ -115,7 +115,7 @@ export default function DefinirSenhaPage() {
                 </form>
             )}
 
-            {estado === "salvo" && <p className="mt-4 text-green-700">Senha criada! Entrando na plataforma...</p>}
+            {estado === "salvo" && <p className="mt-4 text-green-700 dark:text-green-300">Senha criada! Entrando na plataforma...</p>}
 
             {estado === "sem-sessao" && (
                 <div className="mt-4 flex flex-col gap-3">
@@ -123,7 +123,7 @@ export default function DefinirSenhaPage() {
                         Este link expirou ou já foi usado. Informe seu e-mail para receber um novo.
                     </p>
                     {reenviado ? (
-                        <p className="text-green-700">Pronto! Confira sua caixa de entrada (e o spam).</p>
+                        <p className="text-green-700 dark:text-green-300">Pronto! Confira sua caixa de entrada (e o spam).</p>
                     ) : (
                         <form onSubmit={reenviar} className="flex flex-col gap-3">
                             <input
@@ -133,7 +133,7 @@ export default function DefinirSenhaPage() {
                                 value={emailReenvio}
                                 onChange={(e) => setEmailReenvio(e.target.value)}
                             />
-                            {erro && <p className="text-sm text-red-600">{erro}</p>}
+                            {erro && <p className="text-sm text-red-600 dark:text-red-400">{erro}</p>}
                             <button type="submit" className="rounded-xl bg-primary px-6 py-3 font-bold text-primary-foreground">
                                 Enviar novo link
                             </button>

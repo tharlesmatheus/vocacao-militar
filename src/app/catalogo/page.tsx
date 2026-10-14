@@ -609,13 +609,13 @@ export default function CatalogosQuestoesPage() {
                 </header>
 
                 {error && (
-                    <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
                         {error}
                     </div>
                 )}
 
                 {message && (
-                    <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                    <div className="rounded-2xl border border-green-500/40 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-300">
                         {message}
                     </div>
                 )}
@@ -1076,7 +1076,7 @@ function CatalogTable({
 
                             <span
                                 className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${item.active
-                                        ? "bg-green-100 text-green-700"
+                                        ? "bg-green-500/10 text-green-700 dark:text-green-300"
                                         : "bg-muted text-muted-foreground"
                                     }`}
                             >

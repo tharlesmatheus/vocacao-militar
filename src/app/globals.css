@@ -1,6 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
+
+/* O modo escuro segue a classe .dark (next-themes), não a preferência do sistema.
+   Sem isto, as classes dark:* do Tailwind v4 obedecem ao sistema operacional
+   e ficam fora de sincronia com o botão de tema. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* ================= BASE / ANTI OVERFLOW (SEM TRAVAR SCROLL) ================= */
 
@@ -25,9 +30,9 @@ body {
 
   background-color: var(--background);
   color: var(--foreground);
-  font-family: 'Nunito', Arial, Helvetica, sans-serif;
+  font-family: var(--font-corpo);
   font-feature-settings: "liga", "kern";
-  letter-spacing: 0.01em;
+  letter-spacing: normal;
 
   overflow-x: hidden;
   /* trava horizontal */
@@ -61,6 +66,10 @@ select:-webkit-autofill {
 
 /* Tailwind Theme Token Mapping */
 @theme inline {
+  /* Fontes: corpo legível para leitura longa; títulos condensados (visual tático). */
+  --font-sans: var(--font-corpo);
+  --font-titulo: var(--font-titulo-familia);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -109,98 +118,105 @@ select:-webkit-autofill {
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* ================= TEMA CLARO ================= */
+/* ================= IDENTIDADE VISUAL =================
+   Preto/grafite + dourado de insígnia. O tema escuro é o padrão; o claro é
+   opcional (botão no topo). A barra lateral é preta nos dois temas.
+   Verde e vermelho ficam reservados para acerto e erro. */
 
 :root {
-  --radius: 0.625rem;
+  --font-corpo: 'Inter', Arial, Helvetica, sans-serif;
+  --font-titulo-familia: 'Barlow Condensed', 'Arial Narrow', Arial, sans-serif;
 
-  --background: #f5f6fa;
-  --foreground: #232939;
+  --radius: 0.5rem;
 
-  --card: #fff;
-  --card-foreground: #232939;
+  /* ---------- TEMA CLARO ---------- */
+  --background: #f4f4f5;
+  --foreground: #18181b;
 
-  --popover: #fff;
-  --popover-foreground: #232939;
+  --card: #ffffff;
+  --card-foreground: #18181b;
 
-  --primary: #6a88d7;
-  --primary-foreground: #fff;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
 
-  --secondary: #e3e8f3;
-  --secondary-foreground: #232939;
+  /* Ouro velho: contraste AA sobre branco e com texto branco. */
+  --primary: #a16207;
+  --primary-foreground: #ffffff;
 
-  --muted: #f5f7fa;
-  --muted-foreground: #65749b;
+  --secondary: #e4e4e7;
+  --secondary-foreground: #18181b;
 
-  --accent: #f3f5fa;
-  --accent-foreground: #232939;
+  --muted: #ececee;
+  --muted-foreground: #52525b;
 
-  --destructive: #e2735e;
+  --accent: #f1f1f3;
+  --accent-foreground: #18181b;
 
-  --border: #e3e8f3;
-  --input: #e3e8f3;
-  --ring: #b1bad3;
+  --destructive: #dc2626;
 
-  --chart-1: #6a88d7;
-  --chart-2: #90caf9;
-  --chart-3: #ffd700;
-  --chart-4: #76c7c0;
-  --chart-5: #e57373;
+  --border: #e0e0e4;
+  --input: #d4d4d8;
+  --ring: #a16207;
 
-  --sidebar: #fff;
-  --sidebar-foreground: #232939;
-  --sidebar-primary: #6a88d7;
-  --sidebar-primary-foreground: #fff;
-  --sidebar-accent: #f5f6fa;
-  --sidebar-accent-foreground: #232939;
-  --sidebar-border: #e3e8f3;
-  --sidebar-ring: #b1bad3;
+  --chart-1: #a16207;
+  --chart-2: #2563eb;
+  --chart-3: #059669;
+  --chart-4: #dc2626;
+  --chart-5: #71717a;
+
+  --sidebar: #0a0a0b;
+  --sidebar-foreground: #e4e4e7;
+  --sidebar-primary: #f2b705;
+  --sidebar-primary-foreground: #0a0a0b;
+  --sidebar-accent: #18181b;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #1f1f23;
+  --sidebar-ring: #f2b705;
 }
 
-/* ================= TEMA ESCURO ================= */
-
+/* ---------- TEMA ESCURO (padrão) ---------- */
 .dark {
-  --background: #181a1b;
-  --foreground: #f1f2f6;
+  --background: #0b0b0c;
+  --foreground: #ececee;
 
-  --card: #232323;
-  --card-foreground: #fff;
+  --card: #151517;
+  --card-foreground: #ececee;
 
-  --popover: #232323;
-  --popover-foreground: #fff;
+  --popover: #151517;
+  --popover-foreground: #ececee;
 
-  --primary: #6a88d7;
-  --primary-foreground: #fff;
+  --primary: #f2b705;
+  --primary-foreground: #0b0b0c;
 
-  --secondary: #232939;
-  --secondary-foreground: #fff;
+  --secondary: #1f1f22;
+  --secondary-foreground: #ececee;
 
-  --muted: #232323;
-  --muted-foreground: #b1bad3;
+  --muted: #1c1c1f;
+  --muted-foreground: #a1a1aa;
 
-  --accent: #181a1b;
-  --accent-foreground: #f1f2f6;
+  --accent: #222226;
+  --accent-foreground: #e4e4e7;
 
-  --destructive: #ffb4a8;
+  --destructive: #ef4444;
 
-  --border: #343a4f;
-  --input: #343a4f;
-  --ring: #343a4f;
+  --border: #2a2a2e;
+  --input: #34343a;
+  --ring: #f2b705;
 
-  --chart-1: #82b1ff;
-  --chart-2: #ffd700;
-  --chart-3: #90caf9;
-  --chart-4: #76c7c0;
-  --chart-5: #ffb4a8;
+  --chart-1: #f2b705;
+  --chart-2: #60a5fa;
+  --chart-3: #34d399;
+  --chart-4: #f87171;
+  --chart-5: #a1a1aa;
 
-  --sidebar: #181a1b;
-  --sidebar-foreground: #f1f2f6;
-  --sidebar-primary: #6a88d7;
-  --sidebar-primary-foreground: #fff;
-  --sidebar-accent: #232939;
-  --sidebar-accent-foreground: #fff;
-  --sidebar-border: #343a4f;
-  --sidebar-ring: #343a4f;
+  --sidebar: #070708;
+  --sidebar-foreground: #e4e4e7;
+  --sidebar-primary: #f2b705;
+  --sidebar-primary-foreground: #0b0b0c;
+  --sidebar-accent: #18181b;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #1f1f23;
+  --sidebar-ring: #f2b705;
 }
 
 /* Tailwind base layer para variáveis utilitárias */
@@ -212,4 +228,18 @@ select:-webkit-autofill {
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Títulos de página no estilo tático. O enunciado das questões usa <h2>
+     e por isso NÃO entra aqui: texto de prova precisa da fonte normal. */
+  h1 {
+    font-family: var(--font-titulo-familia);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    line-height: 1.05;
+  }
+}
+
+/* Faixa zebrada amarelo/preto (divisória decorativa). */
+.faixa-zebrada {
+  background-image: repeating-linear-gradient(-45deg, #f2b705 0 12px, #0a0a0b 12px 24px);
 }

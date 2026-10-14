@@ -2050,13 +2050,13 @@ Retorne SOMENTE JSON válido:
                 </header>
 
                 {erro && (
-                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
                         {erro}
                     </div>
                 )}
 
                 {msg && (
-                    <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                    <div className="rounded-xl border border-green-500/40 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-300">
                         {msg}
                     </div>
                 )}
@@ -2259,7 +2259,7 @@ Retorne SOMENTE JSON válido:
                         !cargos.length ||
                         !bancas.length ||
                         !disciplinasCatalogo.length ? (
-                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                        <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
                             Há um catálogo vazio. Cadastre as categorias em{" "}
                             <a
                                 href="/catalogo"
@@ -2392,7 +2392,7 @@ QUESTÃO 4 ...
                             </div>
 
                             {!podeAdicionarManual && (
-                                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                                <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
                                     Selecione Instituição, Cargo, Banca, Disciplina e Assunto no catálogo para liberar o cadastro manual.
                                 </div>
                             )}
@@ -2401,8 +2401,8 @@ QUESTÃO 4 ...
                 </section>
 
                 {falhasProcessamento.length > 0 && (
-                    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-                        <h2 className="font-semibold text-amber-900">
+                    <section className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5">
+                        <h2 className="font-semibold text-amber-900 dark:text-amber-300">
                             Falhas no processamento
                         </h2>
 
@@ -2411,14 +2411,14 @@ QUESTÃO 4 ...
                                 (falha) => (
                                     <div
                                         key={`${falha.numero}-${falha.erro}`}
-                                        className="rounded-xl bg-white/70 p-3 text-sm"
+                                        className="rounded-xl bg-card/70 p-3 text-sm"
                                     >
-                                        <div className="font-medium text-amber-900">
+                                        <div className="font-medium text-amber-900 dark:text-amber-300">
                                             Questão{" "}
                                             {falha.numero}
                                         </div>
 
-                                        <div className="mt-1 text-amber-800">
+                                        <div className="mt-1 text-amber-800 dark:text-amber-300">
                                             {falha.erro}
                                         </div>
                                     </div>
@@ -2460,7 +2460,7 @@ QUESTÃO 4 ...
                                                         {q.numero}
                                                     </div>
                                                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${q.origem === "MANUAL"
-                                                        ? "bg-slate-100 text-slate-700"
+                                                        ? "bg-muted text-foreground"
                                                         : "bg-primary/10 text-primary"
                                                         }`}>
                                                         {q.origem === "MANUAL" ? "Manual" : "IA"}
@@ -2692,7 +2692,7 @@ QUESTÃO 4 ...
                                                     }
                                                     className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${q.resultado ===
                                                         "ERRO"
-                                                        ? "border-red-500 bg-red-50 text-red-700"
+                                                        ? "border-red-500 bg-red-500/10 text-red-700 dark:text-red-300"
                                                         : "border-border hover:bg-muted"
                                                         }`}
                                                 >
@@ -2712,7 +2712,7 @@ QUESTÃO 4 ...
                                                     }
                                                     className={`rounded-xl border px-4 py-3 text-sm font-semibold transition ${q.resultado ===
                                                         "ACERTO"
-                                                        ? "border-green-500 bg-green-50 text-green-700"
+                                                        ? "border-green-500 bg-green-500/10 text-green-700 dark:text-green-300"
                                                         : "border-border hover:bg-muted"
                                                         }`}
                                                 >
@@ -2723,7 +2723,7 @@ QUESTÃO 4 ...
 
                                         {q.resultado ===
                                             "ERRO" && (
-                                                <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-xs text-red-700">
+                                                <div className="mt-3 rounded-xl bg-red-500/10 px-4 py-3 text-xs text-red-700 dark:text-red-300">
                                                     Esta tentativa entrará nas estatísticas e a questão será enviada automaticamente para o Caderno de Erros de{" "}
                                                     <strong>
                                                         {disciplinaCatalogoSelecionada?.nome ?? "Disciplina"}
@@ -2738,7 +2738,7 @@ QUESTÃO 4 ...
 
                                         {q.resultado ===
                                             "ACERTO" && (
-                                                <div className="mt-3 rounded-xl bg-green-50 px-4 py-3 text-xs text-green-700">
+                                                <div className="mt-3 rounded-xl bg-green-500/10 px-4 py-3 text-xs text-green-700 dark:text-green-300">
                                                     Esta tentativa será registrada como acerto nas estatísticas de{" "}
                                                     <strong>
                                                         {disciplinaCatalogoSelecionada?.nome ?? "Disciplina"}
@@ -2755,7 +2755,7 @@ QUESTÃO 4 ...
                                             "ACERTO" && (
                                                 <label
                                                     className={`mt-4 flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${q.salvarNoCadernoAcertos
-                                                        ? "border-green-300 bg-green-50/70"
+                                                        ? "border-green-500/40 bg-green-500/10"
                                                         : "border-border bg-background hover:bg-muted/40"
                                                         }`}
                                                 >
@@ -2790,7 +2790,7 @@ QUESTÃO 4 ...
                                                         </span>
 
                                                         {q.salvarNoCadernoAcertos && (
-                                                            <span className="mt-2 block text-xs font-semibold text-green-700">
+                                                            <span className="mt-2 block text-xs font-semibold text-green-700 dark:text-green-300">
                                                                 ✓ Esta questão também será adicionada ao Caderno de Acertos.
                                                             </span>
                                                         )}
@@ -2883,7 +2883,7 @@ QUESTÃO 4 ...
                                                 </div>
 
                                                 {q.flashcardErro && (
-                                                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                                    <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
                                                         <div className="font-medium">
                                                             Não foi possível gerar o flashcard com IA.
                                                         </div>
@@ -2897,7 +2897,7 @@ QUESTÃO 4 ...
                                                                     q.localId
                                                                 )
                                                             }
-                                                            className="mt-3 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                                                            className="mt-3 rounded-lg border border-red-500/40 bg-card px-3 py-2 text-xs font-semibold text-red-700 dark:text-red-300 hover:bg-red-500/10"
                                                         >
                                                             Preencher manualmente agora
                                                         </button>
@@ -3028,7 +3028,7 @@ QUESTÃO 4 ...
                                                                         !q.flashcardVerso.trim()
                                                                     }
                                                                     className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${q.flashcardConfirmado
-                                                                        ? "border border-green-300 bg-green-50 text-green-700"
+                                                                        ? "border border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300"
                                                                         : "bg-primary text-primary-foreground hover:opacity-90"
                                                                         }`}
                                                                 >
@@ -3096,8 +3096,8 @@ QUESTÃO 4 ...
                                         key={`${r.numero}-${r.status}`}
                                         className={`rounded-xl border px-4 py-3 text-sm ${r.status ===
                                             "OK"
-                                            ? "border-green-200 bg-green-50 text-green-700"
-                                            : "border-red-200 bg-red-50 text-red-700"
+                                            ? "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300"
+                                            : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300"
                                             }`}
                                     >
                                         <strong>

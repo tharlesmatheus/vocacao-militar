@@ -30,7 +30,7 @@ export default function NovoClienteForm() {
     }
 
     return (
-        <div className="bg-white rounded-2xl p-6 shadow max-w-lg mx-auto">
+        <div className="bg-card rounded-2xl p-6 shadow max-w-lg mx-auto">
             <h2 className="text-xl font-bold mb-4">Adicionar Novo Cliente</h2>
             <form className="flex flex-col gap-4" onSubmit={handleNovoCliente}>
                 <input
@@ -82,11 +82,11 @@ export default function NovoClienteForm() {
                 />
                 <button
                     type="submit"
-                    className="bg-blue-600 text-white rounded font-bold py-2 hover:bg-blue-700 transition"
+                    className="bg-primary text-primary-foreground rounded font-bold py-2 hover:bg-primary/90 transition"
                 >
                     Adicionar
                 </button>
-                {msg && <div className="text-green-700 font-bold mt-2">{msg}</div>}
+                {msg && <div className="text-green-700 dark:text-green-300 font-bold mt-2">{msg}</div>}
             </form>
         </div>
     );

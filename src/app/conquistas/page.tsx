@@ -29,28 +29,30 @@ import {
 
 type Filter = "TODAS" | "DESBLOQUEADAS" | "EM_PROGRESSO";
 
+/* Patentes em escala metálica: praças em bronze, sargentos em prata,
+   oficiais em ouro e o General em dourado da marca. */
 const rankTone: Record<string, string> = {
-    Soldado: "text-slate-500",
-    Cabo: "text-cyan-500",
-    "Terceiro Sargento": "text-lime-500",
-    "Segundo Sargento": "text-green-600",
-    "Primeiro Sargento": "text-orange-600",
-    Subtenente: "text-yellow-300",
-    Aspirante: "text-yellow-500",
-    "Segundo Tenente": "text-red-500",
-    "Primeiro Tenente": "text-violet-600",
-    Capitão: "text-amber-500",
-    Major: "text-indigo-400",
-    "Tenente Coronel": "text-indigo-600",
-    Coronel: "text-orange-500",
-    General: "text-yellow-500",
+    Soldado: "text-orange-700 dark:text-orange-400",
+    Cabo: "text-orange-700 dark:text-orange-400",
+    "Terceiro Sargento": "text-zinc-500 dark:text-zinc-300",
+    "Segundo Sargento": "text-zinc-500 dark:text-zinc-300",
+    "Primeiro Sargento": "text-zinc-500 dark:text-zinc-300",
+    Subtenente: "text-zinc-600 dark:text-zinc-200",
+    Aspirante: "text-yellow-700 dark:text-yellow-400",
+    "Segundo Tenente": "text-yellow-700 dark:text-yellow-400",
+    "Primeiro Tenente": "text-yellow-700 dark:text-yellow-400",
+    Capitão: "text-yellow-700 dark:text-yellow-400",
+    Major: "text-amber-700 dark:text-amber-400",
+    "Tenente Coronel": "text-amber-700 dark:text-amber-400",
+    Coronel: "text-amber-700 dark:text-amber-400",
+    General: "text-primary",
 };
 
 const rarityTone: Record<string, string> = {
-    Comum: "border-slate-200 bg-slate-50 text-slate-700",
+    Comum: "border-border bg-muted text-foreground",
     Raro: "border-sky-200 bg-sky-50 text-sky-700",
     "Épico": "border-violet-200 bg-violet-50 text-violet-700",
-    Lendário: "border-amber-200 bg-amber-50 text-amber-700",
+    Lendário: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
 };
 
 function clampPct(value: number) {
@@ -84,7 +86,7 @@ function AchievementIcon({ achievement }: { achievement: GamificationAchievement
 
     switch (achievement.category) {
         case "RECUPERACAO":
-            return <ShieldCheck className={`${base} text-emerald-600`} />;
+            return <ShieldCheck className={`${base} text-emerald-600 dark:text-emerald-400`} />;
         case "REVISAO":
             return <Brain className={`${base} text-indigo-600`} />;
         case "FLASHCARDS":
@@ -291,7 +293,7 @@ export default function ConquistasPage() {
         return (
             <main className="mx-auto max-w-4xl px-4 py-10">
                 <div className="rounded-2xl border border-border bg-card p-6">
-                    <h1 className="text-xl font-semibold">Central de Gamificação</h1>
+                    <h1 className="text-xl font-semibold">Patentes e conquistas</h1>
                     <p className="mt-2 text-sm text-destructive">
                         {error || "Não foi possível carregar os dados."}
                     </p>
@@ -322,7 +324,7 @@ export default function ConquistasPage() {
                     <div>
                         <div className="flex items-center gap-2 text-sm font-semibold text-primary">
                             <Trophy size={18} />
-                            Central de Gamificação
+                            Patentes e conquistas
                         </div>
                         <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">
                             Evolução de {userName}
@@ -493,7 +495,7 @@ export default function ConquistasPage() {
                             ))}
 
                             {dashboard.daily.goal_completed && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
                                     <CheckCircle2 size={14} />
                                     Meta concluída
                                 </span>
@@ -643,7 +645,7 @@ export default function ConquistasPage() {
 
                                 <div className="mt-3 text-xs text-muted-foreground">
                                     {item.unlocked ? (
-                                        <span className="inline-flex items-center gap-1 text-emerald-700">
+                                        <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
                                             <CheckCircle2 size={13} />
                                             Conquistada {formatDateTime(item.unlocked_at)}
                                         </span>

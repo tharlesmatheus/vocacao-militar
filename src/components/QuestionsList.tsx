@@ -361,11 +361,11 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                 </div>
 
                 {erroLista && (
-                    <div className="text-red-600 text-sm mb-4">{erroLista}</div>
+                    <div className="text-red-600 dark:text-red-400 text-sm mb-4">{erroLista}</div>
                 )}
 
                 {cadernoError && (
-                    <div className="text-red-600 text-sm mb-4">{cadernoError}</div>
+                    <div className="text-red-600 dark:text-red-400 text-sm mb-4">{cadernoError}</div>
                 )}
 
                 <div className="flex flex-col gap-7">
@@ -374,7 +374,7 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                             Carregando questões...
                         </div>
                     ) : paginated.length === 0 ? (
-                        <div className="min-h-[120px] flex items-center justify-center text-[#a8b1c6]">
+                        <div className="min-h-[120px] flex items-center justify-center text-muted-foreground">
                             Nenhuma questão encontrada.
                         </div>
                     ) : (
