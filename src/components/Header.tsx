@@ -14,7 +14,7 @@ export function Header() {
 
     return (
         <header className="w-full max-w-full overflow-x-hidden border-b border-border bg-card/80 backdrop-blur">
-            {/* Filete dourado: assinatura visual da marca */}
+            {/* Filete azul: assinatura visual da marca */}
             <div aria-hidden className="h-[3px] w-full bg-primary" />
             <div className="flex items-center justify-end gap-3 px-4 py-3">
                 <span className="mr-auto hidden pl-14 font-titulo text-sm font-semibold uppercase tracking-[0.25em] text-muted-foreground sm:inline lg:pl-0">

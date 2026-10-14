@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { BotaoLembretes } from "@/components/BotaoLembretes";
 import {
     User2,
     Lock,
@@ -628,6 +629,14 @@ export default function ContaPage() {
                         </div>
                     </aside>
                 </div>
+
+                <section className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
+                    <h2 className="text-lg font-bold text-foreground">Lembretes no celular</h2>
+                    <p className="mb-4 text-sm text-muted-foreground">
+                        Um aviso por dia, de manhã, quando você tiver revisões para fazer. Ative em cada aparelho que você usa.
+                    </p>
+                    <BotaoLembretes />
+                </section>
             </div>
         </main>
     );

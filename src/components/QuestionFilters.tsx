@@ -15,6 +15,8 @@ export interface Filters {
 
 interface QuestionFiltersProps {
     onFiltrar?: (filters: Filters) => void;
+    /** Filtros já aplicados por fora (ex.: a meta do aluno). Sincroniza os campos. */
+    iniciais?: Filters;
 }
 
 type Opcoes = {
@@ -51,11 +53,15 @@ const selectClass =
 
 const ou = (v?: string) => (v && v.trim() ? v : null);
 
-export function QuestionFilters({ onFiltrar }: QuestionFiltersProps) {
+export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
     const [opcoes, setOpcoes] = useState<Opcoes>(OPCOES_VAZIAS);
     const [loading, setLoading] = useState(false);
     const [erro, setErro] = useState("");
-    const [selected, setSelected] = useState<Filters>(FILTROS_VAZIOS);
+    const [selected, setSelected] = useState<Filters>(() => ({ ...FILTROS_VAZIOS, ...iniciais }));
+
+    useEffect(() => {
+        if (iniciais) setSelected({ ...FILTROS_VAZIOS, ...iniciais });
+    }, [iniciais]);
 
     /*
      * As opções vêm do banco já agregadas (valores distintos), em vez de

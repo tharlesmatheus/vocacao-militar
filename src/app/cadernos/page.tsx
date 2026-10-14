@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { QuestionCard } from "@/components/QuestionCard"; // ajuste path se necessário
 import { Pagination } from "@/components/Pagination"; // ajuste path se necessário
+import { rotuloBanca, rotuloModalidade } from "@/lib/rotulos";
 
 /* ===================== Icons ===================== */
 function BookIcon({ className = "" }: { className?: string }) {
@@ -1031,7 +1032,7 @@ export default function CadernosPageGeral() {
                                     id={q.id}
                                     materiaNome={q.disciplina}
                                     assuntoNome={q.assunto}
-                                    tags={[q.instituicao, q.cargo, q.disciplina, q.assunto, q.modalidade, q.banca]}
+                                    tags={[q.instituicao, q.cargo, q.disciplina, q.assunto, rotuloModalidade(q.modalidade), rotuloBanca(q.banca)]}
                                     statement={q.enunciado}
                                     options={Object.entries(q.alternativas).map(([letter, text]) => ({ letter, text }))}
                                     correct={q.correta}

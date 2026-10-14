@@ -12,6 +12,7 @@ import {
     ChevronLeft,
     ChevronRight,
     Clock,
+    Crosshair,
     FileText,
     History,
     Home,
@@ -21,6 +22,7 @@ import {
     NotebookText,
     PlusCircle,
     Tags,
+    Timer,
     Trophy,
     User,
     X,
@@ -61,6 +63,7 @@ const MENU: MenuGroup[] = [
         items: [
             { name: "Cadastrar Questões", href: "/landing", icon: PlusCircle, adminOnly: true },
             { name: "Questões", href: "/questoes", icon: Brain },
+            { name: "Simulados", href: "/simulados", icon: Timer },
             { name: "Catálogo", href: "/catalogo", icon: Tags },
             { name: "Cadernos", href: "/cadernos", icon: NotebookText },
             { name: "Flash Cards", href: "/flashcards", icon: Layers3 },
@@ -74,6 +77,7 @@ const MENU: MenuGroup[] = [
     {
         category: "CONFIGURAÇÕES",
         items: [
+            { name: "Minha meta", href: "/meta", icon: Crosshair },
             { name: "Meu Perfil", href: "/perfil", icon: User },
         ],
     },

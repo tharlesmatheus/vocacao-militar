@@ -455,7 +455,7 @@ export function QuestionCard(props: QuestionCardProps) {
             )}
 
             <div className="flex flex-wrap gap-2 mb-5">
-                {tags.map((tag, i) => (
+                {tags.filter((t) => String(t ?? "").trim()).map((tag, i) => (
                     <span
                         key={i}
                         className="bg-accent text-accent-foreground text-xs font-semibold rounded px-3 py-1"
@@ -465,7 +465,8 @@ export function QuestionCard(props: QuestionCardProps) {
                 ))}
             </div>
 
-            <h2 className="text-base sm:text-lg font-bold mb-5 text-foreground">{statement}</h2>
+            {/* pre-line: mantém os parágrafos do enunciado (fonte, texto-base, comando). */}
+            <h2 className="mb-5 whitespace-pre-line text-base font-medium leading-relaxed text-foreground sm:text-[17px]">{statement}</h2>
 
             <div className="flex flex-col gap-2 mb-5">
                 {options.map((opt, idx) => {

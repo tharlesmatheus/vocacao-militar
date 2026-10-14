@@ -30,7 +30,7 @@ import {
 type Filter = "TODAS" | "DESBLOQUEADAS" | "EM_PROGRESSO";
 
 /* Patentes em escala metálica: praças em bronze, sargentos em prata,
-   oficiais em ouro e o General em dourado da marca. */
+   oficiais e General em ouro. */
 const rankTone: Record<string, string> = {
     Soldado: "text-orange-700 dark:text-orange-400",
     Cabo: "text-orange-700 dark:text-orange-400",
@@ -45,7 +45,7 @@ const rankTone: Record<string, string> = {
     Major: "text-amber-700 dark:text-amber-400",
     "Tenente Coronel": "text-amber-700 dark:text-amber-400",
     Coronel: "text-amber-700 dark:text-amber-400",
-    General: "text-primary",
+    General: "text-yellow-600 dark:text-yellow-300",
 };
 
 const rarityTone: Record<string, string> = {

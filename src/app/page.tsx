@@ -34,6 +34,9 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { usePerfilAluno } from "@/lib/perfilAluno";
+import { CartaoMeta } from "@/components/painel/CartaoMeta";
+import { BoasVindas } from "@/components/painel/BoasVindas";
 import { ResponsiveContainer, PieChart, Pie, Tooltip, Cell } from "recharts";
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -245,6 +248,7 @@ function buildSlices(
  * ========================= */
 export default function DashboardHome() {
   const router = useRouter();
+  const { perfil, carregando: carregandoPerfil, erro: erroPerfil, recarregar: recarregarPerfil } = usePerfilAluno();
 
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -934,6 +938,13 @@ export default function DashboardHome() {
     }
   }
 
+  // Primeiro acesso (nunca escolheu meta nem pulou): leva para a escolha do concurso.
+  // Se a tabela ainda não existir (migração não rodada), erroPerfil evita o redirecionamento.
+  const precisaEscolherMeta = !!userId && !carregandoPerfil && !perfil && !erroPerfil;
+  useEffect(() => {
+    if (precisaEscolherMeta) router.replace("/meta?primeiro=1");
+  }, [precisaEscolherMeta, router]);
+
   if (loading) {
     return (
       <main className="min-h-[100dvh] flex items-center justify-center px-4">
@@ -952,6 +963,13 @@ export default function DashboardHome() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">Cada questão resolvida te deixa mais perto da farda.</p>
         </div>
+
+        {!carregandoPerfil && !erroPerfil && (
+          <>
+            <BoasVindas perfil={perfil} aoOcultar={recarregarPerfil} />
+            <CartaoMeta temMeta={!!perfil?.meta_instituicao} />
+          </>
+        )}
 
         {/* DATA / HORA */}
         <div className="w-full rounded-2xl border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground shadow-sm flex items-center justify-center sm:justify-start gap-2">
@@ -1081,7 +1099,7 @@ export default function DashboardHome() {
                 href={it.href}
                 className="group relative overflow-hidden rounded-lg border border-border bg-card p-4 shadow-sm transition hover:border-primary/70 active:scale-[0.99]"
               >
-                {/* filete dourado à esquerda, acende no hover */}
+                {/* filete azul à esquerda, acende no hover */}
                 <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-primary/40 transition group-hover:bg-primary" />
                 <div className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
                   <Icon className="h-5 w-5 text-primary" />

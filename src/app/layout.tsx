@@ -100,9 +100,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-status-bar-style" content="black" />
         <meta name="apple-mobile-web-app-title" content="Vocação" />
         <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" type="image/png" href="/icons/icon-192x192.png" />
-        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
-        <link rel="mask-icon" href="/icons/safari-pinned-tab.svg" color="#f2b705" />
+        <link rel="icon" type="image/png" href="/icon-192.png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="application-name" content="Vocação" />
         <meta
           name="description"
@@ -112,7 +111,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
 
       <body className="bg-background text-foreground font-sans antialiased overflow-x-hidden">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} storageKey="vm-tema" disableTransitionOnChange>
           {showChrome && (
             <Sidebar
               collapsed={sidebarCollapsed}

@@ -20,7 +20,7 @@ import { FormularioAssinatura } from "@/components/publico/FormularioAssinatura"
  * Página pública de vendas. Não exige login e não mostra a barra lateral do app
  * (ver isPublicRoute em app/layout.tsx).
  *
- * Visual "tático": fundo preto, dourado de insígnia e títulos condensados.
+ * Visual "tático": fundo preto, azul policial e títulos condensados.
  * As cores são aplicadas sobrescrevendo as variáveis do tema só neste bloco,
  * então o FormularioAssinatura (que usa bg-card, text-primary etc.) herda o
  * visual escuro sem precisar de uma versão própria.
@@ -39,9 +39,9 @@ const temaTatico = {
     "--muted-foreground": "#a1a1aa",
     "--border": "#2c2c2c",
     "--input": "#2c2c2c",
-    "--primary": "#f2b705",
-    "--primary-foreground": "#0a0a0a",
-    "--ring": "#f2b705",
+    "--primary": "#3b82f6",
+    "--primary-foreground": "#ffffff",
+    "--ring": "#3b82f6",
 } as CSSProperties;
 
 export const metadata: Metadata = {
@@ -78,13 +78,13 @@ const faq = [
     { p: "Funciona no celular?", r: "Sim. Funciona no navegador do celular, do tablet e do computador, e pode ser instalada na tela inicial do celular." },
 ];
 
-/* Faixa zebrada amarela e preta, usada como divisória. */
+/* Faixa zebrada azul e preta, usada como divisória. */
 function Faixa() {
     return (
         <div
             aria-hidden
             className="h-2 w-full"
-            style={{ backgroundImage: "repeating-linear-gradient(-45deg, #f2b705 0 14px, #0a0a0a 14px 28px)" }}
+            style={{ backgroundImage: "repeating-linear-gradient(-45deg, #3b82f6 0 14px, #0a0a0a 14px 28px)" }}
         />
     );
 }
@@ -146,7 +146,7 @@ export default function AssinarPage() {
                         </ul>
                     </div>
 
-                    <div id="assinar" className="relative scroll-mt-6 border border-primary/40 bg-[#0f0f0f] p-6 shadow-[0_0_60px_rgba(242,183,5,0.08)] sm:p-8">
+                    <div id="assinar" className="relative scroll-mt-6 border border-primary/40 bg-[#0f0f0f] p-6 shadow-[0_0_60px_rgba(59,130,246,0.10)] sm:p-8">
                         <span aria-hidden className="absolute -top-px left-6 right-6 h-[3px] bg-primary" />
                         <div className="mb-5">
                             <div className={`${fonteTitulo.className} text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground`}>Assinatura mensal</div>

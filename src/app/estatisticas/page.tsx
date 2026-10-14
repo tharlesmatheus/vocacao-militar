@@ -14,6 +14,7 @@ import {
     Percent,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { DesempenhoMeta } from "@/components/painel/DesempenhoMeta";
 import {
     ResponsiveContainer,
     AreaChart,
@@ -1576,6 +1577,7 @@ export default function EstatisticasPage() {
 
     return (
         <div className="mx-auto max-w-6xl space-y-6 px-3 py-6 sm:px-6">
+            <DesempenhoMeta />
             <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>

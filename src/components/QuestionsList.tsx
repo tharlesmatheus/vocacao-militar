@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { QuestionCard } from "./QuestionCard";
 import { Pagination } from "./Pagination";
 import { supabase } from "../lib/supabaseClient";
+import { rotuloBanca, rotuloModalidade } from "@/lib/rotulos";
 
 /* ========== Tipos ========== */
 type Filters = {
@@ -394,8 +395,8 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                                         q.cargo,
                                         q.disciplina,
                                         q.assunto,
-                                        q.modalidade,
-                                        q.banca,
+                                        rotuloModalidade(q.modalidade),
+                                        rotuloBanca(q.banca),
                                     ]}
                                     statement={q.enunciado}
                                     options={Object.entries(q.alternativas).map(([letter, text]) => ({

@@ -1,4 +1,12 @@
 import { NextResponse } from "next/server";
+import { exigirAdmin } from "@/lib/servidor/admin";
+
+/*
+ * Proxy de IA usado SOMENTE pela tela /landing (cadastro de questões, só admin).
+ * Antes aceitava qualquer usuário logado — e qualquer pessoa pode criar conta
+ * em /auth —, o que deixava a cota do Gemini aberta. Agora exige administrador.
+ * Os comentários dos alunos usam /api/questoes/[id]/comentario, com prompt fixo.
+ */
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,10 +19,6 @@ type RequestBody = {
     prompt?: unknown;
 };
 
-type AuthResult =
-    | { ok: true }
-    | { ok: false; status: number; error: string };
-
 function respostaErro(error: string, status: number) {
     return NextResponse.json(
         { error },
@@ -25,78 +29,6 @@ function respostaErro(error: string, status: number) {
             },
         }
     );
-}
-
-async function validarUsuario(
-    request: Request
-): Promise<AuthResult> {
-    const authorization =
-        request.headers.get("authorization") ?? "";
-
-    const accessToken = authorization.startsWith("Bearer ")
-        ? authorization.slice(7).trim()
-        : "";
-
-    if (!accessToken) {
-        return {
-            ok: false,
-            status: 401,
-            error: "Usuário não autenticado.",
-        };
-    }
-
-    const supabaseUrl =
-        process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabasePublicKey =
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
-        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-    if (!supabaseUrl || !supabasePublicKey) {
-        console.error(
-            "Variáveis do Supabase ausentes no servidor."
-        );
-
-        return {
-            ok: false,
-            status: 500,
-            error: "Configuração de autenticação indisponível.",
-        };
-    }
-
-    try {
-        const authResponse = await fetch(
-            `${supabaseUrl.replace(/\/$/, "")}/auth/v1/user`,
-            {
-                method: "GET",
-                headers: {
-                    apikey: supabasePublicKey,
-                    Authorization: `Bearer ${accessToken}`,
-                },
-                cache: "no-store",
-            }
-        );
-
-        if (!authResponse.ok) {
-            return {
-                ok: false,
-                status: 401,
-                error: "Sessão inválida ou expirada.",
-            };
-        }
-
-        return { ok: true };
-    } catch (error) {
-        console.error(
-            "Falha ao validar sessão no Supabase:",
-            error
-        );
-
-        return {
-            ok: false,
-            status: 503,
-            error: "Não foi possível validar sua sessão.",
-        };
-    }
 }
 
 function extrairTextoGemini(data: unknown): string {
@@ -128,11 +60,8 @@ function extrairErroGemini(data: unknown): string {
 }
 
 export async function POST(request: Request) {
-    const auth = await validarUsuario(request);
-
-    if (!auth.ok) {
-        return respostaErro(auth.error, auth.status);
-    }
+    const auth = await exigirAdmin(request);
+    if ("resposta" in auth) return auth.resposta;
 
     const apiKey = process.env.GEMINI_API_KEY;
 
