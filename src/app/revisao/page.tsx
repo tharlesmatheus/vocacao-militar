@@ -494,6 +494,8 @@ export default function RevisaoPage() {
                     .select("questao_id,created_at")
                     .eq("user_id", uid)
                     .eq("tipo", "ERROS")
+                    // Recuperadas (2 acertos seguidos no treino) saem da agenda.
+                    .is("recuperada_em", null)
                     .order("created_at", {
                         ascending: true,
                     }),

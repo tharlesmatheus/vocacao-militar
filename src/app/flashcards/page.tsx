@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabaseClient";
+import { ListaCategorias } from "@/components/app/ListaCategorias";
+import { usePendentesRevisao } from "@/lib/revisoesPendentes";
 
 /* ============================================================================
  * Tipos
@@ -112,6 +114,8 @@ export default function FlashcardsPage() {
 
     const [viewLevel, setViewLevel] = useState<ViewLevel>("disciplinas");
     const [viewMode, setViewMode] = useState<ViewMode>("grid");
+    // Itens com revisão vencida: viram o selo "N para revisar" nos cards.
+    const pendentes = usePendentesRevisao("FLASHCARD");
 
     const [disciplinaSel, setDisciplinaSel] = useState<string | null>(null);
     const [assuntoSel, setAssuntoSel] = useState<string | null>(null);
@@ -319,7 +323,7 @@ export default function FlashcardsPage() {
             {
                 id: string;
                 nome: string;
-                total: number;
+                total: number; pendentes: number;
                 ativos: number;
             }
         >();
@@ -330,6 +334,7 @@ export default function FlashcardsPage() {
 
             if (atual) {
                 atual.total += 1;
+                if (pendentes.has(String(card.id))) atual.pendentes += 1;
                 if (card.active) atual.ativos += 1;
             } else {
                 map.set(id, {
@@ -339,6 +344,7 @@ export default function FlashcardsPage() {
                             ? "Sem disciplina canônica"
                             : nomeDisciplina(id),
                     total: 1,
+                    pendentes: pendentes.has(String(card.id)) ? 1 : 0,
                     ativos: card.active ? 1 : 0,
                 });
             }
@@ -357,6 +363,7 @@ export default function FlashcardsPage() {
         legacyMateriaMap,
         legacyAssuntoMap,
         disciplinaPorNome,
+        pendentes,
     ]);
 
     const assuntosAgrupados = useMemo(() => {
@@ -367,7 +374,7 @@ export default function FlashcardsPage() {
             {
                 id: string;
                 nome: string;
-                total: number;
+                total: number; pendentes: number;
                 ativos: number;
             }
         >();
@@ -381,6 +388,7 @@ export default function FlashcardsPage() {
 
             if (atual) {
                 atual.total += 1;
+                if (pendentes.has(String(card.id))) atual.pendentes += 1;
                 if (card.active) atual.ativos += 1;
             } else {
                 map.set(aId, {
@@ -390,6 +398,7 @@ export default function FlashcardsPage() {
                             ? "Sem assunto canônico"
                             : nomeAssunto(aId),
                     total: 1,
+                    pendentes: pendentes.has(String(card.id)) ? 1 : 0,
                     ativos: card.active ? 1 : 0,
                 });
             }
@@ -409,6 +418,7 @@ export default function FlashcardsPage() {
         legacyMateriaMap,
         legacyAssuntoMap,
         disciplinaPorNome,
+        pendentes,
     ]);
 
     const flashcardsFiltrados = useMemo(() => {
@@ -708,73 +718,6 @@ export default function FlashcardsPage() {
      * Componentes locais
      * ---------------------------------------------------------------------- */
 
-    function CategoryCard({
-        title,
-        total,
-        ativos,
-        onClick,
-    }: {
-        title: string;
-        total: number;
-        ativos: number;
-        onClick: () => void;
-    }) {
-        if (viewMode === "list") {
-            return (
-                <button
-                    type="button"
-                    onClick={onClick}
-                    className="flex w-full items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3 text-left transition hover:bg-muted"
-                >
-                    <div className="flex min-w-0 items-center gap-3">
-                        <div className="shrink-0 rounded-lg bg-primary/10 p-2 text-primary">
-                            <Brain size={18} />
-                        </div>
-
-                        <div className="min-w-0">
-                            <div className="truncate font-medium">
-                                {title}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                                {plural(total)}
-                            </div>
-                        </div>
-                    </div>
-
-                    {ativos !== total && (
-                        <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
-                            {ativos} ativos
-                        </span>
-                    )}
-                </button>
-            );
-        }
-
-        return (
-            <button
-                type="button"
-                onClick={onClick}
-                className="flex flex-col items-center rounded-xl border border-border bg-card p-6 text-center transition hover:shadow-md"
-            >
-                <div className="mb-4 rounded-xl bg-primary/10 p-4 text-primary">
-                    <Brain size={26} />
-                </div>
-
-                <h3 className="text-lg font-semibold">{title}</h3>
-
-                <p className="mt-2 text-sm text-muted-foreground">
-                    {plural(total)}
-                </p>
-
-                {ativos !== total && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        {ativos} ativos
-                    </p>
-                )}
-            </button>
-        );
-    }
-
     /* ------------------------------------------------------------------------
      * Loading
      * ---------------------------------------------------------------------- */
@@ -874,7 +817,8 @@ export default function FlashcardsPage() {
                 </div>
             )}
 
-            <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            {disciplinaSel && (
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <button
                     type="button"
                     onClick={voltarDisciplinas}
@@ -912,6 +856,7 @@ export default function FlashcardsPage() {
                     </>
                 )}
             </div>
+            )}
 
             {viewLevel === "disciplinas" && (
                 <>
@@ -922,25 +867,14 @@ export default function FlashcardsPage() {
                             onCreate={abrirNovoFlashcard}
                         />
                     ) : (
-                        <div
-                            className={
-                                viewMode === "grid"
-                                    ? "grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4"
-                                    : "space-y-3"
-                            }
-                        >
-                            {disciplinasAgrupadas.map((item) => (
-                                <CategoryCard
-                                    key={item.id}
-                                    title={item.nome}
-                                    total={item.total}
-                                    ativos={item.ativos}
-                                    onClick={() =>
-                                        entrarDisciplina(item.id)
-                                    }
-                                />
-                            ))}
-                        </div>
+                        <ListaCategorias
+                            itens={disciplinasAgrupadas.map((item) => ({ id: item.id, nome: item.nome, total: item.total, pendentes: item.pendentes, detalhe: item.ativos !== item.total ? `${item.total - item.ativos} inativos` : undefined }))}
+                            modo={viewMode}
+                            icone={<Brain size={20} />}
+                            unidade={["flashcard", "flashcards"]}
+                            rotuloBusca="Buscar disciplina"
+                            aoAbrir={(id) => entrarDisciplina(id)}
+                        />
                     )}
                 </>
             )}
@@ -963,23 +897,14 @@ export default function FlashcardsPage() {
                             onCreate={abrirNovoFlashcard}
                         />
                     ) : (
-                        <div
-                            className={
-                                viewMode === "grid"
-                                    ? "grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4"
-                                    : "space-y-3"
-                            }
-                        >
-                            {assuntosAgrupados.map((item) => (
-                                <CategoryCard
-                                    key={item.id}
-                                    title={item.nome}
-                                    total={item.total}
-                                    ativos={item.ativos}
-                                    onClick={() => entrarAssunto(item.id)}
-                                />
-                            ))}
-                        </div>
+                        <ListaCategorias
+                            itens={assuntosAgrupados.map((item) => ({ id: item.id, nome: item.nome, total: item.total, pendentes: item.pendentes, detalhe: item.ativos !== item.total ? `${item.total - item.ativos} inativos` : undefined }))}
+                            modo={viewMode}
+                            icone={<Brain size={20} />}
+                            unidade={["flashcard", "flashcards"]}
+                            rotuloBusca="Buscar assunto"
+                            aoAbrir={(id) => entrarAssunto(id)}
+                        />
                     )}
                 </>
             )}

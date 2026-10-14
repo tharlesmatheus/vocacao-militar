@@ -1,1049 +1,308 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { BookOpen, ChevronLeft, LayoutGrid, List, RotateCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import { QuestionCard } from "@/components/QuestionCard"; // ajuste path se necessário
-import { Pagination } from "@/components/Pagination"; // ajuste path se necessário
+import { CabecalhoPagina, Numero, Pagina, SeletorSegmentado, Vazio } from "@/components/app/Pagina";
+import { ListaCategorias } from "@/components/app/ListaCategorias";
+import { QuestionCard } from "@/components/QuestionCard";
+import { Pagination } from "@/components/Pagination";
 import { rotuloBanca, rotuloModalidade } from "@/lib/rotulos";
+import { usePendentesRevisao } from "@/lib/revisoesPendentes";
+import {
+    NOME_CADERNO,
+    carregarItensCaderno,
+    carregarResumoCadernos,
+    itensAtivos,
+    plural,
+    type CadernoTipo,
+    type ItemCaderno,
+    type ResumoCadernos,
+} from "@/lib/cadernos";
 
-/* ===================== Icons ===================== */
-function BookIcon({ className = "" }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 24 24" className={className} fill="none">
-            <path
-                d="M6 4h10a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2V6a2 2 0 0 1 2-2Z"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinejoin="round"
-            />
-            <path d="M8 7h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-    );
-}
-function XIcon({ className = "" }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 24 24" className={className} fill="none">
-            <path d="M15 9 9 15M9 9l6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-        </svg>
-    );
-}
-function CheckIcon({ className = "" }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 24 24" className={className} fill="none">
-            <path
-                d="M20 7 10 17l-4-4"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-            />
-        </svg>
-    );
-}
-function ArrowRightIcon({ className = "" }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 24 24" className={className} fill="none">
-            <path d="M5 12h12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-            <path d="m13 6 6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-        </svg>
-    );
-}
-function ArrowLeftIcon({ className = "" }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 24 24" className={className} fill="none">
-            <path d="M19 12H7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-            <path
-                d="m11 6-6 6 6 6"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-            />
-        </svg>
-    );
-}
-function GridIcon({ active }: { active: boolean }) {
-    return (
-        <div
-            className={`w-10 h-10 rounded-xl border flex items-center justify-center ${active ? "bg-card border-border" : "bg-muted border-border"
-                }`}
-        >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
-                <path
-                    d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                />
-            </svg>
-        </div>
-    );
-}
-function ListIcon({ active }: { active: boolean }) {
-    return (
-        <div
-            className={`w-10 h-10 rounded-xl border flex items-center justify-center ${active ? "bg-card border-border" : "bg-muted border-border"
-                }`}
-        >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
-                <path
-                    d="M8 6h13M8 12h13M8 18h13M3 6h1M3 12h1M3 18h1"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                />
-            </svg>
-        </div>
-    );
-}
-
-/* ===================== Types ===================== */
-type CadernoTipo = "ERROS" | "ACERTOS";
-type ViewMode = "grid" | "list";
-
-type ResumoTipo = { tipo: CadernoTipo; disciplinas: number; questoes: number; anotadas: number };
-type DisciplinaResumo = { tipo: CadernoTipo; disciplina: string; questoes: number; anotadas: number };
-type AssuntoResumo = { tipo: CadernoTipo; disciplina: string; assunto: string; questoes: number; anotadas: number };
-
-type CadernoItem = {
-    questao_id: string;
-    tipo: CadernoTipo;
-    anotacao: string | null;
-    created_at?: string;
-};
-
-type QuestaoMin = {
-    id: string;
-    questao_disciplina_id: string | null;
-    questao_assunto_id: string | null;
-    disciplina: string | null;
-    assunto: string | null;
-};
+/*
+ * Cadernos: o lugar de TREINAR o que o aluno errou (ou acertou no chute).
+ * - Erros saem do caderno ativo depois de 2 acertos seguidos ("recuperadas").
+ * - O Centro de Revisões continua sendo a agenda do dia.
+ */
 
 type Questao = {
     id: string;
-    questao_disciplina_id?: string | null;
-    questao_assunto_id?: string | null;
-    instituicao: string;
-    cargo: string;
-    disciplina: string;
-    assunto: string;
-    modalidade: string;
-    banca: string;
+    instituicao: string | null;
+    cargo: string | null;
+    disciplina: string | null;
+    assunto: string | null;
+    modalidade: string | null;
+    banca: string | null;
+    ano?: number | null;
     enunciado: string;
-    alternativas: { [key: string]: string };
+    alternativas: Record<string, string>;
     correta: string;
-    explicacao: string;
-    comentarios?: any[];
-    erros?: any[];
-    created_at?: string;
+    explicacao: string | null;
 };
 
-/* ===================== Helpers ===================== */
-function pct(anotadas: number, questoes: number) {
-    if (!questoes) return 0;
-    return Math.round((anotadas / questoes) * 100);
-}
+const POR_PAGINA = 5;
 
-function chunk<T>(arr: T[], size: number) {
-    const out: T[][] = [];
-    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-    return out;
-}
-
-/* ===================== Page ===================== */
-export default function CadernosPageGeral() {
-    const [loading, setLoading] = useState(true);
+export default function CadernosPage() {
+    const [itens, setItens] = useState<ItemCaderno[] | null>(null);
+    const [resumo, setResumo] = useState<ResumoCadernos | null>(null);
     const [erro, setErro] = useState("");
-    const [userId, setUserId] = useState<string | null>(null);
-
-    // Navegação dentro da única página
-    const [step, setStep] = useState<"home" | "disciplinas" | "assuntos" | "questoes">("home");
-    const [tipoSelecionado, setTipoSelecionado] = useState<CadernoTipo | null>(null);
-    const [disciplinaSelecionada, setDisciplinaSelecionada] = useState<string | null>(null);
-    const [assuntoSelecionado, setAssuntoSelecionado] = useState<string | null>(null);
-
-    const [mode, setMode] = useState<ViewMode>("grid");
-
-    // Resumo topo
-    const [resumos, setResumos] = useState<Record<CadernoTipo, ResumoTipo>>({
-        ERROS: { tipo: "ERROS", disciplinas: 0, questoes: 0, anotadas: 0 },
-        ACERTOS: { tipo: "ACERTOS", disciplinas: 0, questoes: 0, anotadas: 0 },
-    });
-    const [topErros, setTopErros] = useState<DisciplinaResumo[]>([]);
-    const [topAcertos, setTopAcertos] = useState<DisciplinaResumo[]>([]);
-
-    // Cache: itens do caderno por tipo (IDs e anotação)
-    const [cacheItens, setCacheItens] = useState<Record<CadernoTipo, CadernoItem[]>>({
-        ERROS: [],
-        ACERTOS: [],
-    });
-
-    // Cache: metadados mínimos das questões (id, disciplina, assunto)
-    const [questoesMinMap, setQuestoesMinMap] = useState<Map<string, QuestaoMin>>(new Map());
-
-    // Catálogo canônico. O caderno não armazena disciplina/assunto:
-    // ele sempre resolve a classificação pela questão relacionada.
-    const [disciplinaCatalogoMap, setDisciplinaCatalogoMap] = useState<Record<string, string>>({});
-    const [assuntoCatalogoMap, setAssuntoCatalogoMap] = useState<Record<string, string>>({});
-
-    function nomeDisciplinaQuestao(q?: QuestaoMin | Questao | null) {
-        if (!q) return "Sem disciplina";
-        const id = q.questao_disciplina_id ?? null;
-        if (id && disciplinaCatalogoMap[id]) return disciplinaCatalogoMap[id];
-        return String(q.disciplina ?? "").trim() || "Sem disciplina";
-    }
-
-    function nomeAssuntoQuestao(q?: QuestaoMin | Questao | null) {
-        if (!q) return "Sem assunto";
-        const id = q.questao_assunto_id ?? null;
-        if (id && assuntoCatalogoMap[id]) return assuntoCatalogoMap[id];
-        return String(q.assunto ?? "").trim() || "Sem assunto";
-    }
-
-    // Listas do passo
-    const [disciplinas, setDisciplinas] = useState<DisciplinaResumo[]>([]);
-    const [assuntos, setAssuntos] = useState<AssuntoResumo[]>([]);
-
-    // Questões completas (apenas no final e paginado)
-    const [idsCache, setIdsCache] = useState<string[]>([]);
+    const [tipo, setTipo] = useState<CadernoTipo>("ERROS");
+    const [modo, setModo] = useState<"grid" | "list">("grid");
+    const [disciplina, setDisciplina] = useState<string | null>(null);
+    const [assunto, setAssunto] = useState<string | null>(null);
+    const [pagina, setPagina] = useState(1);
     const [questoes, setQuestoes] = useState<Questao[]>([]);
-    const [qLoading, setQLoading] = useState(false);
+    const [carregandoQ, setCarregandoQ] = useState(false);
+    const pendentes = usePendentesRevisao("CADERNO");
 
-    // paginação
-    const [page, setPage] = useState(1);
-    const [perPage, setPerPage] = useState(3);
-
-    const errosPct = useMemo(() => pct(resumos.ERROS.anotadas, resumos.ERROS.questoes), [resumos.ERROS]);
-    const acertosPct = useMemo(() => pct(resumos.ACERTOS.anotadas, resumos.ACERTOS.questoes), [resumos.ACERTOS]);
-    const tituloTipo = tipoSelecionado === "ERROS" ? "Erros" : "Acertos";
-
-    /* ===================== Load Inicial (CATÁLOGO CANÔNICO) ===================== */
-    useEffect(() => {
-        let mounted = true;
-
-        (async () => {
-            setLoading(true);
-            setErro("");
-
-            const { data: auth, error: authErr } = await supabase.auth.getUser();
-            const uid = auth?.user?.id ?? null;
-
-            if (!mounted) return;
-
-            if (authErr || !uid) {
-                setUserId(null);
-                setLoading(false);
-                return;
-            }
-
-            setUserId(uid);
-
-            try {
-                const [itensReq, disciplinasReq, assuntosReq] = await Promise.all([
-                    supabase
-                        .from("caderno_itens")
-                        .select("questao_id, tipo, anotacao, created_at")
-                        .eq("user_id", uid),
-
-                    supabase
-                        .from("questao_disciplinas")
-                        .select("id,nome")
-                        .eq("user_id", uid)
-                        .eq("ativo", true)
-                        .order("nome"),
-
-                    supabase
-                        .from("questao_assuntos")
-                        .select("id,nome,disciplina_id")
-                        .eq("user_id", uid)
-                        .eq("ativo", true)
-                        .order("nome"),
-                ]);
-
-                if (itensReq.error) throw itensReq.error;
-                if (disciplinasReq.error) throw disciplinasReq.error;
-                if (assuntosReq.error) throw assuntosReq.error;
-
-                const itens = (itensReq.data ?? []) as CadernoItem[];
-                const itensErros = itens.filter((i) => i.tipo === "ERROS");
-                const itensAcertos = itens.filter((i) => i.tipo === "ACERTOS");
-
-                setCacheItens({ ERROS: itensErros, ACERTOS: itensAcertos });
-
-                const localDiscMap: Record<string, string> = {};
-                for (const row of disciplinasReq.data ?? []) {
-                    localDiscMap[String(row.id)] = String(row.nome ?? "").trim();
-                }
-
-                const localAssMap: Record<string, string> = {};
-                for (const row of assuntosReq.data ?? []) {
-                    localAssMap[String(row.id)] = String(row.nome ?? "").trim();
-                }
-
-                setDisciplinaCatalogoMap(localDiscMap);
-                setAssuntoCatalogoMap(localAssMap);
-
-                // O caderno só guarda questao_id. Toda categorização vem da questão.
-                const allIds = Array.from(
-                    new Set(itens.map((i) => i.questao_id))
-                ).filter(Boolean);
-
-                const minMap = new Map<string, QuestaoMin>();
-
-                if (allIds.length) {
-                    for (const part of chunk(allIds, 500)) {
-                        const { data: qsMin, error: qsMinErr } = await supabase
-                            .rpc("questoes_por_ids", { p_ids: part })
-                            .select(
-                                "id,questao_disciplina_id,questao_assunto_id,disciplina,assunto"
-                            );
-
-                        if (qsMinErr) throw qsMinErr;
-
-                        (qsMin ?? []).forEach((q: any) => {
-                            minMap.set(q.id, q as QuestaoMin);
-                        });
-                    }
-                }
-
-                setQuestoesMinMap(minMap);
-
-                const resolveDisc = (q?: QuestaoMin) => {
-                    const id = q?.questao_disciplina_id ?? null;
-                    if (id && localDiscMap[id]) return localDiscMap[id];
-                    return String(q?.disciplina ?? "").trim() || "Sem disciplina";
-                };
-
-                const calcResumo = (tipo: CadernoTipo) => {
-                    const items = tipo === "ERROS" ? itensErros : itensAcertos;
-
-                    let questoes = 0;
-                    let anotadas = 0;
-                    const disciplinasSet = new Set<string>();
-                    const byDisc: Record<
-                        string,
-                        { questoes: number; anotadas: number }
-                    > = {};
-
-                    for (const it of items) {
-                        const q = minMap.get(it.questao_id);
-                        const disciplina = resolveDisc(q);
-                        const anotada = !!(
-                            it.anotacao &&
-                            it.anotacao.trim().length > 0
-                        );
-
-                        questoes += 1;
-                        if (anotada) anotadas += 1;
-
-                        disciplinasSet.add(disciplina);
-
-                        if (!byDisc[disciplina]) {
-                            byDisc[disciplina] = {
-                                questoes: 0,
-                                anotadas: 0,
-                            };
-                        }
-
-                        byDisc[disciplina].questoes += 1;
-                        if (anotada) {
-                            byDisc[disciplina].anotadas += 1;
-                        }
-                    }
-
-                    const resumo: ResumoTipo = {
-                        tipo,
-                        questoes,
-                        anotadas,
-                        disciplinas: disciplinasSet.size,
-                    };
-
-                    const top: DisciplinaResumo[] = Object.entries(byDisc)
-                        .map(([disciplina, v]) => ({
-                            tipo,
-                            disciplina,
-                            questoes: v.questoes,
-                            anotadas: v.anotadas,
-                        }))
-                        .sort((a, b) => b.questoes - a.questoes)
-                        .slice(0, 4);
-
-                    return { resumo, top };
-                };
-
-                const rE = calcResumo("ERROS");
-                const rA = calcResumo("ACERTOS");
-
-                setResumos({
-                    ERROS: rE.resumo,
-                    ACERTOS: rA.resumo,
-                });
-
-                setTopErros(rE.top);
-                setTopAcertos(rA.top);
-            } catch (e: any) {
-                setErro(e?.message || "Erro ao carregar cadernos.");
-            } finally {
-                if (mounted) setLoading(false);
-            }
-        })();
-
-        return () => {
-            mounted = false;
-        };
+    const carregar = useCallback(async () => {
+        try {
+            const lista = await carregarItensCaderno();
+            setItens(lista);
+            setResumo(await carregarResumoCadernos(lista));
+        } catch (e: any) {
+            setErro(e?.message || "Não foi possível carregar seus cadernos.");
+            setItens([]);
+        }
     }, []);
 
-    /* ===================== Steps ===================== */
-    function entrarDisciplinas(tipo: CadernoTipo) {
-        setTipoSelecionado(tipo);
-        setDisciplinaSelecionada(null);
-        setAssuntoSelecionado(null);
-        setQuestoes([]);
-        setIdsCache([]);
-        setAssuntos([]);
-        setStep("disciplinas");
-        setMode("grid");
+    useEffect(() => {
+        carregar();
+    }, [carregar]);
 
-        const items = cacheItens[tipo];
+    const ativos = useMemo(() => (itens ? itensAtivos(itens, tipo) : []), [itens, tipo]);
 
-        const byDisc: Record<string, { questoes: number; anotadas: number }> = {};
-        for (const it of items) {
-            const q = questoesMinMap.get(it.questao_id);
-            const disciplina = nomeDisciplinaQuestao(q);
-            const anotada = !!(it.anotacao && it.anotacao.trim().length > 0);
-
-            if (!byDisc[disciplina]) byDisc[disciplina] = { questoes: 0, anotadas: 0 };
-            byDisc[disciplina].questoes += 1;
-            if (anotada) byDisc[disciplina].anotadas += 1;
+    const disciplinas = useMemo(() => {
+        const mapa = new Map<string, { id: string; nome: string; total: number; pendentes: number }>();
+        for (const i of ativos) {
+            const d = mapa.get(i.disciplina) ?? { id: i.disciplina, nome: i.disciplina, total: 0, pendentes: 0 };
+            d.total += 1;
+            if (tipo === "ERROS" && pendentes.has(i.questao_id)) d.pendentes += 1;
+            mapa.set(i.disciplina, d);
         }
+        return [...mapa.values()];
+    }, [ativos, pendentes, tipo]);
 
-        const list: DisciplinaResumo[] = Object.entries(byDisc)
-            .map(([disciplina, v]) => ({ tipo, disciplina, questoes: v.questoes, anotadas: v.anotadas }))
-            .sort((a, b) => b.questoes - a.questoes);
+    const daDisciplina = useMemo(() => ativos.filter((i) => i.disciplina === disciplina), [ativos, disciplina]);
+    const assuntos = useMemo(() => {
+        const mapa = new Map<string, number>();
+        for (const i of daDisciplina) mapa.set(i.assunto, (mapa.get(i.assunto) ?? 0) + 1);
+        return [...mapa.entries()].sort((a, b) => b[1] - a[1]);
+    }, [daDisciplina]);
+    const filtrados = useMemo(
+        () => daDisciplina.filter((i) => !assunto || i.assunto === assunto),
+        [daDisciplina, assunto]
+    );
 
-        setDisciplinas(list);
-    }
-
-    function entrarAssuntos(disciplina: string) {
-        if (!tipoSelecionado) return;
-        setDisciplinaSelecionada(disciplina);
-        setAssuntoSelecionado(null);
-        setQuestoes([]);
-        setIdsCache([]);
-        setStep("assuntos");
-        setMode("grid");
-
-        const items = cacheItens[tipoSelecionado];
-
-        const byAssunto: Record<string, { questoes: number; anotadas: number }> = {};
-        for (const it of items) {
-            const q = questoesMinMap.get(it.questao_id);
-            const disc = nomeDisciplinaQuestao(q);
-            if (disc !== disciplina) continue;
-
-            const assunto = nomeAssuntoQuestao(q);
-            const anotada = !!(it.anotacao && it.anotacao.trim().length > 0);
-
-            if (!byAssunto[assunto]) byAssunto[assunto] = { questoes: 0, anotadas: 0 };
-            byAssunto[assunto].questoes += 1;
-            if (anotada) byAssunto[assunto].anotadas += 1;
-        }
-
-        const list: AssuntoResumo[] = Object.entries(byAssunto)
-            .map(([assunto, v]) => ({
-                tipo: tipoSelecionado,
-                disciplina,
-                assunto,
-                questoes: v.questoes,
-                anotadas: v.anotadas,
-            }))
-            .sort((a, b) => b.questoes - a.questoes);
-
-        setAssuntos(list);
-    }
-
-    async function carregarPaginaQuestoes(ids: string[], pageNum: number, per: number) {
-        const start = (pageNum - 1) * per;
-        const slice = ids.slice(start, start + per);
-
-        if (!slice.length) {
+    // Página atual de questões da disciplina/assunto escolhidos.
+    useEffect(() => {
+        if (!disciplina) return;
+        const ids = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA).map((i) => i.questao_id);
+        if (!ids.length) {
             setQuestoes([]);
             return;
         }
-
-        // ✅ pega completo só o necessário da página
-        const { data, error } = await supabase
-            .rpc("questoes_por_ids", { p_ids: slice })
-            .select(
-                "id, questao_disciplina_id, questao_assunto_id, instituicao, cargo, disciplina, assunto, modalidade, banca, enunciado, alternativas, correta, explicacao, comentarios, erros, created_at"
-            );
-
-        if (error) throw error;
-
-        // mantém a ordem do slice
-        const map = new Map(
-            (data ?? []).map((q: any) => {
-                const canonicalDisciplina =
-                    (q.questao_disciplina_id &&
-                        disciplinaCatalogoMap[q.questao_disciplina_id]) ||
-                    String(q.disciplina ?? "").trim() ||
-                    "Sem disciplina";
-
-                const canonicalAssunto =
-                    (q.questao_assunto_id &&
-                        assuntoCatalogoMap[q.questao_assunto_id]) ||
-                    String(q.assunto ?? "").trim() ||
-                    "Sem assunto";
-
-                return [
-                    q.id,
-                    {
-                        ...q,
-                        disciplina: canonicalDisciplina,
-                        assunto: canonicalAssunto,
-                    },
-                ];
-            })
-        );
-
-        const ordered = slice
-            .map((id) => map.get(id))
-            .filter(Boolean) as Questao[];
-
-        setQuestoes(ordered);
-    }
-
-    async function entrarQuestoes(assunto: string) {
-        if (!tipoSelecionado || !disciplinaSelecionada) return;
-
-        setAssuntoSelecionado(assunto);
-        setStep("questoes");
-        setPage(1);
-        setErro("");
-        setQLoading(true);
-
-        try {
-            const items = cacheItens[tipoSelecionado];
-
-            // filtra IDs do assunto selecionado usando o map mínimo (sem query)
-            const ids = items
-                .filter((it) => {
-                    const q = questoesMinMap.get(it.questao_id);
-                    const disc = nomeDisciplinaQuestao(q);
-                    const ass = nomeAssuntoQuestao(q);
-                    return disc === disciplinaSelecionada && ass === assunto;
-                })
-                .map((it) => it.questao_id);
-
-            setIdsCache(ids);
-
-            if (!ids.length) {
-                setQuestoes([]);
-                return;
-            }
-
-            await carregarPaginaQuestoes(ids, 1, perPage);
-        } catch (e: any) {
-            setErro(e?.message || "Erro ao carregar questões.");
-            setQuestoes([]);
-        } finally {
-            setQLoading(false);
-        }
-    }
-
-    // paginação no step questoes
-    useEffect(() => {
-        if (step !== "questoes") return;
-        if (!idsCache.length) return;
-
-        let cancelled = false;
-        (async () => {
-            try {
-                setQLoading(true);
-                await carregarPaginaQuestoes(idsCache, page, perPage);
-            } catch (e: any) {
-                if (!cancelled) setErro(e?.message || "Erro ao paginar questões.");
-            } finally {
-                if (!cancelled) setQLoading(false);
-            }
-        })();
-
+        let ativo = true;
+        setCarregandoQ(true);
+        supabase
+            .rpc("questoes_por_ids", { p_ids: ids })
+            .select("id,instituicao,cargo,disciplina,assunto,modalidade,banca,ano,enunciado,alternativas,correta,explicacao")
+            .then(({ data, error }) => {
+                if (!ativo) return;
+                if (error) setErro(error.message);
+                const mapa = new Map(((data ?? []) as Questao[]).map((q) => [q.id, q]));
+                setQuestoes(ids.map((id) => mapa.get(id)).filter(Boolean) as Questao[]);
+                setCarregandoQ(false);
+            });
         return () => {
-            cancelled = true;
+            ativo = false;
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, perPage]);
+    }, [disciplina, filtrados, pagina]);
 
-    /* ===================== UI ===================== */
+    function trocarTipo(t: CadernoTipo) {
+        setTipo(t);
+        setDisciplina(null);
+        setAssunto(null);
+        setPagina(1);
+    }
+
+    function abrirDisciplina(d: string) {
+        setDisciplina(d);
+        setAssunto(null);
+        setPagina(1);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    const linkTreino = (extra: Record<string, string | null> = {}) => {
+        const qs = new URLSearchParams({ tipo });
+        for (const [k, v] of Object.entries(extra)) if (v) qs.set(k, v);
+        return `/cadernos/treino?${qs}`;
+    };
+
+    const taxa = resumo && resumo.erros_total ? Math.round((100 * resumo.recuperadas) / resumo.erros_total) : 0;
+
     return (
-        <div className="flex w-full flex-col gap-6">
-            {/* Header */}
-            <div className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-end md:justify-between">
-                <div className="min-w-0">
-                    <div>
-                        <h1 className="text-3xl font-extrabold text-foreground">Meus Cadernos</h1>
-                        <p className="mt-1.5 text-sm text-muted-foreground">
-                            Organize suas questões. As revisões efetivas acontecem no Centro de Revisões.
-                        </p>
-                    </div>
-                </div>
+        <Pagina>
+            <CabecalhoPagina
+                titulo="Cadernos"
+                descricao="Refaça o que você errou até acertar. Questão errada sai do caderno depois de 2 acertos seguidos."
+                acoes={
+                    <Link href="/revisao" className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted">
+                        Centro de revisões
+                    </Link>
+                }
+            />
 
-                <button
-                    type="button"
-                    onClick={() => {
-                        window.location.href = "/revisao";
-                    }}
-                    className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
-                >
-                    Ir para Revisões
-                </button>
+            {erro && <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">{erro}</div>}
+
+            {/* Números */}
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <Numero rotulo="No caderno de erros" valor={resumo ? resumo.erros_ativos.toLocaleString("pt-BR") : "—"} detalhe="questões para refazer" />
+                <Numero rotulo="Para revisar hoje" valor={resumo ? resumo.para_revisar.toLocaleString("pt-BR") : "—"} detalhe="pela sua agenda de revisão" />
+                <Numero rotulo="Recuperadas" valor={resumo ? resumo.recuperadas.toLocaleString("pt-BR") : "—"} detalhe="errou antes, agora acerta" />
+                <Numero rotulo="Taxa de recuperação" valor={resumo ? `${taxa}%` : "—"} detalhe="dos erros já recuperados" />
             </div>
 
-            {!userId && !loading && (
-                <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
-                    <p className="text-sm text-muted-foreground">Você precisa estar logado para acessar seus cadernos.</p>
-                </div>
-            )}
-
-            {erro && <div className="mb-6 text-sm text-red-600 dark:text-red-400">{erro}</div>}
-
-            {/* HOME */}
-            {userId && step === "home" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* ERROS */}
-                    <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
-                        <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-xl bg-red-500 flex items-center justify-center text-white">
-                                <XIcon className="w-7 h-7" />
-                            </div>
-                            <div>
-                                <h2 className="text-xl font-bold text-foreground">Erros</h2>
-                                <p className="text-sm text-muted-foreground">Questões que você errou para revisar</p>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-3 mt-5">
-                            <div className="bg-muted rounded-xl p-4 text-center">
-                                <div className="text-xl font-extrabold text-primary">{loading ? "—" : resumos.ERROS.disciplinas}</div>
-                                <div className="text-xs text-muted-foreground mt-1">Disciplinas</div>
-                            </div>
-                            <div className="bg-muted rounded-xl p-4 text-center">
-                                <div className="text-xl font-extrabold text-red-500">{loading ? "—" : resumos.ERROS.questoes}</div>
-                                <div className="text-xs text-muted-foreground mt-1">Questões</div>
-                            </div>
-                            <div className="bg-muted rounded-xl p-4 text-center">
-                                <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{loading ? "—" : resumos.ERROS.anotadas}</div>
-                                <div className="text-xs text-muted-foreground mt-1">Anotadas</div>
-                            </div>
-                        </div>
-
-                        <div className="mt-5">
-                            <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
-                                <span>Progresso de anotações</span>
-                                <span className="text-primary font-semibold">{loading ? "—" : `${errosPct}%`}</span>
-                            </div>
-                            <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                <div className="h-full bg-red-500 rounded-full transition-all" style={{ width: `${loading ? 0 : errosPct}%` }} />
-                            </div>
-                        </div>
-
-                        <div className="mt-6">
-                            <button
-                                onClick={() => entrarDisciplinas("ERROS")}
-                                className="w-full inline-flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white font-semibold py-3 rounded-xl transition"
-                            >
-                                Ver Disciplinas <ArrowRightIcon className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {topErros.length > 0 && (
-                            <div className="mt-6 pt-5 border-t border-border">
-                                <div className="text-xs font-semibold text-muted-foreground mb-3">Principais disciplinas</div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {topErros.map((d) => (
-                                        <div key={d.disciplina} className="bg-muted rounded-xl p-3">
-                                            <div className="text-sm font-semibold text-foreground">{d.disciplina}</div>
-                                            <div className="text-xs text-muted-foreground mt-1">
-                                                {d.questoes} questões • {d.anotadas} anotadas
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <SeletorSegmentado
+                    rotulo="Caderno"
+                    opcoes={[
+                        { id: "ERROS", nome: `Erros${itens ? ` (${itensAtivos(itens, "ERROS").length})` : ""}` },
+                        { id: "ACERTOS", nome: `Acertei no chute${itens ? ` (${itensAtivos(itens, "ACERTOS").length})` : ""}` },
+                    ]}
+                    valor={tipo}
+                    aoMudar={trocarTipo}
+                />
+                {!disciplina && ativos.length > 0 && (
+                    <div className="inline-flex rounded-lg border border-border bg-muted p-1">
+                        <button type="button" aria-label="Grade" onClick={() => setModo("grid")} className={`rounded-md p-1.5 ${modo === "grid" ? "bg-card shadow-sm" : "text-muted-foreground"}`}>
+                            <LayoutGrid className="h-4 w-4" />
+                        </button>
+                        <button type="button" aria-label="Lista" onClick={() => setModo("list")} className={`rounded-md p-1.5 ${modo === "list" ? "bg-card shadow-sm" : "text-muted-foreground"}`}>
+                            <List className="h-4 w-4" />
+                        </button>
                     </div>
+                )}
+            </div>
 
-                    {/* ACERTOS */}
-                    <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
-                        <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-white">
-                                <CheckIcon className="w-7 h-7" />
-                            </div>
-                            <div>
-                                <h2 className="text-xl font-bold text-foreground">Acertos</h2>
-                                <p className="text-sm text-muted-foreground">Questões que você acertou para revisar</p>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-3 mt-5">
-                            <div className="bg-muted rounded-xl p-4 text-center">
-                                <div className="text-xl font-extrabold text-primary">{loading ? "—" : resumos.ACERTOS.disciplinas}</div>
-                                <div className="text-xs text-muted-foreground mt-1">Disciplinas</div>
-                            </div>
-                            <div className="bg-muted rounded-xl p-4 text-center">
-                                <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{loading ? "—" : resumos.ACERTOS.questoes}</div>
-                                <div className="text-xs text-muted-foreground mt-1">Questões</div>
-                            </div>
-                            <div className="bg-muted rounded-xl p-4 text-center">
-                                <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{loading ? "—" : resumos.ACERTOS.anotadas}</div>
-                                <div className="text-xs text-muted-foreground mt-1">Anotadas</div>
-                            </div>
-                        </div>
-
-                        <div className="mt-5">
-                            <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
-                                <span>Progresso de anotações</span>
-                                <span className="text-primary font-semibold">{loading ? "—" : `${acertosPct}%`}</span>
-                            </div>
-                            <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${loading ? 0 : acertosPct}%` }} />
-                            </div>
-                        </div>
-
-                        <div className="mt-6">
-                            <button
-                                onClick={() => entrarDisciplinas("ACERTOS")}
-                                className="w-full inline-flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-xl transition"
-                            >
-                                Ver Disciplinas <ArrowRightIcon className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {topAcertos.length > 0 && (
-                            <div className="mt-6 pt-5 border-t border-border">
-                                <div className="text-xs font-semibold text-muted-foreground mb-3">Principais disciplinas</div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {topAcertos.map((d) => (
-                                        <div key={d.disciplina} className="bg-muted rounded-xl p-3">
-                                            <div className="text-sm font-semibold text-foreground">{d.disciplina}</div>
-                                            <div className="text-xs text-muted-foreground mt-1">
-                                                {d.questoes} questões • {d.anotadas} anotadas
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* HEADER DOS STEPS */}
-            {userId && step !== "home" && (
-                <div className="flex items-start justify-between gap-4 mb-6">
-                    <div className="flex items-start gap-3">
-                        <div
-                            className={`w-11 h-11 rounded-xl flex items-center justify-center text-white ${tipoSelecionado === "ERROS" ? "bg-red-500" : "bg-emerald-500"
-                                }`}
-                        >
-                            <span className="text-xl font-extrabold">{tipoSelecionado === "ERROS" ? "×" : "✓"}</span>
-                        </div>
-
-                        <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <div className="text-xl font-extrabold text-foreground">{tituloTipo}</div>
-                                {disciplinaSelecionada && (
-                                    <span className="text-xs font-semibold text-muted-foreground bg-muted px-3 py-1 rounded-full border border-border">
-                                        {disciplinaSelecionada}
-                                    </span>
-                                )}
-                                {assuntoSelecionado && (
-                                    <span className="text-xs font-semibold text-muted-foreground bg-muted px-3 py-1 rounded-full border border-border">
-                                        {assuntoSelecionado}
-                                    </span>
-                                )}
-                            </div>
-
-                            <div className="text-sm text-muted-foreground">
-                                {step === "disciplinas" && `${disciplinas.length} disciplinas`}
-                                {step === "assuntos" && `${assuntos.length} assuntos`}
-                                {step === "questoes" && `${idsCache.length} questões`}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        {step === "disciplinas" && (
-                            <button
-                                onClick={() => {
-                                    setStep("home");
-                                    setTipoSelecionado(null);
-                                    setDisciplinaSelecionada(null);
-                                    setAssuntoSelecionado(null);
-                                }}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card hover:bg-muted transition text-sm font-semibold"
-                            >
-                                <ArrowLeftIcon className="w-5 h-5" /> Voltar
-                            </button>
-                        )}
-
-                        {step === "assuntos" && (
-                            <button
-                                onClick={() => {
-                                    setStep("disciplinas");
-                                    setDisciplinaSelecionada(null);
-                                    setAssuntoSelecionado(null);
-                                    setAssuntos([]);
-                                }}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card hover:bg-muted transition text-sm font-semibold"
-                            >
-                                <ArrowLeftIcon className="w-5 h-5" /> Disciplinas
-                            </button>
-                        )}
-
-                        {step === "questoes" && (
-                            <button
-                                onClick={() => {
-                                    setStep("assuntos");
-                                    setAssuntoSelecionado(null);
-                                    setQuestoes([]);
-                                    setIdsCache([]);
-                                }}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card hover:bg-muted transition text-sm font-semibold"
-                            >
-                                <ArrowLeftIcon className="w-5 h-5" /> Assuntos
-                            </button>
-                        )}
-
-                        {(step === "disciplinas" || step === "assuntos") && (
-                            <div className="flex items-center gap-2 bg-muted rounded-xl p-2 border border-border">
-                                <button onClick={() => setMode("grid")} className="outline-none">
-                                    <GridIcon active={mode === "grid"} />
-                                </button>
-                                <button onClick={() => setMode("list")} className="outline-none">
-                                    <ListIcon active={mode === "list"} />
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* DISCIPLINAS */}
-            {userId && step === "disciplinas" && (
-                <>
-                    {mode === "grid" ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                            {disciplinas.map((d) => {
-                                const progress = pct(d.anotadas, d.questoes);
-                                return (
-                                    <button
-                                        key={d.disciplina}
-                                        onClick={() => entrarAssuntos(d.disciplina)}
-                                        className="text-left bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition block"
-                                    >
-                                        <div
-                                            className={`w-12 h-12 rounded-xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS"
-                                                ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                                                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                                }`}
-                                        >
-                                            <BookIcon className="w-6 h-6" />
-                                        </div>
-                                        <div className="text-base font-bold text-foreground">{d.disciplina}</div>
-
-                                        <div className="grid grid-cols-2 gap-3 mt-5">
-                                            <div>
-                                                <div className="text-lg font-extrabold text-primary">{d.questoes}</div>
-                                                <div className="text-xs text-muted-foreground">Questões</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{d.anotadas}</div>
-                                                <div className="text-xs text-muted-foreground">Anotadas</div>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-5">
-                                            <div className="flex justify-between text-xs text-muted-foreground mb-2">
-                                                <span>Progresso</span>
-                                                <span className="text-primary font-semibold">{progress}%</span>
-                                            </div>
-                                            <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                                <div
-                                                    className={`h-full rounded-full ${tipoSelecionado === "ERROS" ? "bg-red-500" : "bg-emerald-500"}`}
-                                                    style={{ width: `${progress}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
+            {itens === null ? (
+                <div className="h-40 animate-pulse rounded-xl bg-muted" />
+            ) : !disciplina ? (
+                ativos.length === 0 ? (
+                    tipo === "ERROS" ? (
+                        <Vazio
+                            titulo={resumo?.recuperadas ? "Nenhum erro pendente. Mandou bem!" : "Seu caderno de erros está vazio"}
+                            texto={
+                                resumo?.recuperadas
+                                    ? `Você já recuperou ${plural(resumo.recuperadas, "questão", "questões")}. Continue resolvendo: o que errar volta para cá sozinho.`
+                                    : "Quando você errar uma questão, ela entra aqui automaticamente para você refazer até acertar."
+                            }
+                            acao={<Link href="/questoes" className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Resolver questões</Link>}
+                        />
                     ) : (
-                        <div className="flex flex-col gap-4">
-                            {disciplinas.map((d) => (
-                                <button
-                                    key={d.disciplina}
-                                    onClick={() => entrarAssuntos(d.disciplina)}
-                                    className="bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition flex items-center justify-between text-left"
-                                >
-                                    <div>
-                                        <div className="text-base font-bold text-foreground">{d.disciplina}</div>
-                                        <div className="text-xs text-muted-foreground">{pct(d.anotadas, d.questoes)}% anotadas</div>
-                                    </div>
-                                    <div className="flex items-center gap-8">
-                                        <div className="text-right">
-                                            <div className="text-lg font-extrabold text-primary">{d.questoes}</div>
-                                            <div className="text-xs text-muted-foreground">Questões</div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{d.anotadas}</div>
-                                            <div className="text-xs text-muted-foreground">Anotadas</div>
-                                        </div>
-                                        <div className="text-muted-foreground">›</div>
-                                    </div>
+                        <Vazio
+                            titulo="Nada em Acertei no chute"
+                            texto={'Acertou uma questão mas ficou em dúvida? Depois de conferir, toque em "Salvar para revisar" (ou em Caderno › Acertei no chute).'}
+                            acao={<Link href="/questoes" className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Resolver questões</Link>}
+                        />
+                    )
+                ) : (
+                    <>
+                        {/* Ação principal */}
+                        <section className="flex flex-col gap-3 rounded-xl border border-primary/40 bg-primary/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <div className="text-lg font-bold text-foreground">
+                                    {tipo === "ERROS" ? "Refazer meus erros" : "Revisar meus chutes"}
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                    {plural(ativos.length, "questão", "questões")} em {plural(disciplinas.length, "disciplina", "disciplinas")}. Sessões de até 20, das mais antigas para as mais novas.
+                                </div>
+                            </div>
+                            <Link href={linkTreino()} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90">
+                                <RotateCcw className="h-4 w-4" aria-hidden /> Começar agora
+                            </Link>
+                        </section>
+
+                        <ListaCategorias
+                            itens={disciplinas}
+                            modo={modo}
+                            icone={<BookOpen className="h-5 w-5" />}
+                            unidade={["questão", "questões"]}
+                            rotuloBusca="Buscar disciplina"
+                            aoAbrir={abrirDisciplina}
+                        />
+                    </>
+                )
+            ) : (
+                <>
+                    {/* Dentro de uma disciplina: filtro de assunto + questões */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                            <button type="button" onClick={() => setDisciplina(null)} className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted">
+                                <ChevronLeft className="h-4 w-4" aria-hidden /> Disciplinas
+                            </button>
+                            <h2 className="truncate text-lg font-bold text-foreground">{disciplina}</h2>
+                        </div>
+                        <Link href={linkTreino({ disciplina, assunto })} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90">
+                            <RotateCcw className="h-4 w-4" aria-hidden /> Refazer {assunto ? "este assunto" : "esta disciplina"} ({filtrados.length})
+                        </Link>
+                    </div>
+
+                    {assuntos.length > 1 && (
+                        <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por assunto">
+                            <button type="button" onClick={() => { setAssunto(null); setPagina(1); }} className={chip(!assunto)}>
+                                Todos ({daDisciplina.length})
+                            </button>
+                            {assuntos.map(([nome, n]) => (
+                                <button key={nome} type="button" onClick={() => { setAssunto(nome); setPagina(1); }} className={chip(assunto === nome)}>
+                                    {nome} ({n})
                                 </button>
                             ))}
                         </div>
                     )}
-                </>
-            )}
 
-            {/* ASSUNTOS */}
-            {userId && step === "assuntos" && (
-                <>
-                    {mode === "grid" ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                            {assuntos.map((a) => {
-                                const progress = pct(a.anotadas, a.questoes);
-                                return (
-                                    <button
-                                        key={a.assunto}
-                                        onClick={() => entrarQuestoes(a.assunto)}
-                                        className="text-left bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition block"
-                                    >
-                                        <div
-                                            className={`w-12 h-12 rounded-xl flex items-center justify-center mb-6 ${tipoSelecionado === "ERROS"
-                                                ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                                                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                                }`}
-                                        >
-                                            <BookIcon className="w-6 h-6" />
-                                        </div>
-                                        <div className="text-base font-bold text-foreground">{a.assunto}</div>
-
-                                        <div className="grid grid-cols-2 gap-3 mt-5">
-                                            <div>
-                                                <div className="text-lg font-extrabold text-primary">{a.questoes}</div>
-                                                <div className="text-xs text-muted-foreground">Questões</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{a.anotadas}</div>
-                                                <div className="text-xs text-muted-foreground">Anotadas</div>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-5">
-                                            <div className="flex justify-between text-xs text-muted-foreground mb-2">
-                                                <span>Progresso</span>
-                                                <span className="text-primary font-semibold">{progress}%</span>
-                                            </div>
-                                            <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                                <div
-                                                    className={`h-full rounded-full ${tipoSelecionado === "ERROS" ? "bg-red-500" : "bg-emerald-500"}`}
-                                                    style={{ width: `${progress}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <div className="flex flex-col gap-4">
-                            {assuntos.map((a) => (
-                                <button
-                                    key={a.assunto}
-                                    onClick={() => entrarQuestoes(a.assunto)}
-                                    className="bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition flex items-center justify-between text-left"
-                                >
-                                    <div>
-                                        <div className="text-base font-bold text-foreground">{a.assunto}</div>
-                                        <div className="text-xs text-muted-foreground">{pct(a.anotadas, a.questoes)}% anotadas</div>
-                                    </div>
-                                    <div className="flex items-center gap-8">
-                                        <div className="text-right">
-                                            <div className="text-lg font-extrabold text-primary">{a.questoes}</div>
-                                            <div className="text-xs text-muted-foreground">Questões</div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{a.anotadas}</div>
-                                            <div className="text-xs text-muted-foreground">Anotadas</div>
-                                        </div>
-                                        <div className="text-muted-foreground">›</div>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </>
-            )}
-
-            {/* QUESTÕES */}
-            {userId && step === "questoes" && (
-                <div className="bg-card rounded-xl p-6 sm:p-8 shadow-sm border border-border">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border pb-3 mb-6">
-                        <span className="text-sm font-medium text-muted-foreground tracking-tight">Questões do caderno</span>
-
-                        <div className="flex items-center gap-4">
-                            <span className="text-muted-foreground text-xs">
-                                Mostrando {questoes.length} de {idsCache.length} questões
-                            </span>
-
-                            <select
-                                className="bg-muted border border-border rounded px-3 py-1 text-xs text-foreground"
-                                value={perPage}
-                                onChange={(e) => {
-                                    setPerPage(Number(e.target.value));
-                                    setPage(1);
-                                }}
-                            >
-                                <option value={3}>3 por página</option>
-                                <option value={5}>5 por página</option>
-                                <option value={10}>10 por página</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    {qLoading ? (
-                        <div className="text-muted-foreground py-10 text-center">Carregando questões...</div>
+                    {carregandoQ && !questoes.length ? (
+                        <div className="h-60 animate-pulse rounded-xl bg-muted" />
                     ) : questoes.length === 0 ? (
-                        <div className="min-h-[120px] flex items-center justify-center text-muted-foreground">
-                            Nenhuma questão encontrada neste assunto.
-                        </div>
+                        <Vazio titulo="Nenhuma questão aqui" texto="Escolha outra disciplina ou assunto." />
                     ) : (
-                        <div className="flex flex-col gap-7">
-                            {questoes.map((q) => (
+                        <div className="flex flex-col">
+                            {questoes.map((q, i) => (
                                 <QuestionCard
                                     key={q.id}
                                     id={q.id}
+                                    numero={(pagina - 1) * POR_PAGINA + i + 1}
+                                    total={filtrados.length}
                                     materiaNome={q.disciplina}
                                     assuntoNome={q.assunto}
-                                    tags={[q.instituicao, q.cargo, q.disciplina, q.assunto, rotuloModalidade(q.modalidade), rotuloBanca(q.banca)]}
+                                    tags={[
+                                        q.disciplina ?? "",
+                                        q.assunto ?? "",
+                                        q.instituicao ?? "",
+                                        q.cargo ?? "",
+                                        rotuloBanca(q.banca),
+                                        q.ano ? String(q.ano) : "",
+                                        rotuloModalidade(q.modalidade),
+                                    ]}
                                     statement={q.enunciado}
-                                    options={Object.entries(q.alternativas).map(([letter, text]) => ({ letter, text }))}
+                                    options={Object.entries(q.alternativas ?? {}).map(([letter, text]) => ({ letter, text }))}
                                     correct={q.correta}
-                                    explanation={q.explicacao}
-                                    comentarios={q.comentarios}
-                                    erros={q.erros}
+                                    explanation={q.explicacao ?? ""}
                                 />
                             ))}
+                            <Pagination total={filtrados.length} perPage={POR_PAGINA} page={pagina} setPage={setPagina} />
                         </div>
                     )}
-
-                    <Pagination total={idsCache.length} perPage={perPage} page={page} setPage={setPage} />
-                </div>
+                </>
             )}
-        </div>
+        </Pagina>
     );
+}
+
+function chip(ativo: boolean) {
+    return `rounded-full border px-3 py-1.5 text-sm transition ${
+        ativo ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground hover:bg-muted"
+    }`;
 }

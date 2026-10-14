@@ -2,28 +2,19 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { ComentariosQuestao } from "./ComentariosQuestao";
-
-/* ===================== UI ===================== */
-function TesouraIcon({ className = "" }: { className?: string }) {
-    return (
-        <svg
-            viewBox="0 0 20 20"
-            fill="none"
-            width={22}
-            height={22}
-            className={className + " pointer-events-none"}
-        >
-            <path
-                d="M7.5 8.5L3 3M12.5 8.5L17 3M3 17l7-7 7 7"
-                stroke="#9ca3af"
-                strokeWidth={2}
-                strokeLinecap="round"
-            />
-            <circle cx={4.5} cy={15.5} r={1.2} fill="#bbb" />
-            <circle cx={15.5} cy={15.5} r={1.2} fill="#bbb" />
-        </svg>
-    );
-}
+import Link from "next/link";
+import {
+    BookmarkCheck,
+    BookmarkPlus,
+    CheckCircle2,
+    ChevronDown,
+    FileText,
+    Layers3,
+    MessageSquareText,
+    Scissors,
+    XCircle,
+} from "lucide-react";
+import { PainelMaterial, type TipoMaterial } from "./questao/PainelMaterial";
 
 type Option = { letter?: string; text: string };
 
@@ -65,6 +56,12 @@ interface QuestionCardProps {
      * no Caderno de Erros, sem risco de removê-la se já existir.
      */
     onGarantirCadernoErros?: () => void | Promise<void>;
+
+    /** "Questão 3 de 126" (opcional). */
+    numero?: number;
+    total?: number;
+    /** Avisado depois de conferir (ex.: treino de erros passa para a próxima). */
+    aoResponder?: (acertou: boolean) => void;
 }
 
 /* ===================== HELPERS ===================== */
@@ -318,6 +315,13 @@ async function removeFromCaderno(userId: string, questaoId: string, tipo: Cadern
 }
 
 /* ===================== COMPONENTE ===================== */
+/** Botão secundário da barra de ações (destacado quando ativo). */
+function acaoClass(ativo: boolean) {
+    return `inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+        ativo ? "border-primary/50 bg-primary/10 text-primary" : "border-border bg-transparent text-foreground hover:bg-muted"
+    }`;
+}
+
 export function QuestionCard(props: QuestionCardProps) {
     const {
         id,
@@ -341,6 +345,9 @@ export function QuestionCard(props: QuestionCardProps) {
         onToggleCadernoErros,
         onToggleCadernoAcertos,
         onGarantirCadernoErros,
+        numero,
+        total,
+        aoResponder,
     } = props;
 
     const [selected, setSelected] = useState<string | null>(null);
@@ -368,6 +375,9 @@ export function QuestionCard(props: QuestionCardProps) {
         ACERTOS: false,
     });
     const [cadernoMsg, setCadernoMsg] = useState<string | null>(null);
+    const [menuCaderno, setMenuCaderno] = useState(false);
+    const [painel, setPainel] = useState<TipoMaterial | null>(null);
+    const [materialExistente, setMaterialExistente] = useState<{ FLASHCARD: boolean; RESUMO: boolean }>({ FLASHCARD: false, RESUMO: false });
 
     const effectiveStatus = cadernoStatus ?? localCadernoStatus;
     const effectiveBusy = {
@@ -407,6 +417,22 @@ export function QuestionCard(props: QuestionCardProps) {
         };
     }, [id, cadernoStatus]);
 
+    useEffect(() => {
+        let cancelado = false;
+        (async () => {
+            const uid = await getUserId();
+            if (!uid) return;
+            const [fc, rs] = await Promise.all([
+                supabase.from("flashcards").select("id", { count: "exact", head: true }).eq("user_id", uid).eq("questao_origem_id", id),
+                supabase.from("resumos").select("id", { count: "exact", head: true }).eq("user_id", uid).eq("questao_origem_id", id),
+            ]);
+            if (!cancelado) setMaterialExistente({ FLASHCARD: (fc.count ?? 0) > 0, RESUMO: !rs.error && (rs.count ?? 0) > 0 });
+        })();
+        return () => {
+            cancelado = true;
+        };
+    }, [id]);
+
     async function toggleLocal(tipo: CadernoTipo) {
         // se pai controla, só chama callback
         if (tipo === "ERROS" && onToggleCadernoErros) return onToggleCadernoErros();
@@ -428,11 +454,11 @@ export function QuestionCard(props: QuestionCardProps) {
             if (!atual) {
                 await addToCaderno(uid, id, tipo);
                 setLocalCadernoStatus((s) => ({ ...s, [tipo]: true }));
-                showFeedback(tipo === "ERROS" ? "Adicionada aos Erros ✅" : "Adicionada aos Acertos ✅");
+                showFeedback(tipo === "ERROS" ? "Adicionada ao Caderno de erros" : "Salva em Acertei no chute");
             } else {
                 await removeFromCaderno(uid, id, tipo);
                 setLocalCadernoStatus((s) => ({ ...s, [tipo]: false }));
-                showFeedback(tipo === "ERROS" ? "Removida dos Erros" : "Removida dos Acertos");
+                showFeedback(tipo === "ERROS" ? "Removida do Caderno de erros" : "Removida de Acertei no chute");
             }
         } catch (e: any) {
             setCadernoMsg(e?.message || "Erro ao atualizar caderno.");
@@ -442,97 +468,134 @@ export function QuestionCard(props: QuestionCardProps) {
         }
     }
 
+
+    // Etiquetas: disciplina › assunto em destaque; o resto numa linha discreta.
+    const limpas = tags.map((t) => String(t ?? "").trim()).filter(Boolean);
+    const principais = [materiaNome, assuntoNome].map((t) => String(t ?? "").trim()).filter(Boolean);
+    const secundarias = limpas.filter((t) => !principais.includes(t));
+    const acertou = showResult && selected === correct;
+    const ce = options.length === 2 && options.every((o) => /^(C|E)$/.test(String(o.letter)));
+    const rotuloCorreta = ce ? (correct === "C" ? "Certo" : "Errado") : correct;
+
     return (
-        <div className="relative mx-auto mb-6 w-full max-w-6xl rounded-lg border border-border border-l-4 border-l-primary bg-card p-5 shadow-sm transition-all sm:p-7">
+        <article className="relative mx-auto mb-6 w-full rounded-xl border border-border border-l-4 border-l-primary bg-card p-5 shadow-sm sm:p-7">
             {feedbackMsg && (
-                <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground rounded-lg px-6 py-3 text-sm shadow-lg z-[200]">
+                <div className="fixed left-1/2 top-6 z-[200] -translate-x-1/2 rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background shadow-lg" role="status">
                     {feedbackMsg}
                 </div>
             )}
 
-            {cadernoMsg && (
-                <div className="mb-4 text-sm text-red-600 dark:text-red-400">{cadernoMsg}</div>
-            )}
+            {/* Cabeçalho: número, disciplina › assunto e linha de contexto */}
+            <header className="mb-4 flex flex-col gap-1.5">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                    {numero !== undefined && (
+                        <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                            Questão {numero}
+                            {total ? ` de ${total.toLocaleString("pt-BR")}` : ""}
+                        </span>
+                    )}
+                    {principais.length > 0 && (
+                        <span className="font-semibold text-foreground">{principais.join(" › ")}</span>
+                    )}
+                </div>
+                {secundarias.length > 0 && <div className="text-xs text-muted-foreground">{secundarias.join(" · ")}</div>}
+            </header>
 
-            <div className="flex flex-wrap gap-2 mb-5">
-                {tags.filter((t) => String(t ?? "").trim()).map((tag, i) => (
-                    <span
-                        key={i}
-                        className="bg-accent text-accent-foreground text-xs font-semibold rounded px-3 py-1"
-                    >
-                        {tag}
-                    </span>
-                ))}
-            </div>
+            {cadernoMsg && <div className="mb-4 text-sm text-red-600 dark:text-red-400">{cadernoMsg}</div>}
 
             {/* pre-line: mantém os parágrafos do enunciado (fonte, texto-base, comando). */}
             <h2 className="mb-5 whitespace-pre-line text-base font-medium leading-relaxed text-foreground sm:text-[17px]">{statement}</h2>
 
-            <div className="flex flex-col gap-2 mb-5">
+            <div className="mb-5 flex flex-col gap-2">
                 {options.map((opt, idx) => {
                     const value = opt.letter || ["A", "B", "C", "D", "E"][idx];
                     const isSelected = selected === value;
                     const isCorrect = correct === value;
                     const eliminada = eliminadas.includes(idx);
 
-                    let btnClass =
-                        "flex items-center w-full px-4 py-2 rounded-lg text-left font-medium border transition-all text-[15px] relative group";
-                    if (showResult) {
-                        if (isSelected && selected !== correct)
-                            btnClass += " bg-destructive/10 border-destructive text-destructive";
-                        else if (isCorrect) btnClass += " bg-green-500/10 border-green-500/40 text-green-900 dark:text-green-300";
-                        else btnClass += " bg-card border-border";
-                    } else if (isSelected) {
-                        btnClass += " bg-primary/10 border-primary text-foreground";
-                    } else {
-                        btnClass += " bg-card border-border hover:bg-muted";
-                    }
-                    if (eliminada) btnClass += " text-muted-foreground opacity-60 line-through";
+                    let caixa = "border-border bg-card hover:bg-muted/60";
+                    if (showResult && isCorrect) caixa = "border-emerald-500/50 bg-emerald-500/10";
+                    else if (showResult && isSelected) caixa = "border-red-500/50 bg-red-500/10";
+                    else if (showResult) caixa = "border-border bg-card";
+                    else if (isSelected) caixa = "border-primary bg-primary/10";
+
+                    let letra = "bg-muted text-foreground";
+                    if (showResult && isCorrect) letra = "bg-emerald-600 text-white";
+                    else if (showResult && isSelected) letra = "bg-red-600 text-white";
+                    else if (isSelected) letra = "bg-primary text-primary-foreground";
 
                     return (
-                        <button
-                            key={value}
-                            type="button"
-                            className={btnClass}
-                            disabled={showResult}
-                            onClick={() => setSelected(value)}
-                        >
-                            <span
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleEliminada(idx);
-                                }}
-                                title={eliminada ? "Restaurar alternativa" : "Eliminar alternativa"}
-                                className={`mr-3 transition cursor-pointer rounded-full p-1 hover:bg-muted border border-transparent hover:border-border ${eliminada ? "opacity-40" : ""
-                                    }`}
+                        <div key={value} className={`group relative flex items-stretch rounded-lg border transition ${caixa}`}>
+                            <button
+                                type="button"
+                                className={`flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-left text-[15px] leading-relaxed ${eliminada ? "text-muted-foreground line-through opacity-60" : "text-foreground"}`}
+                                disabled={showResult}
+                                onClick={() => setSelected(value)}
+                                aria-pressed={isSelected}
                             >
-                                <TesouraIcon />
-                            </span>
-
-                            <span
-                                className={`mr-3 w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold
-                ${showResult && isCorrect
-                                        ? "bg-green-600 text-white"
-                                        : showResult && isSelected && selected !== correct
-                                            ? "bg-destructive text-white"
-                                            : isSelected
-                                                ? "bg-primary text-primary-foreground"
-                                                : "bg-muted text-foreground"
-                                    }`}
-                            >
-                                {value}
-                            </span>
-
-                            <span className="text-[15px]">{opt.text}</span>
-                        </button>
+                                {/* shrink-0: a letra não encolhe com alternativa longa (texto alinhado) */}
+                                <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${letra}`}>
+                                    {value}
+                                </span>
+                                <span className="min-w-0 pt-0.5">{opt.text}</span>
+                            </button>
+                            {!showResult && (
+                                <button
+                                    type="button"
+                                    onClick={() => toggleEliminada(idx)}
+                                    title={eliminada ? "Restaurar alternativa" : "Eliminar alternativa"}
+                                    aria-label={eliminada ? `Restaurar alternativa ${value}` : `Eliminar alternativa ${value}`}
+                                    className={`flex shrink-0 items-center px-3 text-muted-foreground transition hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 ${eliminada ? "sm:opacity-100 text-primary" : ""}`}
+                                >
+                                    <Scissors className="h-4 w-4" aria-hidden />
+                                </button>
+                            )}
+                        </div>
                     );
                 })}
             </div>
 
-            <div className="flex flex-wrap gap-2 mb-4">
-                <button
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-5 rounded-lg text-sm transition"
-                    onClick={async () => {
+            {/* Resultado */}
+            {showResult && (
+                <div
+                    className={`mb-4 flex flex-col gap-2 rounded-lg border px-4 py-3 text-sm ${acertou ? "border-emerald-500/40 bg-emerald-500/10" : "border-red-500/40 bg-red-500/10"}`}
+                    role="status"
+                >
+                    <div className={`flex items-center gap-2 font-bold ${acertou ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
+                        {acertou ? <CheckCircle2 className="h-5 w-5" aria-hidden /> : <XCircle className="h-5 w-5" aria-hidden />}
+                        {acertou ? "Você acertou!" : `Você errou. A resposta correta é ${rotuloCorreta}.`}
+                    </div>
+                    {acertou ? (
+                        !effectiveStatus.ACERTOS && (
+                            <div className="text-foreground">
+                                Acertou no chute?{" "}
+                                <button type="button" className="font-semibold text-primary underline" onClick={() => toggleLocal("ACERTOS")}>
+                                    Salvar para revisar
+                                </button>
+                            </div>
+                        )
+                    ) : (
+                        <div className="text-foreground">
+                            Ela foi para o seu Caderno de erros.{" "}
+                            {materialExistente.FLASHCARD ? (
+                                <Link href="/flashcards" className="font-semibold text-primary underline">Ver seu flashcard</Link>
+                            ) : (
+                                <button type="button" className="font-semibold text-primary underline" onClick={() => setPainel("FLASHCARD")}>
+                                    Criar um flashcard para não errar de novo
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Ações */}
+            <div className="flex flex-wrap items-center gap-2">
+                {!showResult && (
+                    <button
+                        type="button"
+                        className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
+                        onClick={async () => {
                         if (!selected || showResult || registrandoResposta) {
                             return;
                         }
@@ -649,11 +712,13 @@ export function QuestionCard(props: QuestionCardProps) {
                                 );
                             }
 
-                            showFeedback(
-                                correta
-                                    ? "Você acertou! ✅"
-                                    : "Resposta incorreta. Enviada ao Caderno de Erros."
-                            );
+                            // Treino do caderno de erros: 2 acertos seguidos = questão recuperada.
+                            try {
+                                await supabase.rpc("registrar_treino_caderno", { p_questao: id, p_acertou: correta });
+                            } catch {
+                                /* migração ainda não aplicada: ignora */
+                            }
+                            aoResponder?.(correta);
                         } catch (e: any) {
                             setCadernoMsg(
                                 e?.message ||
@@ -663,70 +728,100 @@ export function QuestionCard(props: QuestionCardProps) {
                             setRegistrandoResposta(false);
                         }
                     }}
-                    disabled={
-                        !selected ||
-                        showResult ||
-                        registrandoResposta
-                    }
-                >
-                    {registrandoResposta
-                        ? "Registrando..."
-                        : "Conferir Resposta"}
+                        disabled={!selected || showResult || registrandoResposta}
+                    >
+                        {registrandoResposta ? "Registrando…" : "Conferir resposta"}
+                    </button>
+                )}
+
+                {/* Caderno: um botão, duas opções */}
+                <div className="relative">
+                    <button
+                        type="button"
+                        onClick={() => setMenuCaderno((v) => !v)}
+                        aria-expanded={menuCaderno}
+                        className={acaoClass(effectiveStatus.ERROS || effectiveStatus.ACERTOS)}
+                    >
+                        {effectiveStatus.ERROS || effectiveStatus.ACERTOS ? <BookmarkCheck className="h-4 w-4" aria-hidden /> : <BookmarkPlus className="h-4 w-4" aria-hidden />}
+                        {effectiveStatus.ERROS ? "No caderno de erros" : effectiveStatus.ACERTOS ? "Em acertei no chute" : "Caderno"}
+                        <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                    </button>
+                    {menuCaderno && (
+                        <>
+                            <button type="button" className="fixed inset-0 z-10 cursor-default" aria-hidden tabIndex={-1} onClick={() => setMenuCaderno(false)} />
+                            <div className="absolute left-0 top-full z-20 mt-1 w-60 rounded-lg border border-border bg-popover p-1 shadow-lg" role="menu">
+                                {(["ERROS", "ACERTOS"] as CadernoTipo[]).map((t) => (
+                                    <button
+                                        key={t}
+                                        type="button"
+                                        role="menuitemcheckbox"
+                                        aria-checked={effectiveStatus[t]}
+                                        disabled={effectiveBusy[t]}
+                                        onClick={async () => {
+                                            setMenuCaderno(false);
+                                            await toggleLocal(t);
+                                        }}
+                                        className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm text-foreground hover:bg-muted disabled:opacity-50"
+                                    >
+                                        <span>
+                                            <span className="block font-medium">{t === "ERROS" ? "Caderno de erros" : "Acertei no chute"}</span>
+                                            <span className="block text-xs text-muted-foreground">
+                                                {t === "ERROS" ? "Para refazer até acertar" : "Acertou, mas com dúvida"}
+                                            </span>
+                                        </span>
+                                        {effectiveStatus[t] && <BookmarkCheck className="h-4 w-4 shrink-0 text-primary" aria-label="Salva" />}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                <button type="button" onClick={() => setShowComentarios((v) => !v)} aria-expanded={showComentarios} className={acaoClass(showComentarios)}>
+                    <MessageSquareText className="h-4 w-4" aria-hidden /> Comentários
                 </button>
 
-                {/* ===================== NOVO: BOTÕES CADERNOS ===================== */}
-                <button
-                    type="button"
-                    onClick={() => toggleLocal("ERROS")}
-                    disabled={effectiveBusy.ERROS}
-                    className={`font-bold py-2 px-4 rounded-lg text-sm transition border
-            ${effectiveStatus.ERROS
-                            ? "bg-red-600 text-white border-red-600 hover:bg-red-700"
-                            : "bg-transparent text-red-600 dark:text-red-400 border-red-500/40 hover:bg-red-500/10"
-                        }`}
-                    title={effectiveStatus.ERROS ? "Remover do Caderno de Erros" : "Adicionar ao Caderno de Erros"}
-                >
-                    {effectiveBusy.ERROS ? "Salvando..." : effectiveStatus.ERROS ? "✓ Erros" : "+ Erros"}
-                </button>
+                {materialExistente.FLASHCARD ? (
+                    <Link href="/flashcards" className={acaoClass(true)}>
+                        <Layers3 className="h-4 w-4" aria-hidden /> Ver flashcard
+                    </Link>
+                ) : (
+                    <button type="button" onClick={() => setPainel("FLASHCARD")} className={acaoClass(false)}>
+                        <Layers3 className="h-4 w-4" aria-hidden /> Flashcard
+                    </button>
+                )}
 
-                <button
-                    type="button"
-                    onClick={() => toggleLocal("ACERTOS")}
-                    disabled={effectiveBusy.ACERTOS}
-                    className={`font-bold py-2 px-4 rounded-lg text-sm transition border
-            ${effectiveStatus.ACERTOS
-                            ? "bg-green-600 text-white border-green-600 hover:bg-green-700"
-                            : "bg-transparent text-green-700 dark:text-green-300 border-green-500/40 hover:bg-green-500/10"
-                        }`}
-                    title={
-                        effectiveStatus.ACERTOS ? "Remover do Caderno de Acertos" : "Adicionar ao Caderno de Acertos"
-                    }
-                >
-                    {effectiveBusy.ACERTOS ? "Salvando..." : effectiveStatus.ACERTOS ? "✓ Acertos" : "+ Acertos"}
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => setShowComentarios((v) => !v)}
-                    className="font-bold py-2 px-4 rounded-lg text-sm transition border bg-transparent text-foreground border-border hover:bg-muted"
-                    aria-expanded={showComentarios}
-                >
-                    {showComentarios ? "Ocultar comentários" : "Ver comentários"}
-                </button>
+                {materialExistente.RESUMO ? (
+                    <Link href="/resumos" className={acaoClass(true)}>
+                        <FileText className="h-4 w-4" aria-hidden /> Ver resumo
+                    </Link>
+                ) : (
+                    <button type="button" onClick={() => setPainel("RESUMO")} className={acaoClass(false)}>
+                        <FileText className="h-4 w-4" aria-hidden /> Resumo
+                    </button>
+                )}
             </div>
 
             {showComentarios && (
-                <div className="mb-4">
+                <div className="mt-4">
                     <ComentariosQuestao questaoId={id} />
                 </div>
             )}
 
             {showResult && selected && explanation?.trim() && (
-                <div className="bg-green-500/10 rounded-lg p-4 mt-2 text-green-900 dark:text-green-300 text-sm">
-                    <span className="font-bold text-green-700 dark:text-green-300">Explicação:</span>
-                    <p className="mt-1">{explanation}</p>
+                <div className="mt-4 rounded-lg border border-border bg-muted/50 p-4 text-sm text-foreground">
+                    <span className="font-bold">Explicação:</span>
+                    <p className="mt-1 whitespace-pre-line">{explanation}</p>
                 </div>
             )}
-        </div>
+
+            <PainelMaterial
+                questaoId={id}
+                tipo={painel ?? "FLASHCARD"}
+                aberto={painel !== null}
+                aoFechar={() => setPainel(null)}
+                aoSalvar={() => painel && setMaterialExistente((m) => ({ ...m, [painel]: true }))}
+            />
+        </article>
     );
 }

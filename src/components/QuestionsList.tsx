@@ -30,6 +30,7 @@ type Questao = {
     assunto: string;
     modalidade: string;
     banca: string;
+    ano?: number | null;
     enunciado: string;
     alternativas: { [key: string]: string };
     correta: string;
@@ -379,13 +380,15 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                             Nenhuma questão encontrada.
                         </div>
                     ) : (
-                        paginated.map((q) => {
+                        paginated.map((q, indice) => {
                             const status = cadernosByQuestao[q.id] ?? { ERROS: false, ACERTOS: false };
 
                             return (
                                 <QuestionCard
                                     key={q.id}
                                     id={q.id}
+                                    numero={(page - 1) * perPage + indice + 1}
+                                    total={total}
                                     materiaId={q.materia_id ?? null}
                                     assuntoId={q.assunto_id ?? null}
                                     materiaNome={q.disciplina}
@@ -397,6 +400,7 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                                         q.assunto,
                                         rotuloModalidade(q.modalidade),
                                         rotuloBanca(q.banca),
+                                        q.ano ? String(q.ano) : "",
                                     ]}
                                     statement={q.enunciado}
                                     options={Object.entries(q.alternativas).map(([letter, text]) => ({

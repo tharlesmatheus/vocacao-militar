@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabaseClient";
+import { ListaCategorias } from "@/components/app/ListaCategorias";
+import { usePendentesRevisao } from "@/lib/revisoesPendentes";
 
 /* ============================================================================
  * Tipos
@@ -108,6 +110,8 @@ export default function ResumosPage() {
 
     const [viewLevel, setViewLevel] = useState<ViewLevel>("disciplinas");
     const [viewMode, setViewMode] = useState<ViewMode>("grid");
+    // Itens com revisão vencida: viram o selo "N para revisar" nos cards.
+    const pendentes = usePendentesRevisao("RESUMO");
     const [disciplinaSel, setDisciplinaSel] = useState<string | null>(null);
     const [assuntoSel, setAssuntoSel] = useState<string | null>(null);
 
@@ -311,7 +315,7 @@ export default function ResumosPage() {
     const disciplinasAgrupadas = useMemo(() => {
         const map = new Map<
             string,
-            { id: string; nome: string; total: number }
+            { id: string; nome: string; total: number; pendentes: number }
         >();
 
         for (const resumo of resumos) {
@@ -320,6 +324,7 @@ export default function ResumosPage() {
 
             if (atual) {
                 atual.total += 1;
+                if (pendentes.has(String(resumo.id))) atual.pendentes += 1;
             } else {
                 map.set(id, {
                     id,
@@ -328,6 +333,7 @@ export default function ResumosPage() {
                             ? "Sem disciplina canônica"
                             : nomeDisciplina(id),
                     total: 1,
+                    pendentes: pendentes.has(String(resumo.id)) ? 1 : 0,
                 });
             }
         }
@@ -345,6 +351,7 @@ export default function ResumosPage() {
         legacyMateriaMap,
         legacyAssuntoMap,
         disciplinaPorNome,
+        pendentes,
     ]);
 
     const assuntosAgrupados = useMemo(() => {
@@ -352,7 +359,7 @@ export default function ResumosPage() {
 
         const map = new Map<
             string,
-            { id: string; nome: string; total: number }
+            { id: string; nome: string; total: number; pendentes: number }
         >();
 
         for (const resumo of resumos) {
@@ -364,6 +371,7 @@ export default function ResumosPage() {
 
             if (atual) {
                 atual.total += 1;
+                if (pendentes.has(String(resumo.id))) atual.pendentes += 1;
             } else {
                 map.set(aId, {
                     id: aId,
@@ -372,6 +380,7 @@ export default function ResumosPage() {
                             ? "Sem assunto canônico"
                             : nomeAssunto(aId),
                     total: 1,
+                    pendentes: pendentes.has(String(resumo.id)) ? 1 : 0,
                 });
             }
         }
@@ -390,6 +399,7 @@ export default function ResumosPage() {
         legacyMateriaMap,
         legacyAssuntoMap,
         disciplinaPorNome,
+        pendentes,
     ]);
 
     const resumosFiltrados = useMemo(() => {
@@ -643,58 +653,6 @@ export default function ResumosPage() {
         setViewLevel("assuntos");
     }
 
-    function CategoryCard({
-        title,
-        count,
-        onClick,
-    }: {
-        title: string;
-        count: number;
-        onClick: () => void;
-    }) {
-        if (viewMode === "list") {
-            return (
-                <button
-                    type="button"
-                    onClick={onClick}
-                    className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-4 py-3 text-left transition hover:bg-muted"
-                >
-                    <div className="flex min-w-0 items-center gap-3">
-                        <div className="shrink-0 rounded-lg bg-red-500 p-2 text-white">
-                            <BookOpen size={18} />
-                        </div>
-                        <div className="min-w-0">
-                            <div className="truncate font-medium">
-                                {title}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                                {pluralResumo(count)}
-                            </div>
-                        </div>
-                    </div>
-                </button>
-            );
-        }
-
-        return (
-            <button
-                type="button"
-                onClick={onClick}
-                className="flex flex-col items-center rounded-xl border border-border bg-card p-6 text-center transition hover:shadow-md"
-            >
-                <div className="mb-4 rounded-xl bg-red-500 p-4 text-white">
-                    <BookOpen size={26} />
-                </div>
-
-                <h3 className="text-lg font-semibold">{title}</h3>
-
-                <p className="mt-2 text-sm text-muted-foreground">
-                    {pluralResumo(count)}
-                </p>
-            </button>
-        );
-    }
-
     if (loading) {
         return (
             <div className="flex min-h-[60vh] items-center justify-center px-4">
@@ -778,7 +736,8 @@ export default function ResumosPage() {
                 </div>
             )}
 
-            <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            {disciplinaSel && (
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <button
                     type="button"
                     onClick={voltarDisciplinas}
@@ -816,6 +775,7 @@ export default function ResumosPage() {
                     </>
                 )}
             </div>
+            )}
 
             {viewLevel === "disciplinas" && (
                 <>
@@ -826,24 +786,14 @@ export default function ResumosPage() {
                             onCreate={abrirNovoResumo}
                         />
                     ) : (
-                        <div
-                            className={
-                                viewMode === "grid"
-                                    ? "grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4"
-                                    : "space-y-3"
-                            }
-                        >
-                            {disciplinasAgrupadas.map((item) => (
-                                <CategoryCard
-                                    key={item.id}
-                                    title={item.nome}
-                                    count={item.total}
-                                    onClick={() =>
-                                        entrarDisciplina(item.id)
-                                    }
-                                />
-                            ))}
-                        </div>
+                        <ListaCategorias
+                            itens={disciplinasAgrupadas.map((item) => ({ id: item.id, nome: item.nome, total: item.total, pendentes: item.pendentes }))}
+                            modo={viewMode}
+                            icone={<BookOpen size={20} />}
+                            unidade={["resumo", "resumos"]}
+                            rotuloBusca="Buscar disciplina"
+                            aoAbrir={(id) => entrarDisciplina(id)}
+                        />
                     )}
                 </>
             )}
@@ -866,22 +816,14 @@ export default function ResumosPage() {
                             onCreate={abrirNovoResumo}
                         />
                     ) : (
-                        <div
-                            className={
-                                viewMode === "grid"
-                                    ? "grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4"
-                                    : "space-y-3"
-                            }
-                        >
-                            {assuntosAgrupados.map((item) => (
-                                <CategoryCard
-                                    key={item.id}
-                                    title={item.nome}
-                                    count={item.total}
-                                    onClick={() => entrarAssunto(item.id)}
-                                />
-                            ))}
-                        </div>
+                        <ListaCategorias
+                            itens={assuntosAgrupados.map((item) => ({ id: item.id, nome: item.nome, total: item.total, pendentes: item.pendentes }))}
+                            modo={viewMode}
+                            icone={<BookOpen size={20} />}
+                            unidade={["resumo", "resumos"]}
+                            rotuloBusca="Buscar assunto"
+                            aoAbrir={(id) => entrarAssunto(id)}
+                        />
                     )}
                 </>
             )}
