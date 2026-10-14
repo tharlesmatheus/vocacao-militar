@@ -11,7 +11,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
   const isAuthRoute = pathname.startsWith("/auth");
   const isAdminRoute = pathname.startsWith("/admin");
-  const showChrome = !isAuthRoute && !isAdminRoute;
+  // Páginas públicas (vendas e textos legais): sem barra lateral e sem moldura centralizada.
+  const isPublicRoute = ["/assinar", "/termos", "/privacidade"].some((r) => pathname.startsWith(r));
+  const isAuthLikeRoute = pathname.startsWith("/definir-senha");
+  const showChrome = !isAuthRoute && !isAdminRoute && !isPublicRoute && !isAuthLikeRoute;
 
   // ✅ estado do collapse fica no layout
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
@@ -124,7 +127,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               className={
                 showChrome
                   ? "w-full px-3 sm:px-4 md:px-8 py-5 md:py-8"
-                  : "min-h-screen flex items-center justify-center bg-muted w-full px-4"
+                  : isPublicRoute
+                    ? "w-full"
+                    : "min-h-screen flex items-center justify-center bg-muted w-full px-4"
               }
             >
               {showChrome ? (

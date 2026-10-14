@@ -139,7 +139,11 @@ export default function AuthPage() {
                     Entrar com Google
                 </button>
                 <div className="mt-5 text-xs text-[#7b8bb0] text-center">
-                    Ao entrar, você concorda com nossos <a href="#" className="underline">Termos de Uso</a>
+                    Ao entrar, você concorda com nossos <a href="/termos" className="underline">Termos de Uso</a> e a{" "}
+                    <a href="/privacidade" className="underline">Política de Privacidade</a>
+                </div>
+                <div className="mt-3 text-sm text-center">
+                    Ainda não é assinante? <a href="/assinar" className="font-semibold underline">Conheça a Vocação Militar</a>
                 </div>
             </div>
         </div>

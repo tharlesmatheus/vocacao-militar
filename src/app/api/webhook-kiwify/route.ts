@@ -39,6 +39,26 @@ type Plano = {
 
 const EVENTOS_DEFINITIVOS = new Set(["compra_reembolsada", "chargeback"]);
 
+type Lead = { id: string; nome: string; email: string; telefone: string | null; user_id: string | null };
+
+/**
+ * Cria a conta do comprador e envia o e-mail "defina sua senha".
+ * Falha aqui não impede o plano: ele fica gravado pelo e-mail e a pessoa pode
+ * criar a conta depois em /auth ou pedir um novo link em /definir-senha.
+ */
+async function convidar(email: string, nome?: string | null, telefone?: string | null): Promise<string | null> {
+    const site = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+    const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+        data: { ...(nome ? { nome } : {}), ...(telefone ? { telefone } : {}) },
+        ...(site ? { redirectTo: `${site}/definir-senha` } : {}),
+    });
+    if (error) {
+        console.error(`Convite não enviado para ${email}:`, error.message);
+        return null;
+    }
+    return data.user?.id ?? null;
+}
+
 // A Kiwify envia o tipo do evento em inglês no corpo (ex.: "order_approved"),
 // embora o painel mostre os nomes em português. Aceitamos os dois.
 const ALIASES_EVENTO: Record<string, string> = {
@@ -153,10 +173,36 @@ export async function POST(req: NextRequest) {
     };
 
     try {
+        // Qual conta recebe o plano, nesta ordem:
+        //   1) cadastro feito na página /assinar (o id dele volta em TrackingParameters.sck);
+        //   2) assinatura já conhecida (renovações e cancelamentos);
+        //   3) e-mail digitado no checkout.
+        const sck = String(p.TrackingParameters?.sck ?? "").trim();
+        let lead: Lead | null = null;
+        if (/^[0-9a-f-]{36}$/i.test(sck)) {
+            const { data } = await supabaseAdmin
+                .from("leads")
+                .select("id,nome,email,telefone,user_id")
+                .eq("id", sck)
+                .maybeSingle<Lead>();
+            lead = data ?? null;
+        }
+        let emailConta = lead?.email ?? null;
+        if (!emailConta && subscriptionId) {
+            const { data } = await supabaseAdmin
+                .from("planos")
+                .select("email")
+                .eq("subscription_id", subscriptionId)
+                .limit(1)
+                .maybeSingle<{ email: string }>();
+            emailConta = data?.email ?? null;
+        }
+        emailConta = (emailConta ?? email).toLowerCase();
+
         const { data: atual } = await supabaseAdmin
             .from("planos")
             .select("email,status,access_until,ultimo_evento_em")
-            .eq("email", email)
+            .eq("email", emailConta)
             .maybeSingle<Plano>();
 
         // 2) Eventos fora de ordem não sobrescrevem um estado mais novo.
@@ -200,11 +246,22 @@ export async function POST(req: NextRequest) {
                 return await finalizar(false, "Evento ignorado");
         }
 
-        const { data: userId } = await supabaseAdmin.rpc("usuario_id_por_email", { p_email: email });
+        let userId: string | null = lead?.user_id ?? null;
+        if (!userId) {
+            const { data } = await supabaseAdmin.rpc("usuario_id_por_email", { p_email: emailConta });
+            userId = (data as string | null) ?? null;
+        }
+        if (!userId && evento === "compra_aprovada") {
+            userId = await convidar(
+                emailConta,
+                lead?.nome ?? p.Customer?.full_name ?? p.Customer?.first_name ?? null,
+                lead?.telefone ?? p.Customer?.mobile ?? null
+            );
+        }
 
         const { error: erroPlano } = await supabaseAdmin.from("planos").upsert(
             [{
-                email,
+                email: emailConta,
                 user_id: userId ?? null,
                 status,
                 subscription_id: subscriptionId,
@@ -219,7 +276,14 @@ export async function POST(req: NextRequest) {
         );
         if (erroPlano) throw new Error(erroPlano.message);
 
-        return await finalizar(true, "OK");
+        if (lead && evento === "compra_aprovada") {
+            await supabaseAdmin
+                .from("leads")
+                .update({ status: "convertido", convertido_em: new Date().toISOString(), user_id: userId })
+                .eq("id", lead.id);
+        }
+
+        return await finalizar(true, emailConta === email ? "OK" : `OK (conta ${emailConta})`);
     } catch (e) {
         console.error("Erro ao aplicar evento Kiwify:", e);
         // Desfaz o registro para que o reenvio da Kiwify seja processado.

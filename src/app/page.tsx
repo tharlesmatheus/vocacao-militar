@@ -519,7 +519,7 @@ export default function DashboardHome() {
         if (!mounted || controller.signal.aborted) return;
 
         if (error || !data?.user?.id) {
-          router.replace("/auth");
+          router.replace("/assinar");
           return;
         }
 
@@ -605,7 +605,7 @@ export default function DashboardHome() {
         setLoading(false);
       } catch {
         if (!mounted || controller.signal.aborted) return;
-        router.replace("/auth");
+        router.replace("/assinar");
         setLoading(false);
       }
     })();
