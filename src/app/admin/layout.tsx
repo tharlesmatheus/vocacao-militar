@@ -8,7 +8,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return (
         <div className="flex bg-[#f5f6fa] min-h-screen">
             <AdminSidebar open={sidebarOpen} onOpen={() => setSidebarOpen(true)} onClose={() => setSidebarOpen(false)} />
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col md:ml-[250px] min-w-0">
                 {/* Header para mobile: botão de menu */}
                 <div className="md:hidden p-3 flex items-center bg-white shadow-sm">
                     <button
@@ -19,7 +19,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </button>
                 </div>
                 {/* Conteúdo principal */}
-                <main className="flex-1 w-full max-w-4xl mx-auto px-2 sm:px-4 py-6">
+                <main className="flex-1 w-full max-w-6xl mx-auto px-2 sm:px-4 py-6">
                     {children}
                 </main>
             </div>

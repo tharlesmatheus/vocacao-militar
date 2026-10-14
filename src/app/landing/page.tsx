@@ -283,6 +283,21 @@ function criarLocalId() {
 }
 
 
+/** Chama uma rota /api/admin/* com o token da sessão atual. */
+async function chamarApiAdmin<T = unknown>(caminho: string, init: RequestInit): Promise<T> {
+    const { data } = await supabase.auth.getSession();
+    const r = await fetch(caminho, {
+        ...init,
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${data.session?.access_token ?? ""}`,
+        },
+    });
+    const corpo = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((corpo as { error?: string })?.error || `Erro ${r.status}`);
+    return corpo as T;
+}
+
 function chavePreferencia(userId: string, nome: string) {
     return `questoes:${userId}:${nome}`;
 }
@@ -450,6 +465,12 @@ export default function NovaQuestaoGeminiLote() {
                 }
 
                 if (cancelled) return;
+
+                // Esta tela grava questões no acervo compartilhado: só administradores.
+                if (user.app_metadata?.is_admin !== true) {
+                    window.location.replace("/questoes");
+                    return;
+                }
 
                 const uid = user.id;
                 setUserId(uid);
@@ -1865,20 +1886,16 @@ Retorne SOMENTE JSON válido:
                         explicacao: q.explicacao,
                     };
 
-                    const {
-                        data: questaoCriada,
-                        error: questaoError,
-                    } = await supabase
-                        .from("questoes")
-                        .insert(payload)
-                        .select("id")
-                        .single();
-
-                    if (questaoError) {
+                    // A gravação passa pelo servidor: ele valida o conteúdo,
+                    // usa o catálogo do acervo e confirma que quem envia é admin.
+                    const questaoCriada = await chamarApiAdmin<{ id: string }>(
+                        "/api/admin/questoes",
+                        { method: "POST", body: JSON.stringify(payload) }
+                    ).catch((e: unknown) => {
                         throw new Error(
-                            `Falha ao salvar a questão: ${questaoError.message}`
+                            `Falha ao salvar a questão: ${e instanceof Error ? e.message : String(e)}`
                         );
-                    }
+                    });
 
                     questaoId = String(
                         questaoCriada.id
@@ -1950,11 +1967,10 @@ Retorne SOMENTE JSON válido:
                                 .eq("user_id", userId),
                         ]);
 
-                        await supabase
-                            .from("questoes")
-                            .delete()
-                            .eq("id", questaoId)
-                            .eq("user_id", userId);
+                        await chamarApiAdmin(
+                            `/api/admin/questoes?id=${encodeURIComponent(questaoId)}`,
+                            { method: "DELETE" }
+                        ).catch(() => undefined);
                     }
 
                     resultados.push({

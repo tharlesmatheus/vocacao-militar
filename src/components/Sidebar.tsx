@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import {
     BarChart2,
     BookOpen,
@@ -27,6 +28,8 @@ import {
 type MenuItem = {
     name: string;
     href: string;
+    /** Só aparece para administradores (a página também se protege sozinha). */
+    adminOnly?: boolean;
     icon: ComponentType<{
         size?: number;
         className?: string;
@@ -55,7 +58,7 @@ const MENU: MenuGroup[] = [
     {
         category: "ESTUDO",
         items: [
-            { name: "Novas Questões", href: "/landing", icon: PlusCircle },
+            { name: "Cadastrar Questões", href: "/landing", icon: PlusCircle, adminOnly: true },
             { name: "Questões", href: "/questoes", icon: Brain },
             { name: "Catálogo", href: "/catalogo", icon: Tags },
             { name: "Cadernos", href: "/cadernos", icon: NotebookText },
@@ -86,6 +89,15 @@ export function Sidebar({
 }: SidebarProps) {
     const pathname = usePathname();
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
+
+    useEffect(() => {
+        let ativo = true;
+        supabase.auth.getUser().then(({ data }) => {
+            if (ativo) setIsAdmin(data.user?.app_metadata?.is_admin === true);
+        });
+        return () => { ativo = false; };
+    }, []);
 
     const desktopWidthClass = collapsed ? "lg:w-20" : "lg:w-[290px]";
 
@@ -168,7 +180,7 @@ export function Sidebar({
                                 </div>
 
                                 <div className="space-y-1">
-                                    {group.items.map((item) => {
+                                    {group.items.filter((item) => !item.adminOnly || isAdmin).map((item) => {
                                         const Icon = item.icon;
                                         const active = isActive(
                                             pathname,
