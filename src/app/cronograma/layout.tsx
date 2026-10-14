@@ -1,4 +1,5 @@
 "use client";
+import { Carregando } from "@/components/app/Carregando";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabaseClient";
@@ -19,9 +20,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
 
     if (loading) {
         return (
-            <div className="flex min-h-screen items-center justify-center">
-                <span className="text-lg text-foreground">Carregando...</span>
-            </div>
+            <Carregando />
         );
     }
 

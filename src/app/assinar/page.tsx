@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Barlow_Condensed } from "next/font/google";
+import { PRECO_PLANO } from "@/lib/plano";
 import {
     BarChart3,
     BookOpenCheck,
@@ -26,7 +27,7 @@ import { FormularioAssinatura } from "@/components/publico/FormularioAssinatura"
  * visual escuro sem precisar de uma versão própria.
  */
 
-const PRECO = "R$ 14,90";
+const PRECO = PRECO_PLANO;
 
 const fonteTitulo = Barlow_Condensed({ subsets: ["latin"], weight: ["600", "700", "800"], display: "swap" });
 
@@ -55,11 +56,11 @@ const carreiras = ["Polícia Militar", "Polícia Civil", "PRF", "Polícia Federa
 
 const recursos = [
     { icone: BookOpenCheck, titulo: "+60 mil questões", texto: "Filtre por corporação, cargo, banca, disciplina e assunto. Só entram questões completas, com gabarito e sem imagem faltando." },
-    { icone: MessageSquareText, titulo: "Comentário em cada questão", texto: "Entenda o porquê do gabarito em \"Ver comentários\" e troque ideias com outros candidatos." },
+    { icone: MessageSquareText, titulo: "Comentário em cada questão", texto: "Entenda o porquê do gabarito em \"Comentários\" e troque ideias com outros candidatos." },
     { icone: NotebookText, titulo: "Caderno de erros", texto: "Errou? A questão vai direto para o seu caderno, para você refazer até acertar." },
     { icone: RotateCcw, titulo: "Revisão programada", texto: "O sistema traz de volta o que você precisa revisar, para o conteúdo não se perder até a prova." },
     { icone: BarChart3, titulo: "Raio-x do desempenho", texto: "Aproveitamento por disciplina e assunto: saiba exatamente onde está perdendo pontos." },
-    { icone: CalendarCheck2, titulo: "Edital e cronograma", texto: "Organize o edital, monte o cronograma e controle seu tempo real de estudo com Pomodoro." },
+    { icone: CalendarCheck2, titulo: "Edital e cronograma", texto: "Organize o edital, monte o cronograma e controle seu tempo real de estudo com o cronômetro." },
     { icone: Layers3, titulo: "Flashcards e resumos", texto: "Transforme questões em flashcards e guarde seus resumos no mesmo lugar." },
     { icone: Crosshair, titulo: "Foco na carreira policial", texto: "Feito para quem quer vestir a farda: questões das provas de PM, PC, PRF, PF, Bombeiros e Guarda Municipal." },
 ];

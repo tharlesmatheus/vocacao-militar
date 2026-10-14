@@ -1,5 +1,6 @@
 "use client";
 
+import { todasAsLinhas } from "@/lib/todasAsLinhas";
 import { supabase } from "@/lib/supabaseClient";
 
 export type CadernoTipo = "ERROS" | "ACERTOS";
@@ -43,12 +44,23 @@ export async function carregarItensCaderno(): Promise<ItemCaderno[]> {
 
     // As colunas de treino vêm da migração 20261018; sem ela, segue sem o progresso.
     let linhas: any[] = [];
-    const completo = await supabase
-        .from("caderno_itens")
-        .select("questao_id,tipo,created_at,acertos_seguidos,recuperada_em,ultima_tentativa_em")
-        .eq("user_id", uid);
+    const completo = await todasAsLinhas<any>(
+        supabase
+            .from("caderno_itens")
+            .select("questao_id,tipo,created_at,acertos_seguidos,recuperada_em,ultima_tentativa_em")
+            .eq("user_id", uid)
+            .order("created_at", { ascending: true })
+            .order("questao_id", { ascending: true })
+    );
     if (completo.error) {
-        const simples = await supabase.from("caderno_itens").select("questao_id,tipo,created_at").eq("user_id", uid);
+        const simples = await todasAsLinhas<any>(
+            supabase
+                .from("caderno_itens")
+                .select("questao_id,tipo,created_at")
+                .eq("user_id", uid)
+                .order("created_at", { ascending: true })
+                .order("questao_id", { ascending: true })
+        );
         if (simples.error) throw simples.error;
         linhas = simples.data ?? [];
     } else {

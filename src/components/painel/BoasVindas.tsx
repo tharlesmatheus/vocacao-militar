@@ -42,7 +42,7 @@ export function BoasVindas({ perfil, aoOcultar }: { perfil: PerfilAluno | null; 
             href: "/questoes",
             acao: "Resolver",
         },
-        { feito: passos.caderno, titulo: "Monte seu caderno", texto: "Marque \"+ Erros\" numa questão que você errou.", href: "/questoes", acao: "Ir às questões" },
+        { feito: passos.caderno, titulo: "Conheça seu caderno de erros", texto: "Toda questão que você errar entra nele sozinha.", href: "/cadernos", acao: "Ver cadernos" },
         { feito: passos.revisao, titulo: "Faça sua primeira revisão", texto: "O que você revisa, você não esquece.", href: "/revisao", acao: "Revisar" },
     ];
     const feitos = itens.filter((i) => i.feito).length;

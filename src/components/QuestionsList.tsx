@@ -16,6 +16,7 @@ type Filters = {
     modalidade?: string;
     banca?: string;
     excluirRespondidas?: boolean;
+    incluirEspecialidades?: boolean;
 };
 
 type Questao = {
@@ -83,6 +84,8 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
             if (!mounted) return;
             if (error || !data?.user?.id) {
                 setUserId(null);
+                setLoading(false);
+                setErroLista("Sua sessão expirou. Entre de novo para ver as questões.");
                 return;
             }
             setUserId(data.user.id);
@@ -113,7 +116,7 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
 
             try {
                 const ou = (v?: string) => (v && v.trim() ? v : null);
-                const { data, error } = await supabase.rpc("listar_questoes", {
+                const parametros = {
                     p_origem: ou(filters.origem),
                     p_instituicao: ou(filters.instituicao),
                     p_cargo: ou(filters.cargo),
@@ -124,7 +127,17 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                     p_excluir_respondidas: !!filters.excluirRespondidas,
                     p_limite: perPage,
                     p_offset: (page - 1) * perPage,
+                };
+                // Sem cargo/disciplina, Medicina, Odontologia, Engenharias etc. ficam de fora
+                // (o banco decide; com cargo ou disciplina escolhidos, mostra tudo).
+                let { data, error } = await supabase.rpc("listar_questoes", {
+                    ...parametros,
+                    p_ocultar_especialidades: !filters.incluirEspecialidades,
                 });
+                // Banco ainda sem a migração 20261019: usa a versão antiga da função.
+                if (error?.code === "PGRST202") {
+                    ({ data, error } = await supabase.rpc("listar_questoes", parametros));
+                }
 
                 if (error) throw error;
 

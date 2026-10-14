@@ -97,6 +97,7 @@ select:-webkit-autofill {
   --color-accent-foreground: var(--accent-foreground);
 
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
 
   --color-border: var(--border);
   --color-input: var(--input);
@@ -153,6 +154,7 @@ select:-webkit-autofill {
   --accent-foreground: #18181b;
 
   --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
 
   --border: #e0e0e4;
   --input: #d4d4d8;
@@ -198,6 +200,7 @@ select:-webkit-autofill {
   --accent-foreground: #e4e4e7;
 
   --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
 
   --border: #2a2a2e;
   --input: #34343a;

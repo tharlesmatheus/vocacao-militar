@@ -1,8 +1,12 @@
 "use client";
+import { Carregando } from "@/components/app/Carregando";
 
 import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { BotaoLembretes } from "@/components/BotaoLembretes";
+import { BotaoJaPaguei } from "@/components/BotaoJaPaguei";
+import { CHECKOUT_URL } from "@/lib/plano";
+import { erroAuth } from "@/lib/errosAuth";
 import {
     User2,
     Lock,
@@ -24,7 +28,6 @@ type PlanoRow = {
     valor_pago?: number | string | null;
 };
 
-const CHECKOUT_URL = "https://pay.kiwify.com.br/ptQ62f5";
 
 function toPtBRDate(dateIso?: string | null) {
     if (!dateIso) return "—";
@@ -91,7 +94,7 @@ export default function ContaPage() {
     })();
 
     const badge = (() => {
-        if (planoStatus === "ativo") {
+        if (planoStatus === "ativo" && emDia) {
             return {
                 klass: "bg-green-500/10 border border-green-500/40 text-green-700 dark:text-green-300",
                 label: "Ativo",
@@ -220,8 +223,9 @@ export default function ContaPage() {
 
         const {
             data: { subscription },
-        } = supabase.auth.onAuthStateChange(() => {
-            fetchUserAndPlan();
+        } = supabase.auth.onAuthStateChange((evento) => {
+            // Renovação de token não muda nada na tela; recarregar apagaria o que o aluno está editando.
+            if (evento === "SIGNED_IN" || evento === "SIGNED_OUT" || evento === "USER_UPDATED") fetchUserAndPlan();
         });
 
         return () => {
@@ -258,25 +262,26 @@ export default function ContaPage() {
                 },
             };
 
+            // Valida a senha antes de gravar qualquer coisa (evita salvar pela metade).
+            if (!isGoogleUser && novaSenha.trim() && novaSenha.trim().length < 8) {
+                setErrPerfil("A nova senha deve ter pelo menos 8 caracteres.");
+                return;
+            }
+
             const { error } = await supabase.auth.updateUser(payload);
 
             if (error) {
-                setErrPerfil("Erro ao atualizar dados: " + error.message);
+                setErrPerfil("Erro ao atualizar dados: " + erroAuth(error.message));
                 return;
             }
 
             if (!isGoogleUser && novaSenha.trim()) {
-                if (novaSenha.trim().length < 8) {
-                    setErrPerfil("A nova senha deve ter pelo menos 8 caracteres.");
-                    return;
-                }
-
                 const { error: errSenha } = await supabase.auth.updateUser({
                     password: novaSenha.trim(),
                 });
 
                 if (errSenha) {
-                    setErrPerfil("Erro ao atualizar senha: " + errSenha.message);
+                    setErrPerfil("Erro ao atualizar senha: " + erroAuth(errSenha.message));
                     return;
                 }
             }
@@ -331,9 +336,7 @@ export default function ContaPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center px-4">
-                <span className="text-lg text-foreground">Carregando...</span>
-            </div>
+            <Carregando />
         );
     }
 
@@ -342,7 +345,7 @@ export default function ContaPage() {
             <div className="flex w-full flex-col gap-6">
                 <div className="flex flex-col gap-1.5 border-b border-border pb-5">
                     <h1 className="text-3xl font-extrabold text-foreground">
-                        Minha Conta
+                        Minha conta
                     </h1>
                     <p className="text-sm text-muted-foreground">
                         Gerencie seu perfil e seu plano em um só lugar.
@@ -417,7 +420,7 @@ export default function ContaPage() {
                                     <label className="block text-sm font-medium text-muted-foreground mb-1">
                                         <span className="inline-flex items-center gap-2">
                                             <Mail className="w-4 h-4" />
-                                            Email
+                                            E-mail
                                         </span>
                                     </label>
                                     <input
@@ -547,7 +550,7 @@ export default function ContaPage() {
                         </div>
 
                         <div className="mt-6 rounded-xl border border-border bg-muted p-4">
-                            <div className="text-sm font-semibold text-foreground">Plano Premium</div>
+                            <div className="text-sm font-semibold text-foreground">Assinatura Vocação Militar</div>
                             <div className="mt-1 text-xs text-muted-foreground">
                                 {loadingPlano ? "Carregando status..." : emDiaLabel}
                             </div>
@@ -607,18 +610,24 @@ export default function ContaPage() {
                                     Seu plano está ativo.
                                 </div>
                             ) : planoStatus === "pendente" ? (
-                                <div className="rounded-xl border border-border bg-muted p-3 text-sm text-muted-foreground">
-                                    Pagamento pendente.
+                                <div className="flex flex-col gap-3">
+                                    <div className="rounded-xl border border-border bg-muted p-3 text-sm text-muted-foreground">
+                                        Pagamento pendente.
+                                    </div>
+                                    <BotaoJaPaguei />
                                 </div>
                             ) : (
-                                <button
-                                    className={`w-full rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/80 transition border border-primary ${loadingCheckout ? "opacity-60 pointer-events-none" : ""
-                                        }`}
-                                    onClick={handleCheckout}
-                                    disabled={loadingCheckout}
-                                >
-                                    {loadingCheckout ? "Abrindo checkout..." : "Assinar agora"}
-                                </button>
+                                <div className="flex flex-col gap-3">
+                                    <button
+                                        className={`w-full rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/80 transition border border-primary ${loadingCheckout ? "opacity-60 pointer-events-none" : ""
+                                            }`}
+                                        onClick={handleCheckout}
+                                        disabled={loadingCheckout}
+                                    >
+                                        {loadingCheckout ? "Abrindo checkout..." : "Assinar agora"}
+                                    </button>
+                                    <BotaoJaPaguei />
+                                </div>
                             )}
                         </div>
                     </aside>

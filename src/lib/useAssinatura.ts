@@ -13,8 +13,18 @@ export function useAssinatura(): boolean | null {
     useEffect(() => {
         let cancelado = false;
         (async () => {
-            const { data, error } = await supabase.rpc("assinatura_ativa");
-            if (!cancelado) setAtiva(!error && data === true);
+            // Falha de rede não pode virar "não assinante" (mostraria a tela de assinar
+            // para quem paga): tenta de novo antes de desistir.
+            for (let tentativa = 0; tentativa < 3; tentativa++) {
+                const { data, error } = await supabase.rpc("assinatura_ativa");
+                if (cancelado) return;
+                if (!error) {
+                    setAtiva(data === true);
+                    return;
+                }
+                await new Promise((r) => setTimeout(r, 1500 * (tentativa + 1)));
+            }
+            if (!cancelado) setAtiva(false);
         })();
         return () => {
             cancelado = true;

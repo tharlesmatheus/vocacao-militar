@@ -41,9 +41,13 @@ export default function AdminDashboard() {
         (async () => {
             const { data: { user } } = await supabase.auth.getUser();
             // app_metadata só o servidor altera; user_metadata o próprio usuário altera.
-            if (!user || user.app_metadata?.is_admin !== true) {
-                await supabase.auth.signOut();
+            if (!user) {
                 router.replace("/admin/login");
+                return;
+            }
+            // Aluno logado que abre /admin volta para o app, sem perder a sessão.
+            if (user.app_metadata?.is_admin !== true) {
+                router.replace("/");
                 return;
             }
             if (ativo) setLiberado(true);

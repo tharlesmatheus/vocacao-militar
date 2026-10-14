@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { rotuloBanca, rotuloModalidade } from "@/lib/rotulos";
 
 export interface Filters {
     origem?: string; // "" = todas | "USUARIO" = minhas | "ACERVO" = acervo da plataforma
@@ -11,6 +12,8 @@ export interface Filters {
     modalidade?: string;
     banca?: string;
     excluirRespondidas?: boolean;
+    /** Mostrar Medicina, Odontologia, Engenharias etc. mesmo sem cargo escolhido. */
+    incluirEspecialidades?: boolean;
 }
 
 interface QuestionFiltersProps {
@@ -46,6 +49,7 @@ const FILTROS_VAZIOS: Filters = {
     modalidade: "",
     banca: "",
     excluirRespondidas: false,
+    incluirEspecialidades: false,
 };
 
 const selectClass =
@@ -141,14 +145,15 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
         name: keyof Filters,
         label: string,
         lista: string[],
-        opts: { placeholder?: string; disabled?: boolean } = {}
+        opts: { placeholder?: string; disabled?: boolean; rotulo?: (v: string) => string } = {}
     ) {
         return (
             <div>
-                <label className="block mb-2 text-sm font-medium text-muted-foreground">
+                <label htmlFor={`filtro-${name}`} className="block mb-2 text-sm font-medium text-muted-foreground">
                     {label}
                 </label>
                 <select
+                    id={`filtro-${name}`}
                     name={name}
                     className={selectClass}
                     value={(selected[name] as string) ?? ""}
@@ -157,8 +162,8 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
                 >
                     <option value="">{opts.placeholder ?? "Selecione"}</option>
                     {lista.map((nome) => (
-                        <option key={nome} value={nome}>
-                            {nome}
+                        <option key={nome} value={nome} title={nome}>
+                            {opts.rotulo ? opts.rotulo(nome) : nome}
                         </option>
                     ))}
                 </select>
@@ -172,40 +177,22 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"
                 onSubmit={handleFiltrar}
             >
-                {/* Origem */}
-                <div>
-                    <label className="block mb-2 text-sm font-medium text-muted-foreground">
-                        Origem
-                    </label>
-                    <select
-                        name="origem"
-                        className={selectClass}
-                        value={selected.origem ?? ""}
-                        onChange={handleChange}
-                        disabled={loading}
-                    >
-                        <option value="">Todas</option>
-                        <option value="ACERVO">Banco de questões</option>
-                        <option value="USUARIO">Minhas questões</option>
-                    </select>
-                </div>
-
                 {campo("instituicao", "Instituição", opcoes.instituicoes)}
                 {campo("cargo", "Cargo", opcoes.cargos)}
-                {campo("banca", "Banca", opcoes.bancas)}
+                {campo("banca", "Banca", opcoes.bancas, { rotulo: rotuloBanca })}
                 {campo("disciplina", "Disciplina", opcoes.disciplinas)}
                 {campo("assunto", "Assunto", opcoes.assuntos, {
                     placeholder: selected.disciplina ? "Selecione" : "Escolha a disciplina primeiro",
                     disabled: !selected.disciplina,
                 })}
-                {campo("modalidade", "Modalidade", opcoes.modalidades)}
+                {campo("modalidade", "Modalidade", opcoes.modalidades, { rotulo: rotuloModalidade })}
 
                 {erro && (
                     <div className="col-span-full text-sm text-red-600 dark:text-red-400">{erro}</div>
                 )}
 
-                {/* Excluir Questões Respondidas */}
-                <div className="col-span-full mt-2">
+                {/* Excluir Questões Respondidas / incluir especialidades */}
+                <div className="col-span-full mt-2 grid gap-3 md:grid-cols-2">
                     <fieldset className="flex items-center gap-4 border border-border bg-muted rounded-xl px-4 py-3">
                         <legend className="text-muted-foreground text-sm font-semibold mr-3">
                             Excluir Questões:
@@ -220,6 +207,28 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
                             />
                             Já Respondidas
                         </label>
+                    </fieldset>
+
+                    <fieldset className="flex flex-col gap-1 border border-border bg-muted rounded-xl px-4 py-3">
+                        <legend className="text-muted-foreground text-sm font-semibold mr-3">
+                            Áreas de saúde e especialistas:
+                        </legend>
+                        <label className="flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer select-none">
+                            <input
+                                name="incluirEspecialidades"
+                                type="checkbox"
+                                className="form-checkbox accent-primary w-5 h-5 rounded border border-border transition"
+                                checked={!!selected.incluirEspecialidades || !!selected.cargo || !!selected.disciplina}
+                                disabled={!!selected.cargo || !!selected.disciplina}
+                                onChange={handleChange}
+                            />
+                            Incluir Medicina, Odontologia, Engenharias e outras
+                        </label>
+                        <span className="text-xs text-muted-foreground">
+                            {selected.cargo || selected.disciplina
+                                ? "Com cargo ou disciplina escolhidos, todas as questões dele aparecem."
+                                : "Ficam de fora quando nenhum cargo é escolhido, para não misturar com a prova policial."}
+                        </span>
                     </fieldset>
                 </div>
 

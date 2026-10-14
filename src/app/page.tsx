@@ -1,4 +1,5 @@
 "use client";
+import { Carregando } from "@/components/app/Carregando";
 
 /**
  * ARQUIVO: src/app/page.tsx
@@ -207,7 +208,7 @@ function buildSlices(
 
   return Object.entries(byMat)
     .map(([id, seconds]) => ({
-      name: id === "SEM_MATERIA" ? "Sem matéria" : matName[id] || "Matéria",
+      name: id === "SEM_MATERIA" ? "Sem disciplina" : matName[id] || "Disciplina removida",
       seconds,
     }))
     .filter((x) => x.seconds > 0)
@@ -257,6 +258,7 @@ export default function DashboardHome() {
   const [openElapsedSec, setOpenElapsedSec] = useState<number>(0);
   const timerRef = useRef<number | null>(null);
 
+  const [versaoSessoes, setVersaoSessoes] = useState(0);
   const [sessions, setSessions] = useState<
     Array<{ materia_id: string | null; duration_seconds: number | null }>
   >([]);
@@ -488,12 +490,13 @@ export default function DashboardHome() {
         if (!mounted || controller.signal.aborted) return;
 
         if (error || !data?.user?.id) {
-          router.replace("/assinar");
+          router.replace("/auth");
           return;
         }
 
         const meta = data.user.user_metadata ?? {};
         const rawFullName =
+          (meta.nome as string | undefined) ||
           (meta.full_name as string | undefined) ||
           (meta.name as string | undefined) ||
           (data.user.email ? data.user.email.split("@")[0] : "") ||
@@ -511,29 +514,42 @@ export default function DashboardHome() {
           .eq("user_id", uid)
           .maybeSingle();
 
-        // 2) tempo estudado 30 dias (pomodoro_sessions)
+        // 2) tempo estudado em 30 dias (cronômetro de Tempo de estudo)
         const from30 = new Date(startOfLocalDay().getTime() - (30 - 1) * ONE_DAY);
 
         const pomodoro30Req = supabase
-          .from("pomodoro_sessions")
-          .select("duration_seconds,started_at,phase")
+          .from("study_sessions")
+          .select("duration_seconds,started_at")
           .eq("user_id", uid)
-          .eq("phase", "study")
           .not("duration_seconds", "is", null)
           .gte("started_at", from30.toISOString());
 
-        // 3) streak: até 365 dias
-        const from365 = new Date(startOfLocalDay().getTime() - 365 * ONE_DAY);
+        // 3) sequência: dias seguidos com cronômetro OU questão respondida (até 120 dias)
+        const from365 = new Date(startOfLocalDay().getTime() - 120 * ONE_DAY);
 
         const pomodoro365Req = supabase
-          .from("pomodoro_sessions")
-          .select("duration_seconds,started_at,phase")
+          .from("study_sessions")
+          .select("duration_seconds,started_at")
           .eq("user_id", uid)
-          .eq("phase", "study")
           .not("duration_seconds", "is", null)
           .gte("started_at", from365.toISOString());
 
-        const [est, pom30, pom365] = await Promise.all([estReq, pomodoro30Req, pomodoro365Req]);
+        const tentativasReq = supabase
+          .from("question_attempts")
+          .select("created_at")
+          .eq("user_id", uid)
+          .gte("created_at", from365.toISOString())
+          .order("created_at", { ascending: false })
+          .limit(5000);
+
+        const [est, pom30, pom365Base, tentativas] = await Promise.all([estReq, pomodoro30Req, pomodoro365Req, tentativasReq]);
+        // Questão respondida conta como dia de estudo (1 s simbólico).
+        const pom365 = {
+          data: [
+            ...(pom365Base.data ?? []),
+            ...((tentativas.data ?? []) as { created_at: string }[]).map((t) => ({ started_at: t.created_at, duration_seconds: 1 })),
+          ],
+        };
 
         if (!mounted || controller.signal.aborted) return;
 
@@ -562,7 +578,9 @@ export default function DashboardHome() {
 
         let streak = 0;
         const base = startOfLocalDay().getTime();
-        for (let i = 0; i < 366; i++) {
+        // Hoje ainda sem estudo não zera a sequência: conta a partir de ontem.
+        const hojeEstudou = (byDay[ymdLocal(new Date(base))] ?? 0) > 0;
+        for (let i = hojeEstudou ? 0 : 1; i < 121; i++) {
           const d = new Date(base - i * ONE_DAY);
           const key = ymdLocal(d);
           const studied = (byDay[key] ?? 0) > 0;
@@ -574,7 +592,7 @@ export default function DashboardHome() {
         setLoading(false);
       } catch {
         if (!mounted || controller.signal.aborted) return;
-        router.replace("/assinar");
+        // Falha de rede/servidor: mostra o painel com o que houver, sem expulsar o aluno.
         setLoading(false);
       }
     })();
@@ -699,8 +717,9 @@ export default function DashboardHome() {
 
       try {
         const [mats, asss] = await Promise.all([
-          supabase.from("materias").select("id,nome").eq("user_id", userId),
-          supabase.from("assuntos").select("id,nome,materia_id").eq("user_id", userId),
+          // Mesmas disciplinas da página Tempo de estudo (menu Disciplinas).
+          supabase.from("questao_disciplinas").select("id,nome").eq("user_id", userId).eq("ativo", true).order("nome"),
+          supabase.from("questao_assuntos").select("id,nome,materia_id:disciplina_id").eq("user_id", userId).eq("ativo", true).order("nome"),
         ]);
 
         if (!mounted) return;
@@ -721,7 +740,7 @@ export default function DashboardHome() {
 
         const { data: open } = await supabase
           .from("study_sessions")
-          .select("id, started_at, materia_id, assunto_id, mode")
+          .select("id, started_at, materia_id:disciplina_catalogo_id, assunto_id:assunto_catalogo_id, mode")
           .eq("user_id", userId)
           .is("ended_at", null)
           .order("started_at", { ascending: false })
@@ -758,7 +777,7 @@ export default function DashboardHome() {
 
         let q = supabase
           .from("study_sessions")
-          .select("materia_id,assunto_id,duration_seconds,started_at,ended_at")
+          .select("materia_id:disciplina_catalogo_id,assunto_id:assunto_catalogo_id,duration_seconds,started_at,ended_at")
           .eq("user_id", userId)
           .not("duration_seconds", "is", null)
           .not("ended_at", "is", null)
@@ -767,8 +786,8 @@ export default function DashboardHome() {
         const from = getRangeStart(range);
         if (from) q = q.gte("started_at", from.toISOString());
 
-        if (materiaId) q = q.eq("materia_id", materiaId);
-        if (assuntoId) q = q.eq("assunto_id", assuntoId);
+        if (materiaId) q = q.eq("disciplina_catalogo_id", materiaId);
+        if (assuntoId) q = q.eq("assunto_catalogo_id", assuntoId);
 
         const { data, error } = await q;
         if (error) throw error;
@@ -784,7 +803,7 @@ export default function DashboardHome() {
     return () => {
       mounted = false;
     };
-  }, [userId, range, materiaId, assuntoId]);
+  }, [userId, range, materiaId, assuntoId, versaoSessoes]);
 
   /* =========================
    * Cronômetro em tempo real (sessão aberta)
@@ -855,7 +874,7 @@ export default function DashboardHome() {
 
     try {
       if (!materiaId) {
-        setTdeErro("Selecione uma Matéria para iniciar.");
+        setTdeErro("Selecione uma disciplina para iniciar.");
         return;
       }
 
@@ -867,15 +886,21 @@ export default function DashboardHome() {
         body: JSON.stringify({
           action: "start",
           access_token,
-          materia_id: materiaId,
-          assunto_id: assuntoId || null,
+          disciplina_catalogo_id: materiaId,
+          assunto_catalogo_id: assuntoId || null,
         }),
       });
 
       const out = await res.json();
       if (!res.ok) throw new Error(out?.error || "Falha ao iniciar.");
 
-      setOpenSession(out.session as OpenSession);
+      // A API devolve as colunas reais; o painel usa materia_id/assunto_id como apelido.
+      const sess = out.session ?? {};
+      setOpenSession({
+        ...sess,
+        materia_id: sess.disciplina_catalogo_id ?? null,
+        assunto_id: sess.assunto_catalogo_id ?? null,
+      } as OpenSession);
     } catch (e: any) {
       setTdeErro(e?.message || "Falha ao iniciar.");
     }
@@ -904,9 +929,8 @@ export default function DashboardHome() {
 
       setOpenSession(null);
       setOpenElapsedSec(0);
-      // o effect de sessions já recarrega quando range/materiaId/assuntoId mudam,
-      // mas aqui forçamos refletir rápido:
-      setSessions((prev) => [...prev]);
+      // Busca de novo para o tempo recém-salvo aparecer no gráfico.
+      setVersaoSessoes((v) => v + 1);
     } catch (e: any) {
       setTdeErro(e?.message || "Falha ao parar.");
     }
@@ -921,9 +945,7 @@ export default function DashboardHome() {
 
   if (loading) {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center px-4">
-        <span className="text-lg text-foreground">Carregando...</span>
-      </div>
+      <Carregando />
     );
   }
 
@@ -1142,7 +1164,7 @@ export default function DashboardHome() {
           </div>
 
           <div className="mt-3 text-[11px] text-muted-foreground">
-            * Tempo médio usa os últimos 30 dias (pomodoro).
+            * Tempo médio: tempo cronometrado nos últimos 30 dias dividido pelas questões resolvidas. Sequência: dias seguidos com estudo cronometrado ou questões resolvidas.
           </div>
         </section>
 
@@ -1151,7 +1173,7 @@ export default function DashboardHome() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="min-w-0">
               <div className="text-base font-extrabold text-foreground">Tempo de estudo</div>
-              <div className="text-xs text-muted-foreground">Por matéria</div>
+              <div className="text-xs text-muted-foreground">Por disciplina</div>
             </div>
 
             <SeletorSegmentado
@@ -1174,7 +1196,7 @@ export default function DashboardHome() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground">Matéria</span>
+                <span className="text-xs text-muted-foreground">Disciplina</span>
                 <select
                   className="bg-muted border border-border rounded-lg px-3 py-2 text-sm"
                   value={materiaId}
@@ -1216,7 +1238,7 @@ export default function DashboardHome() {
                 <div className="min-w-[220px]">
                   <div className="text-sm font-semibold">Sessão em andamento</div>
                   <div className="text-xs text-muted-foreground">
-                    {openSession.materia_id ? matName[openSession.materia_id] : "Sem matéria"}
+                    {openSession.materia_id ? matName[openSession.materia_id] ?? "Disciplina" : "Sem disciplina"}
                     {openSession.assunto_id ? ` • ${assName[openSession.assunto_id] ?? "Assunto"}` : ""}
                   </div>
                 </div>

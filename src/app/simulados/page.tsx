@@ -7,6 +7,7 @@ import { Play, Timer, Trophy } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { rotuloMeta, usePerfilAluno } from "@/lib/perfilAluno";
 import { useAssinatura } from "@/lib/useAssinatura";
+import { ChamadaAssinatura } from "@/components/app/ChamadaAssinatura";
 
 type Par = { instituicao: string; cargo: string; total: number };
 type Linha = {
@@ -53,7 +54,7 @@ export default function SimuladosPage() {
             .order("created_at", { ascending: false })
             .limit(30)
             .then(({ data, error }) => {
-                if (error) setErro("Os simulados ainda não estão disponíveis (falta rodar a atualização do banco).");
+                if (error) setErro("Não foi possível carregar seus simulados agora. Atualize a página em instantes.");
                 setLista((data ?? []) as Linha[]);
             });
     }, []);
@@ -109,9 +110,7 @@ export default function SimuladosPage() {
                 </header>
 
                 {assinaturaAtiva === false && (
-                    <div className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm text-foreground">
-                        Os simulados fazem parte da assinatura. <Link href="/perfil" className="font-semibold text-primary underline">Assinar</Link>
-                    </div>
+                    <ChamadaAssinatura titulo="Assine para fazer simulados" />
                 )}
 
                 {emAndamento.length > 0 && (
@@ -130,69 +129,71 @@ export default function SimuladosPage() {
                     </section>
                 )}
 
-                <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-                    <h2 className="mb-4 flex items-center gap-2 font-titulo text-xl font-bold uppercase tracking-wide text-foreground">
-                        <Timer className="h-5 w-5 text-primary" aria-hidden /> Novo simulado
-                    </h2>
-                    {perfil?.meta_instituicao && (
-                        <p className="mb-4 text-sm text-muted-foreground">
-                            Sugerido pela sua meta: <strong className="text-foreground">{rotuloMeta(perfil.meta_instituicao, perfil.meta_cargo)}</strong>
-                        </p>
-                    )}
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <label className="flex flex-col gap-1 text-sm">
-                            <span className="text-muted-foreground">Instituição</span>
-                            <select className={campo} value={instituicao} onChange={(e) => { setInstituicao(e.target.value); setCargo(""); }}>
-                                <option value="">Todas (simulado geral)</option>
-                                {instituicoes.map((i) => <option key={i} value={i}>{i}</option>)}
-                            </select>
-                        </label>
-                        <label className="flex flex-col gap-1 text-sm">
-                            <span className="text-muted-foreground">Cargo</span>
-                            <select className={campo} value={cargo} onChange={(e) => setCargo(e.target.value)} disabled={!instituicao}>
-                                <option value="">Todos os cargos</option>
-                                {cargos.map((c) => <option key={c.cargo} value={c.cargo}>{c.cargo} ({c.total})</option>)}
-                            </select>
-                        </label>
-                        <label className="flex flex-col gap-1 text-sm">
-                            <span className="text-muted-foreground">Tipo de questão</span>
-                            <select className={campo} value={tipo} onChange={(e) => { setTipo(e.target.value); setMinutos(null); }}>
-                                {TIPOS.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                            </select>
-                        </label>
-                        <div className="grid grid-cols-2 gap-3">
+                {assinaturaAtiva !== false && (
+                    <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+                        <h2 className="mb-4 flex items-center gap-2 font-titulo text-xl font-bold uppercase tracking-wide text-foreground">
+                            <Timer className="h-5 w-5 text-primary" aria-hidden /> Novo simulado
+                        </h2>
+                        {perfil?.meta_instituicao && (
+                            <p className="mb-4 text-sm text-muted-foreground">
+                                Sugerido pela sua meta: <strong className="text-foreground">{rotuloMeta(perfil.meta_instituicao, perfil.meta_cargo)}</strong>
+                            </p>
+                        )}
+                        <div className="grid gap-4 sm:grid-cols-2">
                             <label className="flex flex-col gap-1 text-sm">
-                                <span className="text-muted-foreground">Questões</span>
-                                <select className={campo} value={quantidade} onChange={(e) => { setQuantidade(Number(e.target.value)); setMinutos(null); }}>
-                                    {QUANTIDADES.map((q) => <option key={q} value={q}>{q}</option>)}
+                                <span className="text-muted-foreground">Instituição</span>
+                                <select className={campo} value={instituicao} onChange={(e) => { setInstituicao(e.target.value); setCargo(""); }}>
+                                    <option value="">Todas (simulado geral)</option>
+                                    {instituicoes.map((i) => <option key={i} value={i}>{i}</option>)}
                                 </select>
                             </label>
                             <label className="flex flex-col gap-1 text-sm">
-                                <span className="text-muted-foreground">Tempo (min)</span>
-                                <input
-                                    type="number"
-                                    min={5}
-                                    max={360}
-                                    className={campo}
-                                    value={minutosFinal}
-                                    onChange={(e) => setMinutos(Math.min(360, Math.max(5, Number(e.target.value) || 5)))}
-                                />
+                                <span className="text-muted-foreground">Cargo</span>
+                                <select className={campo} value={cargo} onChange={(e) => setCargo(e.target.value)} disabled={!instituicao}>
+                                    <option value="">Todos os cargos</option>
+                                    {cargos.map((c) => <option key={c.cargo} value={c.cargo}>{c.cargo} ({c.total})</option>)}
+                                </select>
                             </label>
+                            <label className="flex flex-col gap-1 text-sm">
+                                <span className="text-muted-foreground">Tipo de questão</span>
+                                <select className={campo} value={tipo} onChange={(e) => { setTipo(e.target.value); setMinutos(null); }}>
+                                    {TIPOS.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                                </select>
+                            </label>
+                            <div className="grid grid-cols-2 gap-3">
+                                <label className="flex flex-col gap-1 text-sm">
+                                    <span className="text-muted-foreground">Questões</span>
+                                    <select className={campo} value={quantidade} onChange={(e) => { setQuantidade(Number(e.target.value)); setMinutos(null); }}>
+                                        {QUANTIDADES.map((q) => <option key={q} value={q}>{q}</option>)}
+                                    </select>
+                                </label>
+                                <label className="flex flex-col gap-1 text-sm">
+                                    <span className="text-muted-foreground">Tempo (min)</span>
+                                    <input
+                                        type="number"
+                                        min={5}
+                                        max={360}
+                                        className={campo}
+                                        value={minutosFinal}
+                                        onChange={(e) => setMinutos(Math.min(360, Math.max(5, Number(e.target.value) || 5)))}
+                                    />
+                                </label>
+                            </div>
                         </div>
-                    </div>
-                    {cargo && (
-                        <p className="mt-3 text-xs text-muted-foreground">Se o cargo não tiver questões suficientes, completamos com outras da mesma instituição.</p>
-                    )}
-                    {erro && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{erro}</p>}
-                    <button
-                        type="button"
-                        onClick={comecar}
-                        disabled={criando || assinaturaAtiva === false}
-                        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
-                    >
-                        <Play className="h-4 w-4" aria-hidden /> {criando ? "Montando a prova…" : "Começar agora"}
-                    </button>
-                </section>
+                        {cargo && (
+                            <p className="mt-3 text-xs text-muted-foreground">Se o cargo não tiver questões suficientes, completamos com outras da mesma instituição.</p>
+                        )}
+                        {erro && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{erro}</p>}
+                        <button
+                            type="button"
+                            onClick={comecar}
+                            disabled={criando || assinaturaAtiva !== true}
+                            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-bold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
+                        >
+                            <Play className="h-4 w-4" aria-hidden /> {criando ? "Montando a prova…" : "Começar agora"}
+                        </button>
+                    </section>
+                )}
 
                 <section>
                     <h2 className="mb-3 flex items-center gap-2 font-titulo text-xl font-bold uppercase tracking-wide text-foreground">

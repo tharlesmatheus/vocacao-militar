@@ -48,10 +48,21 @@ const rankTone: Record<string, string> = {
     General: "text-yellow-600 dark:text-yellow-300",
 };
 
+const ROTULO_CATEGORIA: Record<string, string> = {
+    QUESTOES: "Questões",
+    RECUPERACAO: "Recuperação de erros",
+    REVISAO: "Revisão",
+    FLASHCARDS: "Flashcards",
+    FOCO: "Foco",
+    CONSTANCIA: "Constância",
+    SIMULADOS: "Simulados",
+    GERAL: "Geral",
+};
+
 const rarityTone: Record<string, string> = {
     Comum: "border-border bg-muted text-foreground",
-    Raro: "border-sky-200 bg-sky-50 text-sky-700",
-    "Épico": "border-violet-200 bg-violet-50 text-violet-700",
+    Raro: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    "Épico": "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300",
     Lendário: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
 };
 
@@ -88,11 +99,11 @@ function AchievementIcon({ achievement }: { achievement: GamificationAchievement
         case "RECUPERACAO":
             return <ShieldCheck className={`${base} text-emerald-600 dark:text-emerald-400`} />;
         case "REVISAO":
-            return <Brain className={`${base} text-indigo-600`} />;
+            return <Brain className={`${base} text-indigo-600 dark:text-indigo-400`} />;
         case "FLASHCARDS":
-            return <Sparkles className={`${base} text-violet-600`} />;
+            return <Sparkles className={`${base} text-violet-600 dark:text-violet-400`} />;
         case "FOCO":
-            return <Clock3 className={`${base} text-sky-600`} />;
+            return <Clock3 className={`${base} text-sky-600 dark:text-sky-400`} />;
         case "CONSTANCIA":
             return <Flame className={`${base} text-orange-500`} />;
         default:
@@ -592,7 +603,7 @@ export default function ConquistasPage() {
                             >
                                 {categories.map((item: string) => (
                                     <option key={item} value={item}>
-                                        {item === "TODAS" ? "Todas as categorias" : item}
+                                        {item === "TODAS" ? "Todas as categorias" : (ROTULO_CATEGORIA[item] ?? item)}
                                     </option>
                                 ))}
                             </select>
@@ -670,13 +681,13 @@ export default function ConquistasPage() {
                         <h2 className="text-lg font-semibold">Atividade de XP</h2>
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        Últimos eventos reconhecidos pelo motor de gamificação.
+                        Seus últimos pontos ganhos.
                     </p>
 
                     <div className="mt-5 divide-y divide-border">
                         {dashboard.recent_events.length === 0 ? (
                             <div className="py-8 text-center text-sm text-muted-foreground">
-                                Ainda não há eventos de gamificação.
+                                Você ainda não ganhou pontos. Resolva questões e faça revisões para começar.
                             </div>
                         ) : (
                             dashboard.recent_events.map((event: GamificationEvent) => {

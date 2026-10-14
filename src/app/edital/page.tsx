@@ -1320,8 +1320,8 @@ function NovoEdital({ onCreated }: { onCreated: (id: string) => void }) {
                             Estrutura do edital
                         </h3>
                         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                            As disciplinas e assuntos abaixo vêm do catálogo
-                            canônico. Marque somente o que faz parte deste
+                            As disciplinas e assuntos abaixo vêm do menu
+                            Disciplinas. Marque somente o que faz parte deste
                             edital. Ao selecionar uma disciplina, todos os
                             assuntos dela são marcados inicialmente.
                         </p>
@@ -1465,7 +1465,7 @@ function NovoEdital({ onCreated }: { onCreated: (id: string) => void }) {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div className="rounded-xl border border-border bg-card p-4">
                     <h3 className="font-medium">
-                        Nova disciplina canônica
+                        Nova disciplina
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
                         Se não existir no catálogo, cadastre aqui. Ela ficará
@@ -1498,7 +1498,7 @@ function NovoEdital({ onCreated }: { onCreated: (id: string) => void }) {
 
                 <div className="rounded-xl border border-border bg-card p-4">
                     <h3 className="font-medium">
-                        Novo assunto canônico
+                        Novo assunto
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
                         O assunto será cadastrado dentro de uma disciplina do
@@ -1555,9 +1555,8 @@ function NovoEdital({ onCreated }: { onCreated: (id: string) => void }) {
 
             <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-muted-foreground">
-                    O catálogo continua único. O edital recebe uma cópia da
-                    estrutura selecionada para preservar o funcionamento de
-                    revisões, flashcards, cronograma e progresso atuais.
+                    Mudanças feitas aqui valem só para este edital. Suas
+                    revisões, flashcards e cronograma continuam como estão.
                 </p>
 
                 <button
@@ -2022,7 +2021,7 @@ function EditarEstrutura({
                                 Adicionar disciplina existente
                             </h3>
                             <p className="mt-1 text-xs text-muted-foreground">
-                                Selecione uma disciplina do catálogo canônico.
+                                Selecione uma das suas disciplinas.
                                 Ela não será cadastrada novamente.
                             </p>
                         </div>
@@ -2102,7 +2101,7 @@ function EditarEstrutura({
 
                     <div className="rounded-xl border border-border bg-card p-4">
                         <h3 className="font-medium">
-                            Nova disciplina canônica
+                            Nova disciplina
                         </h3>
                         <p className="mt-1 text-xs text-muted-foreground">
                             Cria no catálogo e adiciona ao edital atual.
@@ -2140,8 +2139,8 @@ function EditarEstrutura({
                             </h3>
                             <p className="mt-1 text-xs text-muted-foreground">
                                 Escolha uma disciplina já presente no edital.
-                                Os assuntos disponíveis vêm do catálogo
-                                canônico.
+                                Os assuntos disponíveis vêm do menu
+                                Disciplinas.
                             </p>
                         </div>
 
@@ -2170,10 +2169,9 @@ function EditarEstrutura({
 
                         {selMateria && !disciplinaCanonicaDaMateria && (
                             <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-                                Essa disciplina existia no edital antes do
-                                catálogo canônico. Ao criar um novo assunto,
-                                ela será automaticamente cadastrada no
-                                catálogo.
+                                Esta disciplina ainda não está no menu
+                                Disciplinas. Ao criar um novo assunto, ela será
+                                adicionada automaticamente.
                             </div>
                         )}
 
@@ -2257,7 +2255,7 @@ function EditarEstrutura({
 
                         <div className="mt-5 border-t border-border pt-4">
                             <h4 className="text-sm font-medium">
-                                Novo assunto canônico
+                                Novo assunto
                             </h4>
                             <p className="mt-1 text-xs text-muted-foreground">
                                 Cria o assunto no catálogo e adiciona na

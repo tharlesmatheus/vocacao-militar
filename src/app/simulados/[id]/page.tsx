@@ -65,6 +65,7 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
     const [dados, setDados] = useState<DadosSimulado | null>(null);
     const [resultado, setResultado] = useState<Resultado | null>(null);
     const [erro, setErro] = useState("");
+    const [erroEntrega, setErroEntrega] = useState("");
     const [respostas, setRespostas] = useState<Record<string, string>>({});
     const [atual, setAtual] = useState(0);
     const [restante, setRestante] = useState<number | null>(null);
@@ -86,6 +87,10 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
         setRespostas(d.simulado.respostas ?? {});
         if (d.simulado.finalizado_em) {
             const r = await supabase.rpc("resultado_simulado", { p_id: id });
+            if (r.error || !r.data) {
+                setErro("Não foi possível carregar o resultado agora. Atualize a página em instantes.");
+                return;
+            }
             setResultado(r.data as Resultado);
         }
     }, [id]);
@@ -96,9 +101,11 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
 
     const finalizar = useCallback(async () => {
         setEntregando(true);
+        setErroEntrega("");
         const { data, error } = await supabase.rpc("finalizar_simulado", { p_id: id, p_respostas: respostasRef.current });
         if (error) {
-            setErro(error.message);
+            // Não troca a prova por uma tela de erro: as respostas continuam aqui para tentar de novo.
+            setErroEntrega("Não foi possível entregar agora. Verifique sua internet e toque em \"Tentar de novo\".");
             setEntregando(false);
             return;
         }
@@ -188,6 +195,14 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
     return (
         <div className="w-full pb-24">
             <div className="flex w-full flex-col gap-4">
+                {erroEntrega && (
+                    <div role="alert" className="flex flex-col gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300 sm:flex-row sm:items-center sm:justify-between">
+                        <span>{erroEntrega}</span>
+                        <button type="button" onClick={finalizar} disabled={entregando} className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">
+                            {entregando ? "Enviando…" : "Tentar de novo"}
+                        </button>
+                    </div>
+                )}
                 <div className="sticky top-0 z-20 flex items-center justify-between gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur">
                     <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-foreground">{dados.simulado.titulo}</div>

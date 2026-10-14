@@ -210,7 +210,7 @@ export default function ResumosPage() {
             setLegacyAssuntos((legacyAssuntosReq.data ?? []) as LegacyAssunto[]);
         } catch (e) {
             setErro(
-                `${mensagemErro(e)} Se o erro mencionar disciplina_catalogo_id, execute primeiro a migração SQL do catálogo.`
+                "Não foi possível carregar agora. Atualize a página; se continuar, fale com o suporte."
             );
         } finally {
             setLoading(false);
@@ -299,12 +299,12 @@ export default function ResumosPage() {
     }
 
     function nomeDisciplina(id: string | null) {
-        if (!id) return "Sem disciplina canônica";
+        if (!id) return "Sem disciplina";
         return disciplinaMap.get(id)?.nome ?? "Disciplina não encontrada";
     }
 
     function nomeAssunto(id: string | null) {
-        if (!id) return "Sem assunto canônico";
+        if (!id) return "Sem assunto";
         return assuntoMap.get(id)?.nome ?? "Assunto não encontrado";
     }
 
@@ -330,7 +330,7 @@ export default function ResumosPage() {
                     id,
                     nome:
                         id === "SEM_DISCIPLINA"
-                            ? "Sem disciplina canônica"
+                            ? "Sem disciplina"
                             : nomeDisciplina(id),
                     total: 1,
                     pendentes: pendentes.has(String(resumo.id)) ? 1 : 0,
@@ -377,7 +377,7 @@ export default function ResumosPage() {
                     id: aId,
                     nome:
                         aId === "SEM_ASSUNTO"
-                            ? "Sem assunto canônico"
+                            ? "Sem assunto"
                             : nomeAssunto(aId),
                     total: 1,
                     pendentes: pendentes.has(String(resumo.id)) ? 1 : 0,
@@ -671,7 +671,7 @@ export default function ResumosPage() {
                         Meus Resumos
                     </h1>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        Biblioteca única por disciplina e assunto do catálogo canônico.
+                        Seus resumos organizados por disciplina e assunto.
                     </p>
                 </div>
 
@@ -758,7 +758,7 @@ export default function ResumosPage() {
                             className="hover:text-foreground"
                         >
                             {disciplinaSel === "SEM_DISCIPLINA"
-                                ? "Sem disciplina canônica"
+                                ? "Sem disciplina"
                                 : nomeDisciplina(disciplinaSel)}
                         </button>
                     </>
@@ -769,7 +769,7 @@ export default function ResumosPage() {
                         <span>/</span>
                         <span className="text-foreground">
                             {assuntoSel === "SEM_ASSUNTO"
-                                ? "Sem assunto canônico"
+                                ? "Sem assunto"
                                 : nomeAssunto(assuntoSel)}
                         </span>
                     </>
@@ -782,7 +782,7 @@ export default function ResumosPage() {
                     {disciplinasAgrupadas.length === 0 ? (
                         <EmptyState
                             title="Nenhum resumo criado"
-                            description="Crie seu primeiro resumo e classifique-o pelo catálogo canônico."
+                            description="Crie seu primeiro resumo e escolha a disciplina e o assunto."
                             onCreate={abrirNovoResumo}
                         />
                     ) : (
@@ -871,7 +871,7 @@ export default function ResumosPage() {
 
                                             {!resumo.disciplina_catalogo_id && (
                                                 <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-300">
-                                                    legado mapeado por nome
+                                                    sem disciplina definida
                                                 </span>
                                             )}
                                         </div>

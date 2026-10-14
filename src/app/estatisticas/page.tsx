@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
     Activity,
     BookOpenText,
-    Brain,
     CheckCircle2,
     Clock3,
+    FileText,
     Layers3,
     RotateCcw,
     Target,
@@ -14,6 +14,7 @@ import {
     Percent,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { todasAsLinhas } from "@/lib/todasAsLinhas";
 import { DesempenhoMeta } from "@/components/painel/DesempenhoMeta";
 import { SeletorSegmentado } from "@/components/app/Pagina";
 import {
@@ -638,10 +639,10 @@ export default function EstatisticasPage() {
                     attemptRes,
                     reviewEventsRes,
                 ] = await Promise.all([
-                    pomodoroQuery,
-                    studyQuery,
-                    attemptQuery,
-                    reviewEventQuery,
+                    todasAsLinhas<any>(pomodoroQuery),
+                    todasAsLinhas<any>(studyQuery),
+                    todasAsLinhas<any>(attemptQuery),
+                    todasAsLinhas<any>(reviewEventQuery),
                 ]);
 
                 if (pomodoroRes.error && studyRes.error) {
@@ -1048,7 +1049,7 @@ export default function EstatisticasPage() {
                     } catch {
                         if (materiaId || assuntoId) {
                             setReviewWarning(
-                                "As revisões foram carregadas, mas parte delas não pôde ser classificada pelo catálogo canônico."
+                                "Algumas revisões não têm disciplina definida e aparecem fora dos filtros."
                             );
                         }
                     }
@@ -1494,13 +1495,13 @@ export default function EstatisticasPage() {
             {
                 label: "Flashcards revisados",
                 value: reviewTotals.flashcards,
-                icon: <Brain size={20} />,
+                icon: <Layers3 size={20} />,
                 tone: "text-primary",
             },
             {
                 label: "Resumos revisados",
                 value: reviewTotals.resumos,
-                icon: <Layers3 size={20} />,
+                icon: <FileText size={20} />,
                 tone: "text-primary",
             },
         ],
@@ -1735,10 +1736,8 @@ export default function EstatisticasPage() {
 
             {periodMode === "all" && reviewTotals.total > 0 && (
                 <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
-                    Em “Todo o período”, revisões anteriores à implantação da gamificação
-                    podem aparecer como volume histórico consolidado. Elas contam no total,
-                    mas não são distribuídas artificialmente no gráfico diário porque o
-                    histórico antigo não preservava a data de cada revisão.
+                    Em “Tudo”, revisões muito antigas entram no total, mas não aparecem no
+                    gráfico diário porque não temos a data exata de cada uma.
                 </div>
             )}
 

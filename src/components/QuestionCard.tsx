@@ -570,7 +570,7 @@ export function QuestionCard(props: QuestionCardProps) {
                             <div className="text-foreground">
                                 Acertou no chute?{" "}
                                 <button type="button" className="font-semibold text-primary underline" onClick={() => toggleLocal("ACERTOS")}>
-                                    Salvar para revisar
+                                    Guardar para treinar depois
                                 </button>
                             </div>
                         )
@@ -743,7 +743,7 @@ export function QuestionCard(props: QuestionCardProps) {
                         className={acaoClass(effectiveStatus.ERROS || effectiveStatus.ACERTOS)}
                     >
                         {effectiveStatus.ERROS || effectiveStatus.ACERTOS ? <BookmarkCheck className="h-4 w-4" aria-hidden /> : <BookmarkPlus className="h-4 w-4" aria-hidden />}
-                        {effectiveStatus.ERROS ? "No caderno de erros" : effectiveStatus.ACERTOS ? "Em acertei no chute" : "Caderno"}
+                        {effectiveStatus.ERROS ? "No caderno de erros" : effectiveStatus.ACERTOS ? "No Acertei no chute" : "Caderno"}
                         <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
                     </button>
                     {menuCaderno && (

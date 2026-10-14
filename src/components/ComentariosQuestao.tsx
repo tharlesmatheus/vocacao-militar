@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import { linkCheckout } from "@/lib/plano";
 import { supabase } from "../lib/supabaseClient";
 
 type Comentario = {
@@ -162,9 +162,16 @@ export function ComentariosQuestao({ questaoId }: { questaoId: string }) {
         return (
             <div className="rounded-xl border border-border bg-muted p-4 text-sm">
                 Os comentários fazem parte da assinatura.{" "}
-                <Link href="/perfil" className="font-semibold text-primary underline">
+                <button
+                    type="button"
+                    className="font-semibold text-primary underline"
+                    onClick={async () => {
+                        const { data } = await supabase.auth.getUser();
+                        window.location.assign(linkCheckout(data.user?.email));
+                    }}
+                >
                     Assinar agora
-                </Link>
+                </button>
             </div>
         );
     }

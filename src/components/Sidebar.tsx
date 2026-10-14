@@ -53,7 +53,7 @@ const MENU: MenuGroup[] = [
     {
         category: "PRINCIPAL",
         items: [
-            { name: "Dashboard", href: "/", icon: Home },
+            { name: "Painel", href: "/", icon: Home },
             { name: "Estatísticas", href: "/estatisticas", icon: BarChart2 },
             { name: "Conquistas", href: "/conquistas", icon: Trophy },
         ],
@@ -64,9 +64,8 @@ const MENU: MenuGroup[] = [
             { name: "Cadastrar Questões", href: "/landing", icon: PlusCircle, adminOnly: true },
             { name: "Questões", href: "/questoes", icon: Brain },
             { name: "Simulados", href: "/simulados", icon: Timer },
-            { name: "Catálogo", href: "/catalogo", icon: Tags },
             { name: "Cadernos", href: "/cadernos", icon: NotebookText },
-            { name: "Flash Cards", href: "/flashcards", icon: Layers3 },
+            { name: "Flashcards", href: "/flashcards", icon: Layers3 },
             { name: "Edital", href: "/edital", icon: BookOpen },
             { name: "Resumos", href: "/resumos", icon: FileText },
             { name: "Revisão", href: "/revisao", icon: History },
@@ -78,7 +77,8 @@ const MENU: MenuGroup[] = [
         category: "CONFIGURAÇÕES",
         items: [
             { name: "Minha meta", href: "/meta", icon: Crosshair },
-            { name: "Meu Perfil", href: "/perfil", icon: User },
+            { name: "Disciplinas", href: "/catalogo", icon: Tags },
+            { name: "Minha conta", href: "/perfil", icon: User },
         ],
     },
 ];
@@ -261,23 +261,6 @@ export function Sidebar({
                                 <ChevronLeft size={18} />
                             )}
                         </button>
-                    </div>
-
-                    <div
-                        className={`px-4 pb-4 text-xs leading-relaxed text-muted-foreground ${collapsed ? "lg:hidden" : ""
-                            }`}
-                    >
-                        Cadastros de instituições, cargos, bancas,
-                        disciplinas e assuntos:
-                        {" "}
-                        <Link
-                            href="/catalogo"
-                            onClick={() => setMobileOpen(false)}
-                            className="font-semibold text-foreground hover:underline"
-                        >
-                            Catálogo
-                        </Link>
-                        .
                     </div>
                 </div>
             </aside>

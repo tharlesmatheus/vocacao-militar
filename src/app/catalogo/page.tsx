@@ -109,7 +109,7 @@ function formatError(error: unknown) {
         "code" in error &&
         String((error as { code?: unknown }).code) === "23505"
     ) {
-        return "Já existe um cadastro equivalente. O banco bloqueou a duplicação.";
+        return "Já existe um item com esse nome.";
     }
 
     if (
@@ -130,7 +130,13 @@ function clean(value: string) {
 }
 
 export default function CatalogosQuestoesPage() {
-    const [tab, setTab] = useState<Tab>("INSTITUICOES");
+    const [tab, setTab] = useState<Tab>("DISCIPLINAS");
+    // Instituições, cargos e bancas só servem para o cadastro de questões (admin).
+    const [isAdmin, setIsAdmin] = useState(false);
+    const abas = useMemo(
+        () => (isAdmin ? TABS : TABS.filter((t) => t.id === "DISCIPLINAS" || t.id === "ASSUNTOS")),
+        [isAdmin]
+    );
 
     const [userId, setUserId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -206,9 +212,11 @@ export default function CatalogosQuestoesPage() {
             const uid = data.user?.id ?? null;
 
             if (authError || !uid) {
-                throw new Error("Usuário não autenticado.");
+                window.location.replace("/auth");
+                return;
             }
 
+            setIsAdmin(data.user?.app_metadata?.is_admin === true);
             setUserId(uid);
             await loadAll(uid);
         } catch (e) {
@@ -561,7 +569,7 @@ export default function CatalogosQuestoesPage() {
     );
 
     const tabInfo =
-        TABS.find((item) => item.id === tab) ?? TABS[0];
+        abas.find((item) => item.id === tab) ?? abas[0];
 
     const currentCount =
         tab === "INSTITUICOES"
@@ -591,14 +599,13 @@ export default function CatalogosQuestoesPage() {
                     <div className="flex items-center gap-3">
                         <div>
                             <h1 className="text-3xl font-extrabold text-foreground">
-                                Catálogos de Questões
+                                Disciplinas
                             </h1>
 
                             <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
-                                Cadastre aqui as categorias usadas pelo banco de
-                                questões. A tela de inserir questões deve apenas
-                                selecionar estes registros; ela não deve criar
-                                novas categorias.
+                                {isAdmin
+                                    ? "Disciplinas e assuntos de estudo; instituições, cargos e bancas usados no cadastro de questões."
+                                    : "As disciplinas e assuntos que você estuda. Eles aparecem no Edital, no Cronograma, no Tempo de estudo, nos Flashcards e nos Resumos."}
                             </p>
                         </div>
                     </div>
@@ -619,7 +626,7 @@ export default function CatalogosQuestoesPage() {
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
                     <aside className="h-fit rounded-xl border border-border bg-card p-3 shadow-sm">
                         <div className="space-y-1">
-                            {TABS.map((item) => {
+                            {abas.map((item) => {
                                 const Icon = item.icon;
                                 const selected = item.id === tab;
 
@@ -670,7 +677,7 @@ export default function CatalogosQuestoesPage() {
                                     <p className="mt-1 text-sm text-muted-foreground">
                                         {editingId
                                             ? "Editando um cadastro existente."
-                                            : "Adicione um novo cadastro canônico."}
+                                            : "Adicione um novo item."}
                                     </p>
                                 </div>
 
@@ -832,7 +839,7 @@ export default function CatalogosQuestoesPage() {
                                 </div>
 
                                 <div className="text-xs text-muted-foreground">
-                                    Desative em vez de duplicar.
+                                    Para não usar mais, desative em vez de criar outro igual.
                                 </div>
                             </div>
 

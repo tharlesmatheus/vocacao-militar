@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
+import { erroAuth } from "@/lib/errosAuth";
 
 /*
  * Destino do e-mail enviado depois da compra ("defina sua senha") e também do
@@ -63,7 +64,7 @@ export default function DefinirSenhaPage() {
         setSalvando(true);
         const { error } = await supabase.auth.updateUser({ password: senha });
         setSalvando(false);
-        if (error) return setErro(error.message);
+        if (error) return setErro(erroAuth(error.message));
 
         setEstado("salvo");
         setTimeout(() => (window.location.href = "/"), 1500);
@@ -75,7 +76,7 @@ export default function DefinirSenhaPage() {
         const { error } = await supabase.auth.resetPasswordForEmail(emailReenvio.trim().toLowerCase(), {
             redirectTo: `${window.location.origin}/definir-senha`,
         });
-        if (error) return setErro(error.message);
+        if (error) return setErro(erroAuth(error.message));
         setReenviado(true);
     }
 

@@ -216,7 +216,7 @@ export default function FlashcardsPage() {
             setLegacyAssuntos((legacyAssuntosReq.data ?? []) as LegacyAssunto[]);
         } catch (e) {
             setErro(
-                `${mensagemErro(e)} Se o erro mencionar disciplina_catalogo_id, execute primeiro a migração SQL do catálogo.`
+                "Não foi possível carregar agora. Atualize a página; se continuar, fale com o suporte."
             );
         } finally {
             setLoading(false);
@@ -304,12 +304,12 @@ export default function FlashcardsPage() {
     }
 
     function nomeDisciplina(id: string | null) {
-        if (!id) return "Sem disciplina canônica";
+        if (!id) return "Sem disciplina";
         return disciplinaMap.get(id)?.nome ?? "Disciplina não encontrada";
     }
 
     function nomeAssunto(id: string | null) {
-        if (!id) return "Sem assunto canônico";
+        if (!id) return "Sem assunto";
         return assuntoMap.get(id)?.nome ?? "Assunto não encontrado";
     }
 
@@ -341,7 +341,7 @@ export default function FlashcardsPage() {
                     id,
                     nome:
                         id === "SEM_DISCIPLINA"
-                            ? "Sem disciplina canônica"
+                            ? "Sem disciplina"
                             : nomeDisciplina(id),
                     total: 1,
                     pendentes: pendentes.has(String(card.id)) ? 1 : 0,
@@ -395,7 +395,7 @@ export default function FlashcardsPage() {
                     id: aId,
                     nome:
                         aId === "SEM_ASSUNTO"
-                            ? "Sem assunto canônico"
+                            ? "Sem assunto"
                             : nomeAssunto(aId),
                     total: 1,
                     pendentes: pendentes.has(String(card.id)) ? 1 : 0,
@@ -751,7 +751,7 @@ export default function FlashcardsPage() {
                             Meus Flashcards
                         </h1>
                         <p className="mt-1.5 text-sm text-muted-foreground">
-                            Organização única por disciplina e assunto do catálogo canônico.
+                            Seus flashcards organizados por disciplina e assunto.
                         </p>
                     </div>
                 </div>
@@ -839,7 +839,7 @@ export default function FlashcardsPage() {
                             className="hover:text-foreground"
                         >
                             {disciplinaSel === "SEM_DISCIPLINA"
-                                ? "Sem disciplina canônica"
+                                ? "Sem disciplina"
                                 : nomeDisciplina(disciplinaSel)}
                         </button>
                     </>
@@ -850,7 +850,7 @@ export default function FlashcardsPage() {
                         <span>/</span>
                         <span className="text-foreground">
                             {assuntoSel === "SEM_ASSUNTO"
-                                ? "Sem assunto canônico"
+                                ? "Sem assunto"
                                 : nomeAssunto(assuntoSel)}
                         </span>
                     </>
@@ -968,7 +968,7 @@ export default function FlashcardsPage() {
 
                                                 {!card.disciplina_catalogo_id && (
                                                     <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-300">
-                                                        legado mapeado por nome
+                                                        sem disciplina definida
                                                     </span>
                                                 )}
                                             </div>
@@ -1062,7 +1062,7 @@ export default function FlashcardsPage() {
                                         : "Novo flashcard"}
                                 </h2>
                                 <p className="mt-1 text-xs text-muted-foreground">
-                                    A classificação vem apenas do catálogo canônico.
+                                    A disciplina e o assunto vêm do menu Disciplinas.
                                 </p>
                             </div>
 

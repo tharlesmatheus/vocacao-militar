@@ -234,7 +234,7 @@ function normalizeCatalogName(value: string | null | undefined) {
 }
 
 function methodLabel(method: ReviewMethod) {
-    if (method === "CADERNO") return "Caderno de Erros";
+    if (method === "CADERNO") return "Caderno de erros";
     if (method === "FLASHCARD") return "Flashcards";
     return "Resumos";
 }
@@ -1516,7 +1516,7 @@ export default function RevisaoPage() {
                     <>
                         <section className="grid grid-cols-1 gap-5 md:grid-cols-3">
                             <MethodCard
-                                title="Caderno de Erros"
+                                title="Caderno de erros"
                                 description={methodDescription(
                                     "CADERNO"
                                 )}
@@ -1661,7 +1661,7 @@ export default function RevisaoPage() {
                             </h2>
                             <p className="mt-2 text-sm text-muted-foreground">
                                 Mistura as questões vencidas de todas as
-                                disciplinas e assuntos do Caderno de Erros.
+                                disciplinas e assuntos do Caderno de erros.
                             </p>
                         </button>
                     </section>
@@ -1705,7 +1705,7 @@ export default function RevisaoPage() {
                         </div>
 
                         {!cadernoDisciplinas.length && (
-                            <EmptyState text="Não há questões do Caderno de Erros vencidas hoje." />
+                            <EmptyState text="Não há questões do Caderno de erros vencidas hoje." />
                         )}
                     </section>
                 )}
@@ -2249,7 +2249,7 @@ function CadernoActivity({
     return (
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
             <div className="text-xs font-semibold uppercase tracking-wide text-primary">
-                Questão do Caderno de Erros
+                Questão do Caderno de erros
             </div>
 
             <h2 className="mt-5 whitespace-pre-wrap text-lg font-semibold leading-relaxed">

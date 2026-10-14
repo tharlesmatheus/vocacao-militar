@@ -828,7 +828,7 @@ export default function CronogramaPage() {
 
         return item.disciplina_id
             ? "Todos os assuntos"
-            : "Registro legado";
+            : "Disciplina removida";
     }
 
     if (loading) {
@@ -855,7 +855,7 @@ export default function CronogramaPage() {
                     </h1>
 
                     <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
-                        Sem segunda, terça ou quarta. Cada coluna é um ciclo de estudo e usa somente disciplinas e assuntos do catálogo canônico.
+                        Cada coluna é um ciclo de estudo: siga os blocos na ordem, sem se prender a dias da semana. As disciplinas vêm do menu Disciplinas.
                     </p>
                 </div>
 
@@ -1115,7 +1115,7 @@ export default function CronogramaPage() {
 
                                                         {!item.disciplina_id && (
                                                             <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-300">
-                                                                Registro antigo sem correspondência no catálogo. Você pode removê-lo e adicionar a disciplina canônica correta.
+                                                                Esta disciplina não existe mais. Remova o bloco e adicione a disciplina certa.
                                                             </div>
                                                         )}
 
@@ -1203,7 +1203,7 @@ export default function CronogramaPage() {
             </section>
 
             <p className="text-xs leading-relaxed text-muted-foreground">
-                O cronograma apenas organiza sua sequência de estudo. Ele não cria disciplinas nem assuntos: toda classificação vem do catálogo canônico em /catalogo.
+                O cronograma organiza a ordem dos seus estudos. Para criar ou renomear disciplinas e assuntos, use o menu Disciplinas.
             </p>
         </div>
     );

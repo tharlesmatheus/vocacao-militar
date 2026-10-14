@@ -1,4 +1,5 @@
 "use client";
+import { Carregando } from "@/components/app/Carregando";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -8,6 +9,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { QuestionFilters } from "@/components/QuestionFilters";
 import { QuestionsList } from "@/components/QuestionsList";
 import { useAssinatura } from "@/lib/useAssinatura";
+import { ChamadaAssinatura } from "@/components/app/ChamadaAssinatura";
 import { CabecalhoPagina } from "@/components/app/Pagina";
 import { rotuloMeta, usePerfilAluno } from "@/lib/perfilAluno";
 import { Crosshair } from "lucide-react";
@@ -36,6 +38,11 @@ export default function QuestoesPage() {
         if (!carregandoPerfil) setFilters(filtrosMeta);
     }, [carregandoPerfil, filtrosMeta]);
 
+    // O aviso da meta acompanha os filtros de verdade (ex.: "Limpar filtros" sai da meta).
+    const naMeta = !!perfil?.meta_instituicao
+        && filters?.instituicao === perfil.meta_instituicao
+        && (filters?.cargo ?? "") === (perfil.meta_cargo ?? "");
+
     useEffect(() => {
         let mounted = true;
 
@@ -59,9 +66,7 @@ export default function QuestoesPage() {
 
     if (loading || !filters) {
         return (
-            <div className="min-h-screen flex items-center justify-center px-4">
-                <span className="text-lg text-foreground">Carregando...</span>
-            </div>
+            <Carregando />
         );
     }
 
@@ -78,37 +83,47 @@ export default function QuestoesPage() {
                     }
                 />
 
-                {assinaturaAtiva === false && (
-                    <section className="rounded-xl border border-primary/30 bg-primary/10 p-5 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <span className="text-foreground">
-                            O banco de questões e os comentários fazem parte da assinatura. Sem ela, aparecem só as questões cadastradas por você.
-                        </span>
-                        <Link href="/perfil" className="bg-primary text-primary-foreground font-semibold px-4 py-2 rounded-lg text-center whitespace-nowrap">
-                            Assinar agora
-                        </Link>
-                    </section>
+                {/* Sem assinatura não há o que listar: mostra o que ela libera. */}
+                {assinaturaAtiva === null && (
+                    <div className="animate-pulse py-10 text-center text-muted-foreground">Carregando…</div>
                 )}
+                {assinaturaAtiva === false && <ChamadaAssinatura />}
 
-                {perfil?.meta_instituicao && (
+                {assinaturaAtiva && perfil?.meta_instituicao && (
                     <section className="flex flex-col gap-3 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                         <span className="flex items-center gap-2 text-foreground">
                             <Crosshair className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-                            {semMeta ? "Mostrando todas as questões." : <>Treinando para <strong>{rotuloMeta(perfil.meta_instituicao, perfil.meta_cargo)}</strong></>}
+                            {naMeta ? <>Treinando para <strong>{rotuloMeta(perfil.meta_instituicao, perfil.meta_cargo)}</strong></> : "Mostrando questões fora da sua meta."}
                         </span>
                         <span className="flex gap-4">
-                            <button type="button" className="font-semibold text-primary underline" onClick={() => setSemMeta((v) => !v)}>
-                                {semMeta ? "Voltar para a minha meta" : "Ver todas as questões"}
+                            <button
+                                type="button"
+                                className="font-semibold text-primary underline"
+                                onClick={() => {
+                                    if (naMeta) {
+                                        setSemMeta(true);
+                                    } else {
+                                        setSemMeta(false);
+                                        setFilters({ instituicao: perfil.meta_instituicao, cargo: perfil.meta_cargo ?? "" } as Filters);
+                                    }
+                                }}
+                            >
+                                {naMeta ? "Ver todas as questões" : "Voltar para a minha meta"}
                             </button>
                             <Link href="/meta" className="font-semibold text-primary underline">Trocar meta</Link>
                         </span>
                     </section>
                 )}
 
-                <section>
-                    <QuestionFilters onFiltrar={(f) => setFilters(f)} iniciais={filtrosMeta} />
-                </section>
+                {assinaturaAtiva && (
+                    <>
+                        <section>
+                            <QuestionFilters onFiltrar={(f) => setFilters(f)} iniciais={filters ?? undefined} />
+                        </section>
 
-                <QuestionsList filters={filters} />
+                        <QuestionsList filters={filters} />
+                    </>
+                )}
             </div>
         </div>
     );

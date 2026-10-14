@@ -16,6 +16,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isAuthLikeRoute = pathname.startsWith("/definir-senha");
   const showChrome = !isAuthRoute && !isAdminRoute && !isPublicRoute && !isAuthLikeRoute;
 
+  // Título da aba do navegador. O layout é "use client" (sem metadata do Next),
+  // então definimos aqui por rota. Páginas públicas definem o próprio título.
+  React.useEffect(() => {
+    if (isPublicRoute) return;
+    const TITULOS: [string, string][] = [
+      ["/questoes", "Questões"], ["/simulados", "Simulados"], ["/cadernos", "Cadernos"],
+      ["/flashcards", "Flashcards"], ["/resumos", "Resumos"], ["/revisao", "Revisão"],
+      ["/estatisticas", "Estatísticas"], ["/conquistas", "Conquistas"], ["/edital", "Edital"],
+      ["/cronograma", "Cronograma"], ["/tempo-de-estudo", "Tempo de estudo"], ["/catalogo", "Disciplinas"],
+      ["/meta", "Minha meta"], ["/perfil", "Minha conta"], ["/auth", "Entrar"], ["/definir-senha", "Definir senha"],
+      ["/admin", "Administração"], ["/landing", "Cadastrar questões"],
+    ];
+    const achado = TITULOS.find(([rota]) => pathname === rota || pathname.startsWith(rota + "/"));
+    document.title = achado ? `${achado[1]} | Vocação Militar` : pathname === "/" ? "Painel | Vocação Militar" : "Vocação Militar";
+  }, [pathname, isPublicRoute]);
+
   // ✅ estado do collapse fica no layout
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
 
@@ -105,7 +121,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="application-name" content="Vocação" />
         <meta
           name="description"
-          content="Plataforma de estudos e estatísticas de questões."
+          content="Questões comentadas, simulados e revisão para concursos policiais."
         />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </head>

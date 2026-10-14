@@ -1,25 +1,21 @@
-"use client";
-
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { SearchX } from "lucide-react";
 
 export default function NotFound() {
-    const router = useRouter();
-
     return (
-        <div className="min-h-screen flex items-center justify-center bg-muted px-4">
-            <div className="bg-card rounded-2xl shadow-lg p-8 flex flex-col items-center max-w-md w-full">
-                <svg width="68" height="68" fill="none" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10" fill="#f3dada" />
-                    <path d="M9 9l6 6M15 9l-6 6" stroke="#e2735e" strokeWidth={2.5} strokeLinecap="round" />
-                </svg>
-                <h1 className="text-2xl font-extrabold text-foreground mt-4 mb-2 text-center">Conteúdo não encontrado!</h1>
-                <p className="text-muted-foreground text-center mb-6">A página que você tentou acessar não existe ou foi removida.</p>
-                <button
-                    onClick={() => router.push("/")}
-                    className="bg-primary text-primary-foreground font-bold px-6 py-2 rounded-xl hover:bg-primary/90 transition"
+        <div className="flex w-full items-center justify-center px-4 py-20">
+            <div className="flex w-full max-w-md flex-col items-center rounded-xl border border-border bg-card p-8 text-center shadow-sm">
+                <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <SearchX className="h-7 w-7" aria-hidden />
+                </span>
+                <h1 className="mt-4 mb-2 text-2xl font-extrabold text-foreground">Página não encontrada</h1>
+                <p className="mb-6 text-muted-foreground">O endereço que você abriu não existe ou foi removido.</p>
+                <Link
+                    href="/"
+                    className="rounded-lg bg-primary px-6 py-2.5 font-bold text-primary-foreground transition hover:bg-primary/90"
                 >
-                    Voltar Para Página Principal
-                </button>
+                    Voltar para o painel
+                </Link>
             </div>
         </div>
     );
