@@ -1,4 +1,5 @@
 "use client";
+import { marcarDisciplina, useEstudoAutomatico } from "@/lib/tempoAtivo";
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -68,6 +69,11 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
     const [erroEntrega, setErroEntrega] = useState("");
     const [respostas, setRespostas] = useState<Record<string, string>>({});
     const [atual, setAtual] = useState(0);
+    useEstudoAutomatico("simulado");
+    const disciplinaAtual = dados?.questoes?.[atual]?.disciplina ?? null;
+    useEffect(() => {
+        marcarDisciplina({ nome: disciplinaAtual });
+    }, [disciplinaAtual]);
     const [restante, setRestante] = useState<number | null>(null);
     const [entregando, setEntregando] = useState(false);
     const offset = useRef(0); // relógio do servidor − relógio do aparelho

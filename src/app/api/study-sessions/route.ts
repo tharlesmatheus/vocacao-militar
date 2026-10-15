@@ -51,6 +51,17 @@ type ManualPayload = {
 
 type Body = StartPayload | StopPayload | ManualPayload;
 
+const LIMITE_CRONOMETRO_MS = 4 * 3600 * 1000;
+
+async function inserirSessao(linha: Record<string, unknown>, campos: string) {
+    const r = await supabaseAdmin.from("study_sessions").insert([linha]).select(campos).single();
+    if (r.error && /origem/i.test(r.error.message)) {
+        const { origem: _ignorado, ...semOrigem } = linha;
+        return supabaseAdmin.from("study_sessions").insert([semOrigem]).select(campos).single();
+    }
+    return r;
+}
+
 function json(data: unknown, status = 200) {
     return NextResponse.json(data, { status });
 }
@@ -313,6 +324,20 @@ export async function POST(req: Request) {
                 );
             }
 
+            // Sessão aberta esquecida (mais de 4 h): fecha com 4 h e começa uma nova.
+            const aberta = openSessions?.[0] as { id: string; started_at: string } | undefined;
+            if (aberta && Date.now() - new Date(aberta.started_at).getTime() >= LIMITE_CRONOMETRO_MS) {
+                await supabaseAdmin
+                    .from("study_sessions")
+                    .update({
+                        ended_at: new Date(new Date(aberta.started_at).getTime() + LIMITE_CRONOMETRO_MS).toISOString(),
+                        duration_seconds: LIMITE_CRONOMETRO_MS / 1000,
+                    })
+                    .eq("id", aberta.id)
+                    .eq("user_id", userId);
+                openSessions.splice(0, openSessions.length);
+            }
+
             if (openSessions?.length) {
                 return json({
                     ok: true,
@@ -321,31 +346,27 @@ export async function POST(req: Request) {
                 });
             }
 
-            const { data, error } = await supabaseAdmin
-                .from("study_sessions")
-                .insert([
-                    {
-                        user_id: userId,
+            const { data, error } = await inserirSessao(
+                {
+                    user_id: userId,
 
-                        // Canônico
-                        disciplina_catalogo_id:
-                            canonical.disciplina_catalogo_id,
-                        assunto_catalogo_id:
-                            canonical.assunto_catalogo_id,
+                    // Canônico
+                    disciplina_catalogo_id:
+                        canonical.disciplina_catalogo_id,
+                    assunto_catalogo_id:
+                        canonical.assunto_catalogo_id,
 
-                        // Legado opcional
-                        materia_id: materiaId,
-                        assunto_id: assuntoId,
+                    // Legado opcional
+                    materia_id: materiaId,
+                    assunto_id: assuntoId,
 
-                        mode: "cronometro",
-                        started_at:
-                            new Date().toISOString(),
-                    },
-                ])
-                .select(
-                    "id,started_at,materia_id,assunto_id,disciplina_catalogo_id,assunto_catalogo_id,mode"
-                )
-                .single();
+                    mode: "cronometro",
+                    origem: "cronometro",
+                    started_at:
+                        new Date().toISOString(),
+                },
+                "id,started_at,materia_id,assunto_id,disciplina_catalogo_id,assunto_catalogo_id,mode"
+            );
 
             if (error) {
                 return json(
@@ -378,11 +399,25 @@ export async function POST(req: Request) {
                 );
             }
 
+            // Cronômetro esquecido: encerra com no máximo 4 horas.
+            const { data: aberta } = await supabaseAdmin
+                .from("study_sessions")
+                .select("started_at")
+                .eq("id", sessionId)
+                .eq("user_id", userId)
+                .maybeSingle<{ started_at: string }>();
+            const inicio = aberta ? new Date(aberta.started_at).getTime() : NaN;
+            const fim = Number.isFinite(inicio)
+                ? Math.min(Date.now(), inicio + LIMITE_CRONOMETRO_MS)
+                : Date.now();
+
             const { data, error } = await supabaseAdmin
                 .from("study_sessions")
                 .update({
-                    ended_at:
-                        new Date().toISOString(),
+                    ended_at: new Date(fim).toISOString(),
+                    ...(Number.isFinite(inicio)
+                        ? { duration_seconds: Math.max(0, Math.round((fim - inicio) / 1000)) }
+                        : {}),
                 })
                 .eq("id", sessionId)
                 .eq("user_id", userId)
@@ -429,7 +464,8 @@ export async function POST(req: Request) {
 
             if (
                 !Number.isFinite(durationSeconds) ||
-                durationSeconds <= 0
+                durationSeconds <= 0 ||
+                durationSeconds > 12 * 3600
             ) {
                 return json(
                     {
@@ -445,9 +481,9 @@ export async function POST(req: Request) {
                     ? new Date(manualBody.ended_at)
                     : new Date();
 
-            if (Number.isNaN(endedAt.getTime())) {
+            if (Number.isNaN(endedAt.getTime()) || endedAt.getTime() > Date.now() + 60_000) {
                 return json(
-                    { error: "ended_at inválido." },
+                    { error: "Data inválida: não pode ser no futuro." },
                     400
                 );
             }
@@ -473,9 +509,7 @@ export async function POST(req: Request) {
                     manualBody
                 );
 
-            const { data, error } = await supabaseAdmin
-                .from("study_sessions")
-                .insert([
+            const { data, error } = await inserirSessao(
                     {
                         user_id: userId,
 
@@ -490,6 +524,7 @@ export async function POST(req: Request) {
                             manualBody.assunto_id ?? null,
 
                         mode: "manual",
+                        origem: "lancado",
                         started_at:
                             startedAt.toISOString(),
                         ended_at:
@@ -497,11 +532,8 @@ export async function POST(req: Request) {
                         duration_seconds:
                             Math.floor(durationSeconds),
                     },
-                ])
-                .select(
-                    "id,started_at,ended_at,duration_seconds,materia_id,assunto_id,disciplina_catalogo_id,assunto_catalogo_id,mode"
-                )
-                .single();
+                "id,started_at,ended_at,duration_seconds,materia_id,assunto_id,disciplina_catalogo_id,assunto_catalogo_id,mode"
+            );
 
             if (error) {
                 return json(

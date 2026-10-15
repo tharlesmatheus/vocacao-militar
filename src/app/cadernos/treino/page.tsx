@@ -1,4 +1,5 @@
 "use client";
+import { useEstudoAutomatico } from "@/lib/tempoAtivo";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -41,6 +42,7 @@ type Questao = {
 };
 
 function Treino() {
+    useEstudoAutomatico("caderno");
     const params = useSearchParams();
     const tipo: CadernoTipo = params.get("tipo") === "ACERTOS" ? "ACERTOS" : "ERROS";
     const disciplina = params.get("disciplina");

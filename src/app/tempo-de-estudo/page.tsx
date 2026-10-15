@@ -18,7 +18,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { ResponsiveContainer, PieChart, Pie, Tooltip, Cell } from "recharts";
-import { Play, Square } from "lucide-react";
+import { CalendarPlus, Play, Square } from "lucide-react";
+import Link from "next/link";
+import { todasAsLinhas } from "@/lib/todasAsLinhas";
 import { CabecalhoPagina, Pagina, Painel, SeletorSegmentado, Vazio } from "@/components/app/Pagina";
 import { corGrafico } from "@/lib/coresGrafico";
 
@@ -39,6 +41,59 @@ type OpenSession = {
 };
 
 type RangeKey = "dia" | "semana" | "mes" | "ano" | "tudo";
+
+type SessaoLinha = {
+    disciplina_catalogo_id: string | null;
+    duration_seconds: number | null;
+    started_at?: string;
+    origem?: string | null;
+    mode?: string | null;
+};
+
+/** Cronômetro esquecido ligado é encerrado com no máximo 4 horas. */
+const LIMITE_CRONOMETRO_S = 4 * 3600;
+
+const ROTULO_ORIGEM: Record<string, string> = {
+    questoes: "Questões",
+    simulado: "Simulados",
+    revisao: "Revisões",
+    caderno: "Caderno de erros",
+    cronometro: "Cronômetro",
+    lancado: "Lançado por você",
+};
+
+function origemDe(s: SessaoLinha) {
+    return s.origem || (s.mode === "manual" ? "lancado" : "cronometro");
+}
+
+/** Sessões encerradas do período (todas as páginas). Funciona antes e depois da migração 20261020. */
+async function buscarSessoes(userId: string, range: RangeKey): Promise<SessaoLinha[]> {
+    const montar = (campos: string) => {
+        let q = supabase
+            .from("study_sessions")
+            .select(campos)
+            .eq("user_id", userId)
+            .not("duration_seconds", "is", null)
+            .not("ended_at", "is", null)
+            .order("started_at", { ascending: false })
+            .order("id", { ascending: true });
+        const from = getRangeStart(range);
+        if (from) q = q.gte("started_at", from.toISOString());
+        // Campos dinâmicos: o tipo do Supabase não consegue inferir a linha.
+        return q as unknown as { range: (de: number, ate: number) => PromiseLike<{ data: SessaoLinha[] | null; error: { message: string } | null }> };
+    };
+    let r = await todasAsLinhas<SessaoLinha>(montar("id,disciplina_catalogo_id,duration_seconds,started_at,origem,mode"));
+    if (r.error && /origem/i.test(r.error.message)) {
+        r = await todasAsLinhas<SessaoLinha>(montar("id,disciplina_catalogo_id,duration_seconds,started_at,mode"));
+    }
+    if (r.error) throw r.error;
+    return r.data ?? [];
+}
+
+function hojeYmd() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 /* =========================
  * Cores: paleta do tema (lib/coresGrafico), atribuída pela posição no ranking.
@@ -104,7 +159,7 @@ function getRangeStart(range: RangeKey): Date | null {
  * - Inclui sessões finalizadas + (opcional) sessão aberta em tempo real.
  */
 function buildSlices(
-    sessions: Array<{ disciplina_catalogo_id: string | null; duration_seconds: number | null }>,
+    sessions: SessaoLinha[],
     matName: Record<string, string>,
     openSession?: OpenSession | null,
     openElapsedSec?: number
@@ -159,9 +214,18 @@ export default function TempoDeEstudoPage() {
     const [openElapsedSec, setOpenElapsedSec] = useState<number>(0);
 
     // dados agregados (sessões finalizadas)
-    const [sessions, setSessions] = useState<
-        Array<{ disciplina_catalogo_id: string | null; duration_seconds: number | null }>
-    >([]);
+    const [sessions, setSessions] = useState<SessaoLinha[]>([]);
+    const [aviso, setAviso] = useState<string | null>(null);
+    const [userId, setUserId] = useState<string>("");
+
+    // "Lançar tempo" (estudo feito fora, sem cronômetro)
+    const [lancando, setLancando] = useState(false);
+    const [lancDisc, setLancDisc] = useState("");
+    const [lancAss, setLancAss] = useState("");
+    const [lancData, setLancData] = useState(hojeYmd());
+    const [lancHoras, setLancHoras] = useState("0");
+    const [lancMin, setLancMin] = useState("30");
+    const [salvandoLanc, setSalvandoLanc] = useState(false);
 
     // controle de intervalo do cronômetro
     const timerRef = useRef<number | null>(null);
@@ -213,8 +277,18 @@ export default function TempoDeEstudoPage() {
 
                 if (!mounted) return;
 
-                if (open && open.length) {
-                    setOpenSession(open[0] as OpenSession);
+                setUserId(user.id);
+                const aberta = (open?.[0] ?? null) as OpenSession | null;
+                if (aberta && Date.now() - new Date(aberta.started_at).getTime() >= LIMITE_CRONOMETRO_S * 1000) {
+                    // Ficou ligado demais: o servidor encerra com 4 horas.
+                    await pararSessao(aberta.id);
+                    setOpenSession(null);
+                    setAviso("Seu cronômetro ficou ligado por mais de 4 horas e foi encerrado automaticamente com 4h.");
+                } else if (aberta) {
+                    setOpenSession(aberta);
+                    // Os seletores mostram o que está sendo cronometrado.
+                    setMateriaId(aberta.disciplina_catalogo_id ?? "");
+                    setAssuntoId(aberta.assunto_catalogo_id ?? "");
                 } else {
                     setOpenSession(null);
                 }
@@ -247,24 +321,10 @@ export default function TempoDeEstudoPage() {
                 const user = auth?.user;
                 if (!user?.id) return;
 
-                let q = supabase
-                    .from("study_sessions")
-                    .select("disciplina_catalogo_id,duration_seconds,started_at,ended_at")
-                    .eq("user_id", user.id)
-                    .not("duration_seconds", "is", null)
-                    .not("ended_at", "is", null)
-                    .order("started_at", { ascending: false });
-
-                const from = getRangeStart(range);
-                if (from) {
-                    q = q.gte("started_at", from.toISOString());
-                }
-
-                const { data, error } = await q;
-                if (error) throw error;
+                const linhas = await buscarSessoes(user.id, range);
                 if (!mounted) return;
 
-                setSessions((data ?? []) as any);
+                setSessions(linhas);
             } catch (e: any) {
                 if (!mounted) return;
                 setErro(e?.message || "Falha ao carregar sessões.");
@@ -300,7 +360,14 @@ export default function TempoDeEstudoPage() {
         // Atualiza imediatamente e depois a cada 1s
         const tick = () => {
             const now = Date.now();
-            setOpenElapsedSec(Math.max(0, Math.floor((now - started) / 1000)));
+            const seg = Math.max(0, Math.floor((now - started) / 1000));
+            setOpenElapsedSec(Math.min(seg, LIMITE_CRONOMETRO_S));
+            if (seg >= LIMITE_CRONOMETRO_S && timerRef.current) {
+                window.clearInterval(timerRef.current);
+                timerRef.current = null;
+                setAviso("O cronômetro chegou a 4 horas e foi encerrado automaticamente.");
+                void handleStop();
+            }
         };
 
         tick();
@@ -389,6 +456,23 @@ export default function TempoDeEstudoPage() {
         }
     }
 
+    /** Encerra a sessão no servidor (que limita a 4 horas). */
+    async function pararSessao(sessionId: string) {
+        const access_token = await getAccessToken();
+        const res = await fetch("/api/study-sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "stop", access_token, session_id: sessionId }),
+        });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok && res.status !== 404) throw new Error(out?.error || "Falha ao parar.");
+    }
+
+    async function recarregar() {
+        const { data: auth } = await supabase.auth.getUser();
+        if (auth?.user?.id) setSessions(await buscarSessoes(auth.user.id, range));
+    }
+
     /**
      * Para a sessão atual (cronômetro) e recarrega agregados.
      */
@@ -397,48 +481,65 @@ export default function TempoDeEstudoPage() {
 
         try {
             if (!openSession?.id) return;
-
-            const access_token = await getAccessToken();
-
-            const res = await fetch("/api/study-sessions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "stop",
-                    access_token,
-                    session_id: openSession.id,
-                }),
-            });
-
-            const out = await res.json();
-            if (!res.ok) throw new Error(out?.error || "Falha ao parar.");
-
-            // Fecha cronômetro na UI
+            await pararSessao(openSession.id);
             setOpenSession(null);
             setOpenElapsedSec(0);
-
-            // Recarrega agregados do período (para refletir a sessão recém-finalizada)
-            const from = getRangeStart(range);
-            let q = supabase
-                .from("study_sessions")
-                .select("disciplina_catalogo_id,duration_seconds,started_at,ended_at")
-                .not("duration_seconds", "is", null)
-                .not("ended_at", "is", null)
-                .order("started_at", { ascending: false });
-
-            const { data: auth } = await supabase.auth.getUser();
-            const user = auth?.user;
-            if (user?.id) q = q.eq("user_id", user.id);
-
-            if (from) q = q.gte("started_at", from.toISOString());
-
-            const { data, error } = await q;
-            if (error) throw error;
-            setSessions((data ?? []) as any);
+            await recarregar();
         } catch (e: any) {
             setErro(e?.message || "Falha ao parar.");
         }
     }
+
+    /** "Lançar tempo": estudo feito fora da plataforma, sem cronômetro. */
+    async function handleLancar(e: React.FormEvent) {
+        e.preventDefault();
+        setErro(null);
+        const segundos = (Number(lancHoras) || 0) * 3600 + (Number(lancMin) || 0) * 60;
+        if (!lancDisc) return setErro("Escolha a disciplina do tempo lançado.");
+        if (segundos < 60) return setErro("Informe pelo menos 1 minuto.");
+        if (segundos > 12 * 3600) return setErro("O máximo por lançamento é 12 horas.");
+        if (!lancData || lancData > hojeYmd()) return setErro("A data não pode ser no futuro.");
+
+        // Hoje: termina agora. Outro dia: termina às 20h daquele dia.
+        const fim = lancData === hojeYmd() ? new Date() : new Date(`${lancData}T20:00:00`);
+        setSalvandoLanc(true);
+        try {
+            const access_token = await getAccessToken();
+            const res = await fetch("/api/study-sessions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "manual",
+                    access_token,
+                    disciplina_catalogo_id: lancDisc,
+                    assunto_catalogo_id: lancAss || null,
+                    duration_seconds: segundos,
+                    ended_at: fim.toISOString(),
+                }),
+            });
+            const out = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(out?.error || "Não foi possível lançar o tempo.");
+            setLancando(false);
+            setAviso(`Tempo lançado: ${fmtHMSFull(segundos)}.`);
+            await recarregar();
+        } catch (e: any) {
+            setErro(e?.message || "Não foi possível lançar o tempo.");
+        } finally {
+            setSalvandoLanc(false);
+        }
+    }
+
+    const porOrigem = useMemo(() => {
+        const mapa: Record<string, number> = {};
+        for (const s of sessions) {
+            const o = origemDe(s);
+            mapa[o] = (mapa[o] ?? 0) + Math.max(0, Number(s.duration_seconds ?? 0));
+        }
+        if (openSession && openElapsedSec > 0) mapa.cronometro = (mapa.cronometro ?? 0) + openElapsedSec;
+        return Object.entries(mapa)
+            .filter(([, seg]) => seg > 0)
+            .sort((a, b) => b[1] - a[1]);
+    }, [sessions, openSession, openElapsedSec]);
 
     const PERIODOS: { id: RangeKey; nome: string }[] = [
         { id: "dia", nome: "Dia" },
@@ -455,12 +556,67 @@ export default function TempoDeEstudoPage() {
         <Pagina>
             <CabecalhoPagina
                 titulo="Tempo de estudo"
-                descricao="Cronometre suas sessões por disciplina e veja onde o seu tempo está indo."
+                descricao="O tempo em questões, simulados, revisões e caderno de erros é contado sozinho. Use o cronômetro para o estudo fora da plataforma (livro, PDF, videoaula)."
                 acoes={<SeletorSegmentado rotulo="Período" opcoes={PERIODOS} valor={range} aoMudar={setRange} />}
             />
 
             {/* Registro da sessão */}
-            <Painel titulo="Registrar sessão" descricao="Escolha a disciplina (e o assunto, se quiser) e inicie o cronômetro.">
+            <Painel
+                titulo="Cronômetro"
+                descricao="Para estudar fora da plataforma. Escolha a disciplina e inicie; ele para sozinho em 4 horas."
+                acoes={
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setLancando((v) => !v);
+                            setLancDisc(materiaId);
+                        }}
+                        className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+                    >
+                        <CalendarPlus className="h-4 w-4" aria-hidden /> Lançar tempo
+                    </button>
+                }
+            >
+                {!loading && materias.length === 0 && (
+                    <p className="mb-3 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+                        Você ainda não tem disciplinas. Elas aparecem sozinhas quando você resolve questões, ou crie em{" "}
+                        <Link href="/catalogo" className="font-semibold text-primary underline">Disciplinas</Link>.
+                    </p>
+                )}
+                {lancando && (
+                    <form onSubmit={handleLancar} className="mb-4 grid grid-cols-1 gap-3 rounded-lg border border-border bg-muted/40 p-4 md:grid-cols-[2fr_2fr_1.2fr_1.6fr_auto] md:items-end">
+                        <label className="flex flex-col gap-1">
+                            <span className="text-xs font-medium text-muted-foreground">Disciplina</span>
+                            <select className={campoClass} value={lancDisc} onChange={(e) => { setLancDisc(e.target.value); setLancAss(""); }}>
+                                <option value="">Selecione</option>
+                                {materias.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+                            </select>
+                        </label>
+                        <label className="flex flex-col gap-1">
+                            <span className="text-xs font-medium text-muted-foreground">Assunto (opcional)</span>
+                            <select className={campoClass} value={lancAss} onChange={(e) => setLancAss(e.target.value)} disabled={!lancDisc}>
+                                <option value="">Selecione</option>
+                                {assuntos.filter((a) => a.disciplina_id === lancDisc).map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                            </select>
+                        </label>
+                        <label className="flex flex-col gap-1">
+                            <span className="text-xs font-medium text-muted-foreground">Dia</span>
+                            <input type="date" className={campoClass} value={lancData} max={hojeYmd()} onChange={(e) => setLancData(e.target.value)} />
+                        </label>
+                        <div className="flex flex-col gap-1">
+                            <span className="text-xs font-medium text-muted-foreground">Duração</span>
+                            <div className="flex items-center gap-2">
+                                <input type="number" min={0} max={12} className={`${campoClass} w-16`} value={lancHoras} onChange={(e) => setLancHoras(e.target.value)} aria-label="Horas" />
+                                <span className="text-sm text-muted-foreground">h</span>
+                                <input type="number" min={0} max={59} step={5} className={`${campoClass} w-16`} value={lancMin} onChange={(e) => setLancMin(e.target.value)} aria-label="Minutos" />
+                                <span className="text-sm text-muted-foreground">min</span>
+                            </div>
+                        </div>
+                        <button type="submit" disabled={salvandoLanc} className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+                            {salvandoLanc ? "Salvando…" : "Salvar"}
+                        </button>
+                    </form>
+                )}
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <label className="flex flex-col gap-1">
                         <span className="text-xs font-medium text-muted-foreground">Disciplina</span>
@@ -535,6 +691,7 @@ export default function TempoDeEstudoPage() {
                     </div>
                 )}
 
+                {aviso && <div className="mt-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-foreground" role="status">{aviso}</div>}
                 {erro && <div className="mt-3 text-sm text-red-600 dark:text-red-400">{erro}</div>}
             </Painel>
 
@@ -552,7 +709,7 @@ export default function TempoDeEstudoPage() {
                 {loading && !slices.length ? (
                     <div className="h-48 animate-pulse rounded-lg bg-muted" />
                 ) : !slices.length ? (
-                    <Vazio titulo="Nenhuma sessão neste período" texto="Inicie o cronômetro acima ou escolha outro período." />
+                    <Vazio titulo="Nenhum tempo neste período" texto="Resolva questões, revise ou use o cronômetro — o tempo aparece aqui." />
                 ) : (
                     <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-[240px_1fr]">
                         <div className="mx-auto h-56 w-56">
@@ -613,8 +770,20 @@ export default function TempoDeEstudoPage() {
                         </ul>
                     </div>
                 )}
+                {porOrigem.length > 0 && (
+                    <div className="mt-5 border-t border-border pt-4">
+                        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">De onde veio o tempo</div>
+                        <div className="flex flex-wrap gap-2">
+                            {porOrigem.map(([o, seg]) => (
+                                <span key={o} className="rounded-full border border-border bg-muted px-3 py-1 text-xs text-foreground">
+                                    {ROTULO_ORIGEM[o] ?? o} <strong className="font-semibold">{fmtHMSFull(seg)}</strong>
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
                 {openSession && slices.length > 0 && (
-                    <p className="mt-4 text-xs text-muted-foreground">Inclui a sessão em andamento, somando em tempo real.</p>
+                    <p className="mt-4 text-xs text-muted-foreground">Inclui o cronômetro em andamento, somando em tempo real.</p>
                 )}
             </Painel>
         </Pagina>

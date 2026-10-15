@@ -67,7 +67,7 @@ const MENU: MenuGroup[] = [
             { name: "Simulados", href: "/simulados", icon: Timer },
             { name: "Cadernos", href: "/cadernos", icon: NotebookText },
             { name: "Flashcards", href: "/flashcards", icon: Layers3 },
-            { name: "Edital", href: "/edital", icon: BookOpen },
+            { name: "Edital", href: "/edital", icon: BookOpen, adminOnly: true },
             { name: "Resumos", href: "/resumos", icon: FileText },
             { name: "Revisão", href: "/revisao", icon: History },
             { name: "Cronograma", href: "/cronograma", icon: CalendarDays },
@@ -172,18 +172,21 @@ export function Sidebar({
                 </div>
 
                 {/* Navegação */}
-                <nav className="sem-barra min-h-0 flex-1 overflow-y-auto px-3 py-[clamp(4px,1vh,14px)]">
-                    <div className="space-y-[clamp(4px,calc(2vh-6px),16px)]">
+                <nav className="sem-barra min-h-0 flex-1 overflow-y-auto px-3 py-3">
+                    <div>
                         {MENU.map((group) => (
-                            <section key={group.category}>
+                            <section
+                                key={group.category}
+                                className="border-sidebar-border [&:not(:first-child)]:mt-3 [&:not(:first-child)]:border-t [&:not(:first-child)]:pt-3"
+                            >
                                 <div
-                                    className={`mb-1 px-3 font-titulo text-[11px] font-semibold uppercase leading-4 tracking-[0.22em] text-sidebar-primary/80 [@media(max-height:600px)]:hidden ${collapsed ? "lg:hidden" : ""
+                                    className={`mb-1.5 px-3 font-titulo text-[11px] font-semibold uppercase leading-4 tracking-[0.22em] text-sidebar-primary/80 ${collapsed ? "lg:hidden" : ""
                                         }`}
                                 >
                                     {group.category}
                                 </div>
 
-                                <div className="space-y-px">
+                                <div className="space-y-0.5">
                                     {group.items.filter((item) => !item.adminOnly || isAdmin).map((item) => {
                                         const Icon = item.icon;
                                         const active = isActive(
@@ -204,20 +207,20 @@ export function Sidebar({
                                                         : undefined
                                                 }
                                                 className={`relative flex rounded-md transition ${collapsed
-                                                        ? "items-center gap-2.5 px-3 py-[clamp(2px,calc(1.1vh-4px),9px)] lg:justify-center lg:px-2"
-                                                        : "items-center gap-2.5 px-3 py-[clamp(2px,calc(1.1vh-4px),9px)]"
+                                                        ? "items-center gap-2.5 px-3 py-2 lg:justify-center lg:px-2"
+                                                        : "items-center gap-3 px-3 py-2"
                                                     } ${active
                                                         ? "bg-sidebar-primary/10 text-sidebar-primary before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-sidebar-primary"
                                                         : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                                                     }`}
                                             >
                                                 <Icon
-                                                    size={17}
+                                                    size={18}
                                                     className="shrink-0"
                                                 />
 
                                                 <span
-                                                    className={`min-w-0 text-[13px] font-medium leading-[18px] ${collapsed
+                                                    className={`min-w-0 text-sm font-medium ${collapsed
                                                             ? "lg:hidden"
                                                             : ""
                                                         }`}

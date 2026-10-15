@@ -1,1355 +1,387 @@
 "use client";
-import { Carregando } from "@/components/app/Carregando";
 
 /**
- * ARQUIVO: src/app/page.tsx
+ * Painel do aluno.
  *
- * O que muda:
- * - Header simples: "Olá, {nome}"
- * - Tag (pill) com data + hora (alinhada na mesma largura dos botões no mobile)
- * - Meta diária concreta: 50 questões, 10 flashcards e 10 resumos revisados
- * - Botões (cards) em 2 colunas no mobile, estilo “cartões coloridos”
- *   - Questões, Resumos, Revisão, Ciclo de Estudos, Cadernos e Tempo de estudo
- * - Abaixo: “Suas Estatísticas” no padrão da imagem (2 colunas), mais compacto/alinhado
- * - Abaixo: Tempo de estudo (gráfico redondo/pizza + lista) EMBUTIDO aqui (substitui o mini gráfico atual)
- *   - Fonte: study_sessions (com ended_at != null) + sessão aberta em tempo real (ended_at null)
- *   - Filtro: Dia / Semana / Mês / Ano / Tudo
- *   - Cores estáveis por matéria (hash do nome)
+ * Ordem: saudação → Missão do dia → atalhos → Sua meta → números → Primeiros passos.
+ * O cronômetro fica só na página Tempo de estudo. O tempo do dia já inclui o
+ * tempo contado sozinho em questões, simulados, revisão e caderno de erros.
  */
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen } from "lucide-react";
 import {
-  Brain,
-  FileText,
-  History,
-  CalendarDays,
-  Calendar as CalendarIcon,
-  BarChart2,
-  Target,
-  Timer,
-  Flame,
-  ArrowUpRight,
-  CheckCircle2,
+    ArrowUpRight,
+    BarChart2,
+    Brain,
+    CheckCircle2,
+    Clock,
+    FileText,
+    Flame,
+    History,
+    Layers3,
+    NotebookText,
+    Target,
+    Timer,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { usePerfilAluno } from "@/lib/perfilAluno";
-import { corGrafico } from "@/lib/coresGrafico";
-import { SeletorSegmentado } from "@/components/app/Pagina";
+import { todasAsLinhas } from "@/lib/todasAsLinhas";
+import { Carregando } from "@/components/app/Carregando";
 import { CartaoMeta } from "@/components/painel/CartaoMeta";
 import { BoasVindas } from "@/components/painel/BoasVindas";
-import { ResponsiveContainer, PieChart, Pie, Tooltip, Cell } from "recharts";
 
-const ONE_DAY = 24 * 60 * 60 * 1000;
+const DIA_MS = 24 * 60 * 60 * 1000;
 
-const DAILY_GOALS = {
-  questoes: 50,
-  flashcards: 10,
-  resumos: 10,
-} as const;
+/** Metas do dia: alcançáveis por qualquer aluno, inclusive quem acabou de entrar. */
+const META = { questoes: 20, estudoMin: 30 } as const;
 
-type ReviewMethod = "CADERNO" | "FLASHCARD" | "RESUMO";
+type Sessao = { started_at: string; duration_seconds: number | null };
+type Progresso = { item_id: string; method: string; last_reviewed_at: string | null; next_review: string | null };
 
-type ReviewEventRow = {
-  source_id: string | null;
-  metadata: unknown;
-  occurred_at: string;
-};
-
-type ReviewProgressRow = {
-  item_id: string;
-  method: ReviewMethod;
-  last_reviewed_at: string | null;
-  next_review: string;
-};
-
-function clampPct(value: number) {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, value));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-function reviewMethodFromMetadata(metadata: unknown): ReviewMethod | null {
-  if (!isRecord(metadata)) return null;
-
-  const raw = String(metadata.method ?? "").toUpperCase();
-
-  if (raw === "CADERNO" || raw === "FLASHCARD" || raw === "RESUMO") {
-    return raw;
-  }
-
-  return null;
-}
-
-/* =========================
- * Helpers básicos
- * ========================= */
-function sanitizeDisplayName(name: string): string {
-  const cleaned = (name ?? "").replace(/\s+/g, " ").trim();
-  return cleaned.length > 60 ? `${cleaned.slice(0, 60)}…` : cleaned;
-}
-
-function startOfLocalDay(t = Date.now()) {
-  const d = new Date(t);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function ymdLocal(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-}
-
-function hmLocal(d: Date) {
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
-}
-
-function fmtDateLong(d: Date) {
-  return d.toLocaleDateString("pt-BR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-  });
-}
-
-function fmtCompact(n: number) {
-  const v = Number(n ?? 0);
-  return Number.isFinite(v) ? v : 0;
-}
-
-/* =========================
- * Tempo de estudo (Pizza)
- * ========================= */
-type Materia = { id: string; nome: string };
-type Assunto = { id: string; nome: string; materia_id?: string | null };
-type Slice = { name: string; seconds: number };
-
-type OpenSession = {
-  id: string;
-  started_at: string;
-  materia_id: string | null;
-  assunto_id: string | null;
-  mode: "cronometro" | "manual";
-};
-
-type RangeKey = "dia" | "semana" | "mes" | "ano" | "tudo";
-
-function fmtHMSFull(totalSeconds: number): string {
-  const s = Math.max(0, Math.floor(totalSeconds));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const r = s % 60;
-
-  const hh = h ? `${h}h ` : "";
-  const mm = h || m ? `${m}m ` : "";
-  const ss = `${r}s`;
-
-  return `${hh}${mm}${ss}`.trim();
-}
-
-function getRangeStart(range: RangeKey): Date | null {
-  const now = new Date();
-  const d = new Date(now);
-
-  if (range === "tudo") return null;
-
-  if (range === "dia") {
+function inicioDoDia(t = Date.now()) {
+    const d = new Date(t);
     d.setHours(0, 0, 0, 0);
     return d;
-  }
-
-  if (range === "semana") {
-    const day = d.getDay();
-    const diff = (day + 6) % 7; // semana começa na segunda
-    d.setDate(d.getDate() - diff);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-
-  if (range === "mes") {
-    d.setDate(1);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-
-  // ano
-  d.setMonth(0, 1);
-  d.setHours(0, 0, 0, 0);
-  return d;
 }
 
-function buildSlices(
-  sessions: Array<{ materia_id: string | null; duration_seconds: number | null }>,
-  matName: Record<string, string>,
-  openSession?: OpenSession | null,
-  openElapsedSec?: number
-): Slice[] {
-  const byMat: Record<string, number> = {};
-
-  for (const s of sessions) {
-    const matId = s.materia_id ?? "SEM_MATERIA";
-    const dur = Number(s.duration_seconds ?? 0);
-    byMat[matId] = (byMat[matId] ?? 0) + Math.max(0, dur);
-  }
-
-  if (openSession && typeof openElapsedSec === "number" && openElapsedSec > 0) {
-    const matId = openSession.materia_id ?? "SEM_MATERIA";
-    byMat[matId] = (byMat[matId] ?? 0) + Math.max(0, Math.floor(openElapsedSec));
-  }
-
-  return Object.entries(byMat)
-    .map(([id, seconds]) => ({
-      name: id === "SEM_MATERIA" ? "Sem disciplina" : matName[id] || "Disciplina removida",
-      seconds,
-    }))
-    .filter((x) => x.seconds > 0)
-    .sort((a, b) => b.seconds - a.seconds);
+function ymd(d: Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/* =========================
- * Page
- * ========================= */
-export default function DashboardHome() {
-  const router = useRouter();
-  const { perfil, carregando: carregandoPerfil, erro: erroPerfil, recarregar: recarregarPerfil } = usePerfilAluno();
+function duracao(seg: number) {
+    const s = Math.max(0, Math.round(seg));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (h) return `${h}h ${m}min`;
+    if (m) return `${m}min`;
+    return s ? `${s}s` : "0min";
+}
 
-  const [loading, setLoading] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
+const pct = (v: number, alvo: number) => (alvo <= 0 ? 100 : Math.max(0, Math.min(100, (v / alvo) * 100)));
 
-  const [userName, setUserName] = useState("");
-  const [userId, setUserId] = useState<string>("");
+export default function Painel() {
+    const router = useRouter();
+    const { perfil, carregando: carregandoPerfil, erro: erroPerfil, recarregar: recarregarPerfil } = usePerfilAluno();
 
-  // stats (resumo)
-  const [questoesTotal, setQuestoesTotal] = useState(0);
-  const [taxaAcerto, setTaxaAcerto] = useState(0);
+    const [carregando, setCarregando] = useState(true);
+    const [nome, setNome] = useState("");
+    const [userId, setUserId] = useState("");
 
-  // tempo médio (pomodoro) e streak (pomodoro)
-  const [tempoTotalSeg30d, setTempoTotalSeg30d] = useState(0);
-  const [streakDias, setStreakDias] = useState(0);
+    const [questoesTotal, setQuestoesTotal] = useState(0);
+    const [taxaAcerto, setTaxaAcerto] = useState(0);
+    const [questoesHoje, setQuestoesHoje] = useState(0);
+    const [estudoHojeSeg, setEstudoHojeSeg] = useState(0);
+    const [estudo7dSeg, setEstudo7dSeg] = useState(0);
+    const [sequencia, setSequencia] = useState(0);
+    const [revisoesPendentes, setRevisoesPendentes] = useState(0);
+    const [revisoesFeitasHoje, setRevisoesFeitasHoje] = useState(0);
+    const [errosParaRefazer, setErrosParaRefazer] = useState(0);
+    const [totalFlashcards, setTotalFlashcards] = useState(0);
+    const [totalResumos, setTotalResumos] = useState(0);
 
-  // pill relógio
-  const [now, setNow] = useState<Date>(() => new Date());
-  const clockRef = useRef<number | null>(null);
+    useEffect(() => {
+        let ativo = true;
+        (async () => {
+            const { data, error } = await supabase.auth.getUser();
+            if (!ativo) return;
+            if (error || !data?.user?.id) {
+                router.replace("/auth");
+                return;
+            }
+            const meta = data.user.user_metadata ?? {};
+            const bruto = String(meta.nome || meta.full_name || meta.name || (data.user.email ?? "").split("@")[0] || "");
+            setNome(bruto.replace(/\s+/g, " ").trim().slice(0, 60));
+            setUserId(data.user.id);
 
-  // ===== Tempo de estudo (pizza) =====
-  const [tdeLoading, setTdeLoading] = useState(false);
-  const [tdeErro, setTdeErro] = useState<string | null>(null);
+            const uid = data.user.id;
+            const hoje = inicioDoDia();
+            const amanha = new Date(hoje.getTime() + DIA_MS);
+            const desde120 = new Date(hoje.getTime() - 120 * DIA_MS);
+            const desde7 = new Date(hoje.getTime() - 6 * DIA_MS);
 
-  const [materias, setMaterias] = useState<Materia[]>([]);
-  const [assuntos, setAssuntos] = useState<Assunto[]>([]);
-  const [matName, setMatName] = useState<Record<string, string>>({});
-  const [assName, setAssName] = useState<Record<string, string>>({});
+            try {
+                const [est, tentHoje, sessoes, tentativas, progresso, eventos, cadernos, flash, res] = await Promise.all([
+                    supabase.from("estatisticas").select("questoes_respondidas,taxa_acerto").eq("user_id", uid).maybeSingle(),
+                    supabase
+                        .from("question_attempts")
+                        .select("questao_id", { count: "exact", head: true })
+                        .eq("user_id", uid)
+                        .gte("created_at", hoje.toISOString())
+                        .lt("created_at", amanha.toISOString()),
+                    todasAsLinhas<Sessao>(
+                        supabase
+                            .from("study_sessions")
+                            .select("started_at,duration_seconds")
+                            .eq("user_id", uid)
+                            .not("duration_seconds", "is", null)
+                            .not("ended_at", "is", null)
+                            .gte("started_at", desde120.toISOString())
+                            .order("started_at", { ascending: false })
+                    ),
+                    supabase
+                        .from("question_attempts")
+                        .select("created_at")
+                        .eq("user_id", uid)
+                        .gte("created_at", desde120.toISOString())
+                        .order("created_at", { ascending: false })
+                        .limit(1000),
+                    supabase.from("review_progress").select("item_id,method,last_reviewed_at,next_review").eq("user_id", uid),
+                    supabase
+                        .from("gamification_events")
+                        .select("source_id")
+                        .eq("user_id", uid)
+                        .eq("event_type", "REVIEW_COMPLETED")
+                        .gte("occurred_at", hoje.toISOString())
+                        .lt("occurred_at", amanha.toISOString()),
+                    supabase.rpc("resumo_cadernos"),
+                    supabase.from("flashcards").select("id", { count: "exact", head: true }).eq("user_id", uid),
+                    supabase.from("resumos").select("id", { count: "exact", head: true }).eq("user_id", uid),
+                ]);
+                if (!ativo) return;
 
-  const [materiaId, setMateriaId] = useState<string>("");
-  const [assuntoId, setAssuntoId] = useState<string>("");
+                setQuestoesTotal(Number(est.data?.questoes_respondidas ?? 0) || 0);
+                setTaxaAcerto(Math.round(Number(est.data?.taxa_acerto ?? 0) || 0));
+                setQuestoesHoje(tentHoje.count ?? 0);
+                setTotalFlashcards(flash.count ?? 0);
+                setTotalResumos(res.count ?? 0);
+                setErrosParaRefazer(Number((cadernos.data as any)?.erros_ativos ?? 0) || 0);
 
-  const [range, setRange] = useState<RangeKey>("tudo");
+                // Tempo de estudo (cronômetro + contagem automática) e sequência de dias.
+                const porDia = new Map<string, number>();
+                let hojeSeg = 0;
+                let seteDiasSeg = 0;
+                for (const s of sessoes.data ?? []) {
+                    const ini = new Date(s.started_at);
+                    const seg = Math.max(0, Number(s.duration_seconds ?? 0));
+                    if (Number.isNaN(ini.getTime())) continue;
+                    const chave = ymd(ini);
+                    porDia.set(chave, (porDia.get(chave) ?? 0) + seg);
+                    if (ini >= hoje) hojeSeg += seg;
+                    if (ini >= desde7) seteDiasSeg += seg;
+                }
+                for (const t of (tentativas.data ?? []) as { created_at: string }[]) {
+                    const d = new Date(t.created_at);
+                    if (!Number.isNaN(d.getTime())) porDia.set(ymd(d), (porDia.get(ymd(d)) ?? 0) + 1);
+                }
+                setEstudoHojeSeg(hojeSeg);
+                setEstudo7dSeg(seteDiasSeg);
 
-  const [openSession, setOpenSession] = useState<OpenSession | null>(null);
-  const [openElapsedSec, setOpenElapsedSec] = useState<number>(0);
-  const timerRef = useRef<number | null>(null);
+                // Dia sem estudo ainda não zera a sequência: conta a partir de ontem.
+                let seq = 0;
+                const base = hoje.getTime();
+                const comecaHoje = (porDia.get(ymd(hoje)) ?? 0) > 0;
+                for (let i = comecaHoje ? 0 : 1; i < 121; i++) {
+                    if ((porDia.get(ymd(new Date(base - i * DIA_MS))) ?? 0) > 0) seq += 1;
+                    else break;
+                }
+                setSequencia(seq);
 
-  const [versaoSessoes, setVersaoSessoes] = useState(0);
-  const [sessions, setSessions] = useState<
-    Array<{ materia_id: string | null; duration_seconds: number | null }>
-  >([]);
-
-  /* =========================
- * CONTADORES DASHBOARD
- * ========================= */
-
-  const [questoesHoje, setQuestoesHoje] = useState(0);
-  const [flashcardsHoje, setFlashcardsHoje] = useState(0);
-  const [resumosRevisadosHoje, setResumosRevisadosHoje] = useState(0);
-
-  const [totalResumos, setTotalResumos] = useState(0);
-  const [revisoesConcluidasHoje, setRevisoesConcluidasHoje] = useState(0);
-  const [revisoesPendentes, setRevisoesPendentes] = useState(0);
-  const [totalCadernos, setTotalCadernos] = useState(0);
-  const [tempoHojeSeg, setTempoHojeSeg] = useState(0);
-
-  useEffect(() => {
-    if (!userId) return;
-
-    let active = true;
-
-    (async () => {
-      const inicioHoje = startOfLocalDay();
-      const fimHoje = new Date(inicioHoje);
-      fimHoje.setDate(fimHoje.getDate() + 1);
-
-      const hojeYmd = ymdLocal(inicioHoje);
-
-      const [
-        questoes,
-        resumos,
-        reviewEvents,
-        reviewProgress,
-        sessoesHoje,
-        cadernos,
-      ] = await Promise.all([
-        // Fonte atual das questões respondidas.
-        supabase
-          .from("question_attempts")
-          .select("questao_id", { count: "exact", head: true })
-          .eq("user_id", userId)
-          .gte("created_at", inicioHoje.toISOString())
-          .lt("created_at", fimHoje.toISOString()),
-
-        supabase
-          .from("resumos")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", userId),
-
-        // Quando a gamificação está instalada, este é o histórico mais exato
-        // das revisões concluídas no dia.
-        supabase
-          .from("gamification_events")
-          .select("source_id,metadata,occurred_at")
-          .eq("user_id", userId)
-          .eq("event_type", "REVIEW_COMPLETED")
-          .gte("occurred_at", inicioHoje.toISOString())
-          .lt("occurred_at", fimHoje.toISOString())
-          .order("occurred_at", { ascending: true }),
-
-        // Também serve para calcular pendências e como fallback caso
-        // gamification_events ainda não esteja disponível.
-        supabase
-          .from("review_progress")
-          .select("item_id,method,last_reviewed_at,next_review")
-          .eq("user_id", userId),
-
-        supabase
-          .from("study_sessions")
-          .select("duration_seconds")
-          .eq("user_id", userId)
-          .gte("started_at", inicioHoje.toISOString())
-          .lt("started_at", fimHoje.toISOString())
-          .not("ended_at", "is", null),
-
-        supabase
-          .from("cadernos")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", userId),
-      ]);
-
-      if (!active) return;
-
-      setQuestoesHoje(questoes.count ?? 0);
-      setTotalResumos(resumos.count ?? 0);
-      setTotalCadernos(cadernos.count ?? 0);
-
-      const progressRows = (reviewProgress.data ?? []) as ReviewProgressRow[];
-
-      setRevisoesPendentes(
-        progressRows.filter((row) => String(row.next_review ?? "") <= hojeYmd).length
-      );
-
-      const methodByItem = new Map<string, ReviewMethod>();
-      for (const row of progressRows) {
-        methodByItem.set(String(row.item_id), row.method);
-      }
-
-      let flashcards = 0;
-      let resumosFeitos = 0;
-      let revisoesFeitas = 0;
-
-      if (!reviewEvents.error) {
-        for (const event of (reviewEvents.data ?? []) as ReviewEventRow[]) {
-          const method =
-            reviewMethodFromMetadata(event.metadata) ||
-            (event.source_id
-              ? methodByItem.get(String(event.source_id)) ?? null
-              : null);
-
-          if (!method) continue;
-
-          revisoesFeitas += 1;
-
-          if (method === "FLASHCARD") flashcards += 1;
-          if (method === "RESUMO") resumosFeitos += 1;
-        }
-      } else {
-        // Fallback sem alterar banco: review_progress guarda a última revisão
-        // de cada item. Para a meta diária isso é suficiente para contar os
-        // itens revisados hoje.
-        for (const row of progressRows) {
-          if (!row.last_reviewed_at) continue;
-
-          const reviewedAt = new Date(row.last_reviewed_at);
-
-          if (
-            Number.isNaN(reviewedAt.getTime()) ||
-            reviewedAt < inicioHoje ||
-            reviewedAt >= fimHoje
-          ) {
-            continue;
-          }
-
-          revisoesFeitas += 1;
-
-          if (row.method === "FLASHCARD") flashcards += 1;
-          if (row.method === "RESUMO") resumosFeitos += 1;
-        }
-      }
-
-      setFlashcardsHoje(flashcards);
-      setResumosRevisadosHoje(resumosFeitos);
-      setRevisoesConcluidasHoje(revisoesFeitas);
-
-      const tempo = (sessoesHoje.data ?? []).reduce(
-        (acc: number, s: any) => acc + Number(s.duration_seconds ?? 0),
-        0
-      );
-
-      setTempoHojeSeg(Math.max(0, tempo));
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [userId]);
-
-  /* =========================
-   * AÇÕES PRINCIPAIS
-   * ========================= */
-
-  const ACTIONS = useMemo(
-    () => [
-      {
-        name: "Resolver Questões",
-        subtitle: `${Math.min(questoesHoje, DAILY_GOALS.questoes)}/${DAILY_GOALS.questoes} hoje`,
-        href: "/questoes",
-        icon: Brain,
-      },
-      {
-        name: "Resumos",
-        subtitle: `${Math.min(
-          resumosRevisadosHoje,
-          DAILY_GOALS.resumos
-        )}/${DAILY_GOALS.resumos} hoje • ${totalResumos} salvos`,
-        href: "/resumos",
-        icon: FileText,
-      },
-      {
-        name: "Revisão",
-        subtitle: `${revisoesPendentes} para hoje • ${revisoesConcluidasHoje} feitas`,
-        href: "/revisao",
-        icon: History,
-      },
-      {
-        name: "Ciclo de Estudos",
-        subtitle: "Continue de onde parou",
-        href: "/cronograma",
-        icon: CalendarDays,
-      },
-      {
-        name: "Cadernos",
-        subtitle: `${totalCadernos} cadernos`,
-        href: "/cadernos",
-        icon: BookOpen,
-      },
-      {
-        name: "Tempo de estudo",
-        subtitle: fmtHMSFull(tempoHojeSeg),
-        href: "/tempo-de-estudo",
-        icon: Timer,
-      },
-    ],
-    [
-      questoesHoje,
-      resumosRevisadosHoje,
-      totalResumos,
-      revisoesPendentes,
-      revisoesConcluidasHoje,
-      totalCadernos,
-      tempoHojeSeg,
-    ]
-  );
-
-  // ====== LOAD AUTH + DADOS ======
-  useEffect(() => {
-    let mounted = true;
-    const controller = new AbortController();
-
-    (async () => {
-      setLoading(true);
-      setErro(null);
-
-      try {
-        const { data, error } = await supabase.auth.getUser();
-        if (!mounted || controller.signal.aborted) return;
-
-        if (error || !data?.user?.id) {
-          router.replace("/auth");
-          return;
-        }
-
-        const meta = data.user.user_metadata ?? {};
-        const rawFullName =
-          (meta.nome as string | undefined) ||
-          (meta.full_name as string | undefined) ||
-          (meta.name as string | undefined) ||
-          (data.user.email ? data.user.email.split("@")[0] : "") ||
-          "";
-
-        setUserName(sanitizeDisplayName(rawFullName));
-        setUserId(data.user.id);
-
-        const uid = data.user.id;
-
-        // 1) estatisticas (resumo)
-        const estReq = supabase
-          .from("estatisticas")
-          .select("questoes_respondidas,taxa_acerto")
-          .eq("user_id", uid)
-          .maybeSingle();
-
-        // 2) tempo estudado em 30 dias (cronômetro de Tempo de estudo)
-        const from30 = new Date(startOfLocalDay().getTime() - (30 - 1) * ONE_DAY);
-
-        const pomodoro30Req = supabase
-          .from("study_sessions")
-          .select("duration_seconds,started_at")
-          .eq("user_id", uid)
-          .not("duration_seconds", "is", null)
-          .gte("started_at", from30.toISOString());
-
-        // 3) sequência: dias seguidos com cronômetro OU questão respondida (até 120 dias)
-        const from365 = new Date(startOfLocalDay().getTime() - 120 * ONE_DAY);
-
-        const pomodoro365Req = supabase
-          .from("study_sessions")
-          .select("duration_seconds,started_at")
-          .eq("user_id", uid)
-          .not("duration_seconds", "is", null)
-          .gte("started_at", from365.toISOString());
-
-        const tentativasReq = supabase
-          .from("question_attempts")
-          .select("created_at")
-          .eq("user_id", uid)
-          .gte("created_at", from365.toISOString())
-          .order("created_at", { ascending: false })
-          .limit(5000);
-
-        const [est, pom30, pom365Base, tentativas] = await Promise.all([estReq, pomodoro30Req, pomodoro365Req, tentativasReq]);
-        // Questão respondida conta como dia de estudo (1 s simbólico).
-        const pom365 = {
-          data: [
-            ...(pom365Base.data ?? []),
-            ...((tentativas.data ?? []) as { created_at: string }[]).map((t) => ({ started_at: t.created_at, duration_seconds: 1 })),
-          ],
+                // Revisões: pendentes até hoje e feitas hoje.
+                const linhas = (progresso.data ?? []) as Progresso[];
+                const hojeYmd = ymd(hoje);
+                setRevisoesPendentes(linhas.filter((r) => r.next_review && String(r.next_review).slice(0, 10) <= hojeYmd).length);
+                const feitas = !eventos.error
+                    ? (eventos.data ?? []).length
+                    : linhas.filter((r) => r.last_reviewed_at && new Date(r.last_reviewed_at) >= hoje).length;
+                setRevisoesFeitasHoje(feitas);
+            } catch {
+                // Falha de rede: mostra o painel com o que houver.
+            } finally {
+                if (ativo) setCarregando(false);
+            }
+        })();
+        return () => {
+            ativo = false;
         };
+    }, [router]);
+
+    // Primeiro acesso (nunca escolheu meta nem pulou): leva para a escolha do concurso.
+    const precisaEscolherMeta = !!userId && !carregandoPerfil && !perfil && !erroPerfil;
+    useEffect(() => {
+        if (precisaEscolherMeta) router.replace("/meta?primeiro=1");
+    }, [precisaEscolherMeta, router]);
+
+    const missao = useMemo(() => {
+        const alvoRevisoes = revisoesPendentes + revisoesFeitasHoje;
+        const itens = [
+            {
+                label: "Questões",
+                detalhe: `${Math.min(questoesHoje, META.questoes)} / ${META.questoes}`,
+                progresso: pct(questoesHoje, META.questoes),
+                href: "/questoes",
+                icon: Brain,
+            },
+            {
+                label: "Revisões do dia",
+                detalhe: alvoRevisoes ? `${revisoesFeitasHoje} / ${alvoRevisoes}` : "Nada pendente hoje",
+                progresso: pct(revisoesFeitasHoje, alvoRevisoes),
+                href: "/revisao",
+                icon: History,
+            },
+            {
+                label: "Tempo de estudo",
+                detalhe: `${duracao(Math.min(estudoHojeSeg, META.estudoMin * 60))} / ${META.estudoMin}min`,
+                progresso: pct(estudoHojeSeg, META.estudoMin * 60),
+                href: "/tempo-de-estudo",
+                icon: Clock,
+            },
+        ];
+        const total = Math.round(itens.reduce((a, i) => a + i.progresso, 0) / itens.length);
+        const concluidas = itens.filter((i) => i.progresso >= 100).length;
+        return { itens, total, concluidas };
+    }, [questoesHoje, revisoesPendentes, revisoesFeitasHoje, estudoHojeSeg]);
+
+    const atalhos = [
+        { nome: "Resolver questões", sub: `${questoesHoje} hoje`, href: "/questoes", icon: Brain },
+        { nome: "Revisão", sub: `${revisoesPendentes} para hoje • ${revisoesFeitasHoje} feitas`, href: "/revisao", icon: History },
+        { nome: "Cadernos", sub: errosParaRefazer ? `${errosParaRefazer} ${errosParaRefazer === 1 ? "erro" : "erros"} para refazer` : "Nenhum erro pendente", href: "/cadernos", icon: NotebookText },
+        { nome: "Simulados", sub: "Prova cronometrada", href: "/simulados", icon: Timer },
+        { nome: "Flashcards", sub: `${totalFlashcards} salvos`, href: "/flashcards", icon: Layers3 },
+        { nome: "Resumos", sub: `${totalResumos} salvos`, href: "/resumos", icon: FileText },
+    ];
+
+    const numeros = [
+        { label: "Questões", valor: questoesTotal.toLocaleString("pt-BR"), sub: "Respondidas", icon: BarChart2 },
+        { label: "Acerto", valor: `${taxaAcerto}%`, sub: "Média geral", icon: Target },
+        { label: "Estudo", valor: duracao(estudo7dSeg), sub: "Últimos 7 dias", icon: Clock },
+        { label: "Sequência", valor: String(sequencia), sub: sequencia === 1 ? "Dia" : "Dias", icon: Flame },
+    ];
+
+    if (carregando) return <Carregando />;
+
+    const diaConcluido = missao.concluidas === missao.itens.length;
 
-        if (!mounted || controller.signal.aborted) return;
-
-        setQuestoesTotal(fmtCompact(est.data?.questoes_respondidas ?? 0));
-        setTaxaAcerto(Math.round(fmtCompact(est.data?.taxa_acerto ?? 0)));
-
-        const total30 = (pom30.data ?? []).reduce((acc: number, r: any) => {
-          const dur = Number(r?.duration_seconds ?? 0);
-          return acc + (Number.isFinite(dur) ? Math.max(0, dur) : 0);
-        }, 0);
-        setTempoTotalSeg30d(Math.round(total30));
-
-        const byDay: Record<string, number> = {};
-        for (const r of pom365.data ?? []) {
-          const startedAt = new Date(r.started_at);
-          if (Number.isNaN(startedAt.getTime())) continue;
-
-          const key = ymdLocal(
-            new Date(startedAt.getFullYear(), startedAt.getMonth(), startedAt.getDate())
-          );
-
-          const dur = Number(r?.duration_seconds ?? 0);
-          if (!Number.isFinite(dur)) continue;
-          byDay[key] = (byDay[key] ?? 0) + Math.max(0, dur);
-        }
-
-        let streak = 0;
-        const base = startOfLocalDay().getTime();
-        // Hoje ainda sem estudo não zera a sequência: conta a partir de ontem.
-        const hojeEstudou = (byDay[ymdLocal(new Date(base))] ?? 0) > 0;
-        for (let i = hojeEstudou ? 0 : 1; i < 121; i++) {
-          const d = new Date(base - i * ONE_DAY);
-          const key = ymdLocal(d);
-          const studied = (byDay[key] ?? 0) > 0;
-          if (!studied) break;
-          streak += 1;
-        }
-        setStreakDias(streak);
-
-        setLoading(false);
-      } catch {
-        if (!mounted || controller.signal.aborted) return;
-        // Falha de rede/servidor: mostra o painel com o que houver, sem expulsar o aluno.
-        setLoading(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-      controller.abort();
-    };
-  }, [router]);
-
-  // ====== relógio atualiza (hora no pill) ======
-  useEffect(() => {
-    if (clockRef.current) window.clearInterval(clockRef.current);
-    clockRef.current = window.setInterval(() => setNow(new Date()), 30_000);
-    return () => {
-      if (clockRef.current) window.clearInterval(clockRef.current);
-      clockRef.current = null;
-    };
-  }, []);
-
-  const tempoMedioSeg = useMemo(() => {
-    if (!questoesTotal) return 0;
-    return Math.max(0, Math.round(tempoTotalSeg30d / questoesTotal));
-  }, [tempoTotalSeg30d, questoesTotal]);
-
-  const statsCards = useMemo(
-    () => [
-      {
-        label: "Questões",
-        value: questoesTotal,
-        sub: "Respondidas",
-        icon: BarChart2,
-        iconBg: "bg-primary/10",
-      },
-      {
-        label: "Acerto",
-        value: `${taxaAcerto}%`,
-        sub: "Média",
-        icon: Target,
-        iconBg: "bg-primary/10",
-      },
-      {
-        label: "Tempo",
-        value: `${tempoMedioSeg || 0}s`,
-        sub: "/ questão",
-        icon: Timer,
-        iconBg: "bg-primary/10",
-      },
-      {
-        label: "Sequência",
-        value: String(streakDias),
-        sub: "Dias",
-        icon: Flame,
-        iconBg: "bg-primary/10",
-      },
-    ],
-    [questoesTotal, taxaAcerto, tempoMedioSeg, streakDias]
-  );
-
-  const questoesGoalPct = clampPct(
-    (questoesHoje / DAILY_GOALS.questoes) * 100
-  );
-
-  const flashcardsGoalPct = clampPct(
-    (flashcardsHoje / DAILY_GOALS.flashcards) * 100
-  );
-
-  const resumosGoalPct = clampPct(
-    (resumosRevisadosHoje / DAILY_GOALS.resumos) * 100
-  );
-
-  const metasConcluidas =
-    Number(questoesHoje >= DAILY_GOALS.questoes) +
-    Number(flashcardsHoje >= DAILY_GOALS.flashcards) +
-    Number(resumosRevisadosHoje >= DAILY_GOALS.resumos);
-
-  const metaDiariaConcluida = metasConcluidas === 3;
-
-  const metaDiariaPct = Math.round(
-    (questoesGoalPct + flashcardsGoalPct + resumosGoalPct) / 3
-  );
-
-  const dailyGoalItems = [
-    {
-      label: "Questões",
-      value: questoesHoje,
-      target: DAILY_GOALS.questoes,
-      progress: questoesGoalPct,
-      href: "/questoes",
-      icon: Brain,
-    },
-    {
-      label: "Flashcards",
-      value: flashcardsHoje,
-      target: DAILY_GOALS.flashcards,
-      progress: flashcardsGoalPct,
-      href: "/revisao",
-      icon: Target,
-    },
-    {
-      label: "Resumos",
-      value: resumosRevisadosHoje,
-      target: DAILY_GOALS.resumos,
-      progress: resumosGoalPct,
-      href: "/revisao",
-      icon: FileText,
-    },
-  ];
-
-  const dateTimePillText = useMemo(() => `${fmtDateLong(now)} • ${hmLocal(now)}`, [now]);
-
-  /* =========================
-   * Tempo de estudo: carregar listas + sessão aberta
-   * ========================= */
-  useEffect(() => {
-    let mounted = true;
-    if (!userId) return;
-
-    (async () => {
-      setTdeLoading(true);
-      setTdeErro(null);
-
-      try {
-        const [mats, asss] = await Promise.all([
-          // Mesmas disciplinas da página Tempo de estudo (menu Disciplinas).
-          supabase.from("questao_disciplinas").select("id,nome").eq("user_id", userId).eq("ativo", true).order("nome"),
-          supabase.from("questao_assuntos").select("id,nome,materia_id:disciplina_id").eq("user_id", userId).eq("ativo", true).order("nome"),
-        ]);
-
-        if (!mounted) return;
-
-        const mList = (mats.data ?? []) as Materia[];
-        const aList = (asss.data ?? []) as Assunto[];
-
-        setMaterias(mList);
-        setAssuntos(aList);
-
-        const mMap: Record<string, string> = {};
-        mList.forEach((m) => (mMap[m.id] = m.nome));
-        setMatName(mMap);
-
-        const aMap: Record<string, string> = {};
-        aList.forEach((a) => (aMap[a.id] = a.nome));
-        setAssName(aMap);
-
-        const { data: open } = await supabase
-          .from("study_sessions")
-          .select("id, started_at, materia_id:disciplina_catalogo_id, assunto_id:assunto_catalogo_id, mode")
-          .eq("user_id", userId)
-          .is("ended_at", null)
-          .order("started_at", { ascending: false })
-          .limit(1);
-
-        if (!mounted) return;
-
-        if (open && open.length) setOpenSession(open[0] as OpenSession);
-        else setOpenSession(null);
-      } catch (e: any) {
-        if (!mounted) return;
-        setTdeErro(e?.message || "Falha ao carregar tempo de estudo.");
-      } finally {
-        if (!mounted) return;
-        setTdeLoading(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [userId]);
-
-  /* =========================
-   * Tempo de estudo: carregar sessões finalizadas (respeita filtro + range)
-   * ========================= */
-  useEffect(() => {
-    let mounted = true;
-    if (!userId) return;
-
-    (async () => {
-      try {
-        setTdeErro(null);
-
-        let q = supabase
-          .from("study_sessions")
-          .select("materia_id:disciplina_catalogo_id,assunto_id:assunto_catalogo_id,duration_seconds,started_at,ended_at")
-          .eq("user_id", userId)
-          .not("duration_seconds", "is", null)
-          .not("ended_at", "is", null)
-          .order("started_at", { ascending: false });
-
-        const from = getRangeStart(range);
-        if (from) q = q.gte("started_at", from.toISOString());
-
-        if (materiaId) q = q.eq("disciplina_catalogo_id", materiaId);
-        if (assuntoId) q = q.eq("assunto_catalogo_id", assuntoId);
-
-        const { data, error } = await q;
-        if (error) throw error;
-        if (!mounted) return;
-
-        setSessions((data ?? []) as any);
-      } catch (e: any) {
-        if (!mounted) return;
-        setTdeErro(e?.message || "Falha ao carregar sessões.");
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [userId, range, materiaId, assuntoId, versaoSessoes]);
-
-  /* =========================
-   * Cronômetro em tempo real (sessão aberta)
-   * ========================= */
-  useEffect(() => {
-    if (timerRef.current) {
-      window.clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    if (!openSession?.started_at) {
-      setOpenElapsedSec(0);
-      return;
-    }
-
-    const started = new Date(openSession.started_at).getTime();
-    if (Number.isNaN(started)) {
-      setOpenElapsedSec(0);
-      return;
-    }
-
-    const tick = () => {
-      const nowTs = Date.now();
-      setOpenElapsedSec(Math.max(0, Math.floor((nowTs - started) / 1000)));
-    };
-
-    tick();
-    timerRef.current = window.setInterval(tick, 1000);
-
-    return () => {
-      if (timerRef.current) {
-        window.clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [openSession?.started_at]);
-
-  const assuntosFiltrados = useMemo(
-    () => (materiaId ? assuntos.filter((a) => a.materia_id === materiaId) : assuntos),
-    [assuntos, materiaId]
-  );
-
-  const slices = useMemo(
-    () => buildSlices(sessions, matName, openSession, openElapsedSec),
-    [sessions, matName, openSession, openElapsedSec]
-  );
-
-  const totalSeconds = useMemo(() => slices.reduce((acc, s) => acc + s.seconds, 0), [slices]);
-
-  const colorMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    // Cor pela posição no ranking (paleta do tema): nunca repete entre disciplinas.
-    slices.forEach((s, i) => {
-      map[s.name] = corGrafico(i);
-    });
-    return map;
-  }, [slices]);
-
-  async function getAccessToken(): Promise<string> {
-    const { data } = await supabase.auth.getSession();
-    const token = data?.session?.access_token;
-    if (!token) throw new Error("Sessão inválida (sem access_token).");
-    return token;
-  }
-
-  async function handleStart() {
-    setTdeErro(null);
-
-    try {
-      if (!materiaId) {
-        setTdeErro("Selecione uma disciplina para iniciar.");
-        return;
-      }
-
-      const access_token = await getAccessToken();
-
-      const res = await fetch("/api/study-sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "start",
-          access_token,
-          disciplina_catalogo_id: materiaId,
-          assunto_catalogo_id: assuntoId || null,
-        }),
-      });
-
-      const out = await res.json();
-      if (!res.ok) throw new Error(out?.error || "Falha ao iniciar.");
-
-      // A API devolve as colunas reais; o painel usa materia_id/assunto_id como apelido.
-      const sess = out.session ?? {};
-      setOpenSession({
-        ...sess,
-        materia_id: sess.disciplina_catalogo_id ?? null,
-        assunto_id: sess.assunto_catalogo_id ?? null,
-      } as OpenSession);
-    } catch (e: any) {
-      setTdeErro(e?.message || "Falha ao iniciar.");
-    }
-  }
-
-  async function handleStop() {
-    setTdeErro(null);
-
-    try {
-      if (!openSession?.id) return;
-
-      const access_token = await getAccessToken();
-
-      const res = await fetch("/api/study-sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "stop",
-          access_token,
-          session_id: openSession.id,
-        }),
-      });
-
-      const out = await res.json();
-      if (!res.ok) throw new Error(out?.error || "Falha ao parar.");
-
-      setOpenSession(null);
-      setOpenElapsedSec(0);
-      // Busca de novo para o tempo recém-salvo aparecer no gráfico.
-      setVersaoSessoes((v) => v + 1);
-    } catch (e: any) {
-      setTdeErro(e?.message || "Falha ao parar.");
-    }
-  }
-
-  // Primeiro acesso (nunca escolheu meta nem pulou): leva para a escolha do concurso.
-  // Se a tabela ainda não existir (migração não rodada), erroPerfil evita o redirecionamento.
-  const precisaEscolherMeta = !!userId && !carregandoPerfil && !perfil && !erroPerfil;
-  useEffect(() => {
-    if (precisaEscolherMeta) router.replace("/meta?primeiro=1");
-  }, [precisaEscolherMeta, router]);
-
-  if (loading) {
     return (
-      <Carregando />
-    );
-  }
-
-  return (
-    <div className="w-full">
-      <div className="flex w-full flex-col gap-6">
-        {/* HEADER */}
-        <div className="border-b border-border pb-5">
-          <h1 className="text-3xl font-extrabold text-foreground">
-            Olá{userName ? `, ${userName}` : ""}.
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">Cada questão resolvida te deixa mais perto da farda.</p>
-        </div>
-
-        {!carregandoPerfil && !erroPerfil && (
-          <>
-            <BoasVindas perfil={perfil} aoOcultar={recarregarPerfil} />
-            <CartaoMeta temMeta={!!perfil?.meta_instituicao} />
-          </>
-        )}
-
-        {/* DATA / HORA */}
-        <div className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground shadow-sm flex items-center justify-center sm:justify-start gap-2">
-          <CalendarIcon className="h-4 w-4 text-primary" />
-          <span className="capitalize">{dateTimePillText}</span>
-        </div>
-
-        {/* META DIÁRIA */}
-        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <Target className="h-5 w-5 text-primary" />
-                <h2 className="font-titulo text-lg font-bold uppercase tracking-wide text-foreground">
-                  Missão do dia
-                </h2>
-              </div>
-
-              <p className="mt-1 text-xs text-muted-foreground">
-                50 questões • 10 flashcards • 10 resumos revisados
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {metaDiariaConcluida ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Dia concluído
-                </span>
-              ) : (
-                <span className="rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
-                  {metasConcluidas}/3 metas concluídas
-                </span>
-              )}
-
-              <span className="text-sm font-extrabold text-foreground">
-                {metaDiariaPct}%
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-            {dailyGoalItems.map((goal) => {
-              const Icon = goal.icon;
-              const completed = goal.value >= goal.target;
-
-              return (
-                <Link
-                  key={goal.label}
-                  href={goal.href}
-                  className="rounded-xl border border-border bg-background p-4 transition hover:bg-muted/40"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${completed
-                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                            : "bg-primary/10 text-primary"
-                          }`}
-                      >
-                        {completed ? (
-                          <CheckCircle2 className="h-5 w-5" />
-                        ) : (
-                          <Icon className="h-5 w-5" />
-                        )}
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="font-semibold text-foreground">
-                          {goal.label}
-                        </div>
-                        <div className="mt-0.5 text-xs text-muted-foreground">
-                          {Math.min(goal.value, goal.target)} / {goal.target}
-                          {goal.value > goal.target
-                            ? ` • ${goal.value - goal.target} extras`
-                            : ""}
-                        </div>
-                      </div>
-                    </div>
-
-                    <span
-                      className={`text-sm font-extrabold ${completed ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"
-                        }`}
-                    >
-                      {Math.round(goal.progress)}%
-                    </span>
-                  </div>
-
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full transition-all ${completed ? "bg-emerald-500" : "bg-primary"
-                        }`}
-                      style={{ width: `${goal.progress}%` }}
-                    />
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-
-          <div className="mt-4">
-            <div className="mb-1.5 flex items-center justify-between text-xs">
-              <span className="font-medium text-foreground">
-                Progresso geral do dia
-              </span>
-              <span className="text-muted-foreground">{metaDiariaPct}%</span>
-            </div>
-
-            <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className={`h-full rounded-full transition-all ${metaDiariaConcluida ? "bg-emerald-500" : "bg-primary"
-                  }`}
-                style={{ width: `${metaDiariaPct}%` }}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* AÇÕES PRINCIPAIS */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {ACTIONS.map((it) => {
-            const Icon = it.icon;
-
-            return (
-              <Link
-                key={it.href}
-                href={it.href}
-                className="group relative overflow-hidden rounded-lg border border-border bg-card p-4 shadow-sm transition hover:border-primary/70 active:scale-[0.99]"
-              >
-                {/* filete azul à esquerda, acende no hover */}
-                <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-primary/40 transition group-hover:bg-primary" />
-                <div className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
-                  <Icon className="h-5 w-5 text-primary" />
+        <div className="w-full">
+            <div className="flex w-full flex-col gap-6">
+                <div className="border-b border-border pb-5">
+                    <h1 className="text-3xl font-extrabold text-foreground">Olá{nome ? `, ${nome}` : ""}.</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">Cada questão resolvida te deixa mais perto da farda.</p>
                 </div>
 
-                <div className="mt-10">
-                  <div className="font-titulo text-lg font-bold uppercase leading-tight tracking-wide text-foreground">
-                    {it.name}
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {it.subtitle}
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* ESTATÍSTICAS (compacto/alinhado) */}
-        <section className="rounded-xl bg-card border border-border p-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-base font-extrabold text-foreground">Suas Estatísticas</div>
-              <div className="text-xs text-muted-foreground">Resumo rápido</div>
-            </div>
-
-            <Link
-              href="/estatisticas"
-              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted/70 transition"
-            >
-              Detalhes
-              <ArrowUpRight className="h-4 w-4" />
-            </Link>
-          </div>
-
-          {erro ? <p className="mt-3 text-sm text-destructive">{erro}</p> : null}
-
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            {statsCards.map((c) => {
-              const Icon = c.icon;
-              return (
-                <div
-                  key={c.label}
-                  className="rounded-xl border border-border bg-background px-3.5 py-3 shadow-sm"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`h-11 w-11 rounded-md ${c.iconBg} flex items-center justify-center shrink-0`}
-                    >
-                      <Icon className="h-5 w-5 text-primary" />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-bold tracking-wide text-muted-foreground uppercase leading-none">
-                        {c.label}
-                      </div>
-                      <div className="mt-1 text-[22px] font-extrabold text-foreground leading-none">
-                        {c.value}
-                      </div>
-                      <div className="mt-1 text-[11px] text-muted-foreground leading-none">{c.sub}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-3 text-[11px] text-muted-foreground">
-            * Tempo médio: tempo cronometrado nos últimos 30 dias dividido pelas questões resolvidas. Sequência: dias seguidos com estudo cronometrado ou questões resolvidas.
-          </div>
-        </section>
-
-        {/* TEMPO DE ESTUDO (pizza + lista) */}
-        <section className="rounded-xl bg-card border border-border p-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="min-w-0">
-              <div className="text-base font-extrabold text-foreground">Tempo de estudo</div>
-              <div className="text-xs text-muted-foreground">Por disciplina</div>
-            </div>
-
-            <SeletorSegmentado
-              rotulo="Período"
-              opcoes={[
-                { id: "dia", nome: "Dia" },
-                { id: "semana", nome: "Semana" },
-                { id: "mes", nome: "Mês" },
-                { id: "ano", nome: "Ano" },
-                { id: "tudo", nome: "Tudo" },
-              ]}
-              valor={range}
-              aoMudar={(id) => setRange(id as RangeKey)}
-            />
-          </div>
-
-          {/* BLOCO: iniciar/controle (compacto) */}
-          <div className="mt-4 rounded-xl border border-border bg-background p-4 space-y-3">
-            <div className="text-sm font-semibold">Registro</div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground">Disciplina</span>
-                <select
-                  className="bg-muted border border-border rounded-lg px-3 py-2 text-sm"
-                  value={materiaId}
-                  onChange={(e) => {
-                    setMateriaId(e.target.value);
-                    setAssuntoId("");
-                  }}
-                  disabled={tdeLoading || !!openSession}
-                >
-                  <option value="">Selecione</option>
-                  {materias.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.nome}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground">Conteúdo / Assunto</span>
-                <select
-                  className="bg-muted border border-border rounded-lg px-3 py-2 text-sm"
-                  value={assuntoId}
-                  onChange={(e) => setAssuntoId(e.target.value)}
-                  disabled={tdeLoading || !assuntosFiltrados.length || !!openSession}
-                >
-                  <option value="">Selecione</option>
-                  {assuntosFiltrados.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.nome}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {openSession ? (
-              <div className="rounded-xl border border-border bg-muted p-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-[220px]">
-                  <div className="text-sm font-semibold">Sessão em andamento</div>
-                  <div className="text-xs text-muted-foreground">
-                    {openSession.materia_id ? matName[openSession.materia_id] ?? "Disciplina" : "Sem disciplina"}
-                    {openSession.assunto_id ? ` • ${assName[openSession.assunto_id] ?? "Assunto"}` : ""}
-                  </div>
-                </div>
-
-                <div className="text-lg font-extrabold tracking-tight">{fmtHMSFull(openElapsedSec)}</div>
-
-                <button
-                  className="px-5 py-2 rounded-lg bg-destructive text-destructive-foreground font-semibold"
-                  onClick={handleStop}
-                  disabled={tdeLoading}
-                >
-                  Parar e salvar
-                </button>
-              </div>
-            ) : (
-              <button
-                className="px-6 py-3 rounded-lg bg-primary text-primary-foreground font-semibold disabled:opacity-60"
-                onClick={handleStart}
-                disabled={tdeLoading || !materiaId}
-              >
-                Iniciar atividade
-              </button>
-            )}
-
-            {tdeErro && <div className="text-destructive text-sm">{tdeErro}</div>}
-            {tdeLoading && <div className="text-muted-foreground text-sm">Carregando…</div>}
-          </div>
-
-          {/* Pizza + lista */}
-          <div className="mt-4">
-            {!slices.length ? (
-              <div className="text-sm text-muted-foreground">Sem dados para o período selecionado.</div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={slices}
-                        dataKey="seconds"
-                        nameKey="name"
-                        outerRadius={90}
-                        innerRadius={45}
-                        paddingAngle={2}
-                        stroke="var(--card)"
-                        strokeWidth={2}
-                      >
-                        {slices.map((s) => (
-                          <Cell key={s.name} fill={colorMap[s.name] ?? "#94A3B8"} />
-                        ))}
-                      </Pie>
-
-                      <Tooltip
-                        formatter={(v: any, _n: any, p: any) => {
-                          const sec = Number(v ?? 0);
-                          const pct = totalSeconds ? Math.round((sec / totalSeconds) * 100) : 0;
-                          return [`${fmtHMSFull(sec)} (${pct}%)`, p?.payload?.name ?? "Item"];
-                        }}
-                        contentStyle={{
-                          background: "var(--muted)",
-                          border: "1px solid var(--border)",
-                          color: "var(--foreground)",
-                          borderRadius: 12,
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="text-center text-3xl font-extrabold tracking-tight">
-                    {fmtHMSFull(totalSeconds)}
-                  </div>
-
-                  <div className="space-y-2">
-                    {slices.map((s) => {
-                      const pct = totalSeconds ? Math.round((s.seconds / totalSeconds) * 100) : 0;
-                      const color = colorMap[s.name] ?? "#94A3B8";
-
-                      return (
-                        <div
-                          key={s.name}
-                          className="flex items-center justify-between rounded-xl border border-border bg-muted px-3 py-2"
-                        >
-                          <div className="min-w-0 flex items-center gap-2">
-                            <span
-                              className="inline-block h-3 w-3 rounded-full shrink-0"
-                              style={{ backgroundColor: color }}
-                              aria-hidden="true"
-                            />
-                            <div className="min-w-0">
-                              <div className="font-medium truncate">{s.name}</div>
-                              <div className="text-xs text-muted-foreground">{pct}%</div>
+                {/* MISSÃO DO DIA */}
+                <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <Target className="h-5 w-5 text-primary" aria-hidden />
+                                <h2 className="font-titulo text-lg font-bold uppercase tracking-wide text-foreground">Missão do dia</h2>
                             </div>
-                          </div>
-
-                          <div className="font-semibold">{fmtHMSFull(s.seconds)}</div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                {META.questoes} questões • suas revisões do dia • {META.estudoMin} minutos de estudo
+                            </p>
                         </div>
-                      );
-                    })}
-                  </div>
+                        <div className="flex items-center gap-2">
+                            {diaConcluido ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                    <CheckCircle2 className="h-4 w-4" aria-hidden /> Dia concluído
+                                </span>
+                            ) : (
+                                <span className="rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
+                                    {missao.concluidas}/{missao.itens.length} metas concluídas
+                                </span>
+                            )}
+                            <span className="text-sm font-extrabold text-foreground">{missao.total}%</span>
+                        </div>
+                    </div>
 
-                  <div className="text-xs text-muted-foreground">
-                    * Inclui a sessão em andamento (se houver), somando em tempo real.
-                  </div>
+                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                        {missao.itens.map((m) => {
+                            const Icon = m.icon;
+                            const feito = m.progresso >= 100;
+                            return (
+                                <Link key={m.label} href={m.href} className="rounded-xl border border-border bg-background p-4 transition hover:bg-muted/40">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="flex min-w-0 items-center gap-3">
+                                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${feito ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-primary/10 text-primary"}`}>
+                                                {feito ? <CheckCircle2 className="h-5 w-5" aria-hidden /> : <Icon className="h-5 w-5" aria-hidden />}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="font-semibold text-foreground">{m.label}</div>
+                                                <div className="mt-0.5 text-xs text-muted-foreground">{m.detalhe}</div>
+                                            </div>
+                                        </div>
+                                        <span className={`text-sm font-extrabold ${feito ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}>
+                                            {Math.round(m.progresso)}%
+                                        </span>
+                                    </div>
+                                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                                        <div className={`h-full rounded-full transition-all ${feito ? "bg-emerald-500" : "bg-primary"}`} style={{ width: `${m.progresso}%` }} />
+                                    </div>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                </section>
+
+                {/* ATALHOS */}
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+                    {atalhos.map((a) => {
+                        const Icon = a.icon;
+                        return (
+                            <Link
+                                key={a.href}
+                                href={a.href}
+                                className="group relative overflow-hidden rounded-lg border border-border bg-card p-4 shadow-sm transition hover:border-primary/70 active:scale-[0.99]"
+                            >
+                                <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-primary/40 transition group-hover:bg-primary" />
+                                <div className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
+                                    <Icon className="h-5 w-5 text-primary" aria-hidden />
+                                </div>
+                                <div className="mt-10">
+                                    <div className="font-titulo text-lg font-bold uppercase leading-tight tracking-wide text-foreground">{a.nome}</div>
+                                    <div className="mt-1 text-xs text-muted-foreground">{a.sub}</div>
+                                </div>
+                            </Link>
+                        );
+                    })}
                 </div>
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-    </div>
-  );
+
+                {!carregandoPerfil && !erroPerfil && <CartaoMeta temMeta={!!perfil?.meta_instituicao} />}
+
+                {/* NÚMEROS */}
+                <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <div className="text-base font-extrabold text-foreground">Seus números</div>
+                            <div className="text-xs text-muted-foreground">Resumo rápido</div>
+                        </div>
+                        <Link
+                            href="/estatisticas"
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-2 text-xs font-semibold text-foreground transition hover:bg-muted/70"
+                        >
+                            Detalhes <ArrowUpRight className="h-4 w-4" aria-hidden />
+                        </Link>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        {numeros.map((n) => {
+                            const Icon = n.icon;
+                            return (
+                                <div key={n.label} className="rounded-xl border border-border bg-background px-3.5 py-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-primary/10">
+                                            <Icon className="h-5 w-5 text-primary" aria-hidden />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="text-[11px] font-bold uppercase leading-none tracking-wide text-muted-foreground">{n.label}</div>
+                                            <div className="mt-1 text-[22px] font-extrabold leading-none text-foreground">{n.valor}</div>
+                                            <div className="mt-1 text-[11px] leading-none text-muted-foreground">{n.sub}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <p className="mt-3 text-[11px] text-muted-foreground">
+                        Estudo inclui o tempo contado sozinho em questões, simulados, revisões e caderno de erros, mais o cronômetro.
+                        Sequência: dias seguidos com estudo ou questões resolvidas.
+                    </p>
+                </section>
+
+                {!carregandoPerfil && !erroPerfil && <BoasVindas perfil={perfil} aoOcultar={recarregarPerfil} />}
+            </div>
+        </div>
+    );
 }

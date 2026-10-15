@@ -1,4 +1,5 @@
 "use client";
+import { marcarDisciplina } from "@/lib/tempoAtivo";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { ComentariosQuestao } from "./ComentariosQuestao";
@@ -479,7 +480,10 @@ export function QuestionCard(props: QuestionCardProps) {
     const rotuloCorreta = ce ? (correct === "C" ? "Certo" : "Errado") : correct;
 
     return (
-        <article className="relative mx-auto mb-6 w-full rounded-xl border border-border border-l-4 border-l-primary bg-card p-5 shadow-sm sm:p-7">
+        <article
+            onPointerDown={() => marcarDisciplina({ nome: materiaNome })}
+            onKeyDown={() => marcarDisciplina({ nome: materiaNome })}
+            className="relative mx-auto mb-6 w-full rounded-xl border border-border border-l-4 border-l-primary bg-card p-5 shadow-sm sm:p-7">
             {feedbackMsg && (
                 <div className="fixed left-1/2 top-6 z-[200] -translate-x-1/2 rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background shadow-lg" role="status">
                     {feedbackMsg}

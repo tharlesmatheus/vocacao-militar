@@ -1,4 +1,5 @@
 "use client";
+import { useEstudoAutomatico } from "@/lib/tempoAtivo";
 import { Carregando } from "@/components/app/Carregando";
 
 import { useEffect, useMemo, useState } from "react";
@@ -19,6 +20,7 @@ type Filters = Parameters<
 >[0];
 
 export default function QuestoesPage() {
+    useEstudoAutomatico("questoes");
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<Filters | null>(null);

@@ -1,4 +1,5 @@
 "use client";
+import { useEstudoAutomatico } from "@/lib/tempoAtivo";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -45,6 +46,7 @@ type Questao = {
 const POR_PAGINA = 5;
 
 export default function CadernosPage() {
+    useEstudoAutomatico("caderno");
     const [itens, setItens] = useState<ItemCaderno[] | null>(null);
     const [resumo, setResumo] = useState<ResumoCadernos | null>(null);
     const [erro, setErro] = useState("");

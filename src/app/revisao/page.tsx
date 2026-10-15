@@ -1,4 +1,5 @@
 "use client";
+import { marcarDisciplina, useEstudoAutomatico } from "@/lib/tempoAtivo";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -252,6 +253,7 @@ function methodDescription(method: ReviewMethod) {
 }
 
 export default function RevisaoPage() {
+    useEstudoAutomatico("revisao");
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [erro, setErro] = useState("");
@@ -939,128 +941,20 @@ export default function RevisaoPage() {
         return token;
     }
 
+    // O tempo de cada revisão é medido aqui (para o registro da revisão).
+    // O tempo de estudo é contado pela contagem automática (useEstudoAutomatico),
+    // sem abrir sessões de cronômetro: assim o cronômetro manual nunca é cortado.
     async function stopStudySession() {
         const startedAt = studyStartedAtRef.current;
-        const duration = startedAt
-            ? Math.max(
-                1,
-                Math.round((Date.now() - startedAt) / 1000)
-            )
-            : 0;
-
-        const sessionId = studySessionIdRef.current;
-
         studySessionIdRef.current = null;
         studyStartedAtRef.current = null;
-
-        if (!sessionId) {
-            return duration;
-        }
-
-        try {
-            const access_token = await getAccessToken();
-
-            await fetch("/api/study-sessions", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    action: "stop",
-                    access_token,
-                    session_id: sessionId,
-                }),
-            });
-        } catch {
-            // A revisão não deve ser perdida se apenas o contador falhar.
-        }
-
-        return duration;
+        return startedAt ? Math.max(1, Math.round((Date.now() - startedAt) / 1000)) : 0;
     }
 
-    async function startStudySession(
-        item: ReviewItem
-    ) {
-        if (!userId || !item.disciplinaId) {
-            studySessionIdRef.current = null;
-            studyStartedAtRef.current = Date.now();
-            return;
-        }
-
-        try {
-            const access_token =
-                await getAccessToken();
-
-            const { data: abertas } = await supabase
-                .from("study_sessions")
-                .select("id")
-                .eq("user_id", userId)
-                .is("ended_at", null)
-                .order("started_at", {
-                    ascending: false,
-                })
-                .limit(1);
-
-            if (abertas?.[0]?.id) {
-                await fetch(
-                    "/api/study-sessions",
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type":
-                                "application/json",
-                        },
-                        body: JSON.stringify({
-                            action: "stop",
-                            access_token,
-                            session_id:
-                                abertas[0].id,
-                        }),
-                    }
-                );
-            }
-
-            const res = await fetch(
-                "/api/study-sessions",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-                    },
-                    body: JSON.stringify({
-                        action: "start",
-                        access_token,
-                        disciplina_catalogo_id:
-                            item.disciplinaId,
-                        assunto_catalogo_id:
-                            item.assuntoId || null,
-                    }),
-                }
-            );
-
-            const out = await res
-                .json()
-                .catch(() => null);
-
-            if (!res.ok) {
-                throw new Error(
-                    out?.error ||
-                    "Não foi possível iniciar o tempo de estudo."
-                );
-            }
-
-            studySessionIdRef.current =
-                out?.session?.id ?? null;
-
-            studyStartedAtRef.current =
-                Date.now();
-        } catch {
-            // A revisão continua mesmo se apenas o contador falhar.
-            studySessionIdRef.current = null;
-            studyStartedAtRef.current =
-                Date.now();
-        }
+    async function startStudySession(item: ReviewItem) {
+        marcarDisciplina({ id: item.disciplinaId || null });
+        studySessionIdRef.current = null;
+        studyStartedAtRef.current = Date.now();
     }
 
     async function iniciarFila(
