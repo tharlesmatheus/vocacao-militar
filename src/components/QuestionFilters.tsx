@@ -9,6 +9,8 @@ export interface Filters {
     cargo?: string;
     disciplina?: string;
     assunto?: string;
+    /** Detalhe dentro do assunto (árvore da fonte). */
+    subassunto?: string;
     modalidade?: string;
     banca?: string;
     excluirRespondidas?: boolean;
@@ -29,6 +31,7 @@ type Opcoes = {
     disciplinas: string[];
     modalidades: string[];
     assuntos: string[];
+    subassuntos: string[];
 };
 
 const OPCOES_VAZIAS: Opcoes = {
@@ -38,6 +41,7 @@ const OPCOES_VAZIAS: Opcoes = {
     disciplinas: [],
     modalidades: [],
     assuntos: [],
+    subassuntos: [],
 };
 
 const FILTROS_VAZIOS: Filters = {
@@ -46,6 +50,7 @@ const FILTROS_VAZIOS: Filters = {
     cargo: "",
     disciplina: "",
     assunto: "",
+    subassunto: "",
     modalidade: "",
     banca: "",
     excluirRespondidas: false,
@@ -79,11 +84,16 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
             setLoading(true);
             setErro("");
 
-            const { data, error } = await supabase.rpc("opcoes_filtro_questoes", {
+            const base = {
                 p_origem: ou(selected.origem),
                 p_instituicao: ou(selected.instituicao),
                 p_disciplina: ou(selected.disciplina),
-            });
+            };
+            let { data, error } = await supabase.rpc("opcoes_filtro_questoes", { ...base, p_assunto: ou(selected.assunto) });
+            // Banco ainda sem a migração 20261021: versão antiga, sem subassuntos.
+            if (error?.code === "PGRST202") {
+                ({ data, error } = await supabase.rpc("opcoes_filtro_questoes", base));
+            }
 
             if (cancelado) return;
 
@@ -100,7 +110,7 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
         return () => {
             cancelado = true;
         };
-    }, [selected.origem, selected.instituicao, selected.disciplina]);
+    }, [selected.origem, selected.instituicao, selected.disciplina, selected.assunto]);
 
     function handleChange(
         e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>
@@ -117,12 +127,17 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
 
             // Filtros dependentes: trocar o "pai" limpa o "filho".
             if (name === "instituicao") next.cargo = "";
-            if (name === "disciplina") next.assunto = "";
+            if (name === "disciplina") {
+                next.assunto = "";
+                next.subassunto = "";
+            }
+            if (name === "assunto") next.subassunto = "";
             if (name === "origem") {
                 next.instituicao = "";
                 next.cargo = "";
                 next.disciplina = "";
                 next.assunto = "";
+                next.subassunto = "";
                 next.banca = "";
                 next.modalidade = "";
             }
@@ -184,6 +199,14 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
                 {campo("assunto", "Assunto", opcoes.assuntos, {
                     placeholder: selected.disciplina ? "Selecione" : "Escolha a disciplina primeiro",
                     disabled: !selected.disciplina,
+                })}
+                {campo("subassunto", "Subassunto", opcoes.subassuntos, {
+                    placeholder: !selected.assunto
+                        ? "Escolha o assunto primeiro"
+                        : opcoes.subassuntos.length
+                            ? "Todos"
+                            : "Sem subdivisões",
+                    disabled: !selected.assunto || opcoes.subassuntos.length === 0,
                 })}
                 {campo("modalidade", "Modalidade", opcoes.modalidades, { rotulo: rotuloModalidade })}
 

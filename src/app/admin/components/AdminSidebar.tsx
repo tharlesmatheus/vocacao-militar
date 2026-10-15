@@ -1,5 +1,5 @@
 "use client";
-import { User, BookOpen, PlusCircle, LogOut, LayoutDashboard, CreditCard, MessageSquareWarning, FilePlus2 } from "lucide-react";
+import { User, BookOpen, PlusCircle, LogOut, LayoutDashboard, CreditCard, MessageSquareWarning, FilePlus2, Tags } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import React from "react";
@@ -9,6 +9,7 @@ const links = [
     { href: "/admin?tab=vendas", label: "Vendas", icon: <CreditCard className="w-5 h-5" /> },
     { href: "/admin?tab=moderacao", label: "Moderação", icon: <MessageSquareWarning className="w-5 h-5" /> },
     { href: "/admin?tab=questoes", label: "Questões", icon: <BookOpen className="w-5 h-5" /> },
+    { href: "/admin?tab=nomes", label: "Nomes", icon: <Tags className="w-5 h-5" /> },
     { href: "/landing", label: "Cadastrar questões", icon: <FilePlus2 className="w-5 h-5" /> },
     { href: "/admin?tab=clientes", label: "Clientes", icon: <User className="w-5 h-5" /> },
     { href: "/admin?tab=novo-cliente", label: "Novo Cliente", icon: <PlusCircle className="w-5 h-5" /> },

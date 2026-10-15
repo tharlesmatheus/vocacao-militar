@@ -32,6 +32,8 @@ interface QuestionCardProps {
     // fallback por nome (se você preferir passar nomes)
     materiaNome?: string | null;
     assuntoNome?: string | null;
+    /** Detalhe do assunto (ex.: "Lei de Drogas" dentro de "Legislação Especial"). */
+    subassuntoNome?: string | null;
 
     tags: string[];
     statement: string;
@@ -331,6 +333,7 @@ export function QuestionCard(props: QuestionCardProps) {
         assuntoId,
         materiaNome,
         assuntoNome,
+        subassuntoNome,
         tags,
         statement,
         options,
@@ -473,7 +476,7 @@ export function QuestionCard(props: QuestionCardProps) {
 
     // Etiquetas: disciplina › assunto em destaque; o resto numa linha discreta.
     const limpas = tags.map((t) => String(t ?? "").trim()).filter(Boolean);
-    const principais = [materiaNome, assuntoNome].map((t) => String(t ?? "").trim()).filter(Boolean);
+    const principais = [materiaNome, assuntoNome, subassuntoNome].map((t) => String(t ?? "").trim()).filter(Boolean);
     const secundarias = limpas.filter((t) => !principais.includes(t));
     const acertou = showResult && selected === correct;
     const ce = options.length === 2 && options.every((o) => /^(C|E)$/.test(String(o.letter)));

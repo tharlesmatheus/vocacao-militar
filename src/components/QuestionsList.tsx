@@ -14,6 +14,7 @@ type Filters = {
     cargo?: string;
     disciplina?: string;
     assunto?: string;
+    subassunto?: string;
     modalidade?: string;
     banca?: string;
     excluirRespondidas?: boolean;
@@ -28,8 +29,10 @@ type Questao = {
     assunto_id?: string | null;
     instituicao: string;
     cargo: string;
+    cargo_area?: string | null;
     disciplina: string;
     assunto: string;
+    subassunto?: string | null;
     modalidade: string;
     banca: string;
     ano?: number | null;
@@ -139,11 +142,13 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                 };
                 // Sem cargo/disciplina, Medicina, Odontologia, Engenharias etc. ficam de fora
                 // (o banco decide; com cargo ou disciplina escolhidos, mostra tudo).
-                let { data, error } = await supabase.rpc("listar_questoes", {
+                const completos: Record<string, unknown> = {
                     ...parametros,
                     p_ocultar_especialidades: !filters.incluirEspecialidades,
-                });
-                // Banco ainda sem a migração 20261019: usa a versão antiga da função.
+                };
+                if (ou(filters.subassunto)) completos.p_subassunto = ou(filters.subassunto);
+                let { data, error } = await supabase.rpc("listar_questoes", completos);
+                // Banco ainda sem as migrações 20261019/20261021: usa a versão antiga da função.
                 if (error?.code === "PGRST202") {
                     ({ data, error } = await supabase.rpc("listar_questoes", parametros));
                 }
@@ -417,11 +422,13 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                                     assuntoId={q.assunto_id ?? null}
                                     materiaNome={q.disciplina}
                                     assuntoNome={q.assunto}
+                                    subassuntoNome={q.subassunto ?? null}
                                     tags={[
                                         q.instituicao,
-                                        q.cargo,
+                                        q.cargo_area ? `${q.cargo} (${q.cargo_area})` : q.cargo,
                                         q.disciplina,
                                         q.assunto,
+                                        q.subassunto ?? "",
                                         rotuloModalidade(q.modalidade),
                                         rotuloBanca(q.banca),
                                         q.ano ? String(q.ano) : "",
