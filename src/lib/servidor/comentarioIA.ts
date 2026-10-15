@@ -61,53 +61,82 @@ ${certoErrado ? "" : `Alternativas:\n${alternativas}\n`}
 Gabarito: ${gabarito}`;
 }
 
-export async function gerarComentario(q: QuestaoParaComentario): Promise<{ texto: string; revisar: boolean }> {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY não configurada.");
+type Tentativa = { raciocinio: string | null; prazoMs: number };
 
+/** Uma chamada ao Gemini. Lança erro com o motivo (HTTP, resposta cortada, JSON inválido, tamanho). */
+async function tentar(q: QuestaoParaComentario, apiKey: string, t: Tentativa): Promise<{ texto: string; revisar: boolean }> {
     const controle = new AbortController();
-    const timer = setTimeout(() => controle.abort(), 25_000);
+    const timer = setTimeout(() => controle.abort(), t.prazoMs);
     try {
-        // Raciocínio "low" deixa a resposta bem mais rápida; a explicação é curta e o
-        // gabarito já vem pronto, então não precisa de raciocínio longo.
-        const chamar = (comRaciocinioBaixo: boolean) =>
-            fetch(GEMINI_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-goog-api-key": apiKey },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: montarPrompt(q) }] }],
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        temperature: 0.3,
-                        maxOutputTokens: 2048,
-                        ...(comRaciocinioBaixo ? { thinkingConfig: { thinkingLevel: RACIOCINIO } } : {}),
-                    },
-                }),
-                cache: "no-store",
-                signal: controle.signal,
-            });
-        let r = await chamar(!!RACIOCINIO);
-        let dados = await r.json().catch(() => null);
-        // Modelo que não aceita o nível de raciocínio: tenta de novo sem ele.
-        if (r.status === 400 && RACIOCINIO && /thinking/i.test(String(dados?.error?.message ?? ""))) {
-            console.warn("Gemini recusou thinkingLevel; usando o padrão do modelo.");
-            r = await chamar(false);
-            dados = await r.json().catch(() => null);
-        }
-        if (!r.ok) throw new Error(`Gemini HTTP ${r.status}: ${String(dados?.error?.message ?? "").slice(0, 200)}`);
+        // Sem maxOutputTokens: no Gemini 3 o "raciocínio" conta no limite de saída e
+        // um teto baixo corta o JSON no meio (foi o que fez as explicações falharem).
+        const r = await fetch(GEMINI_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-goog-api-key": apiKey },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: montarPrompt(q) }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    temperature: 0.3,
+                    ...(t.raciocinio ? { thinkingConfig: { thinkingLevel: t.raciocinio } } : {}),
+                },
+            }),
+            cache: "no-store",
+            signal: controle.signal,
+        });
+        const dados = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(`HTTP ${r.status}: ${String(dados?.error?.message ?? "").slice(0, 200)}`);
 
-        const bruto = String(dados?.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
-        const json = JSON.parse(bruto.replace(/^```(?:json)?\s*|\s*```$/g, ""));
+        const candidato = dados?.candidates?.[0];
+        // Junta só as partes de texto da resposta (ignora partes de raciocínio, se vierem).
+        const bruto = ((candidato?.content?.parts ?? []) as { text?: string; thought?: boolean }[])
+            .filter((p) => !p.thought && typeof p.text === "string")
+            .map((p) => p.text)
+            .join("")
+            .trim();
+        if (!bruto) throw new Error(`resposta vazia (finishReason=${candidato?.finishReason ?? "?"})`);
+
+        const semCerca = bruto.replace(/^```(?:json)?\s*|\s*```$/g, "");
+        let json: any;
+        try {
+            json = JSON.parse(semCerca);
+        } catch {
+            const ini = semCerca.indexOf("{");
+            const fim = semCerca.lastIndexOf("}");
+            if (ini < 0 || fim <= ini) throw new Error(`JSON inválido (finishReason=${candidato?.finishReason ?? "?"})`);
+            json = JSON.parse(semCerca.slice(ini, fim + 1));
+        }
+
         const texto = String(json?.comentario ?? "")
             .replace(/\r\n/g, "\n")
             .replace(/[*#`]+/g, "")
             .replace(/\n{3,}/g, "\n\n")
             .trim();
-
-        if (texto.length < 120 || texto.length > 3000) throw new Error(`Explicação com tamanho inválido (${texto.length}).`);
+        if (texto.length < 80 || texto.length > 4000) throw new Error(`tamanho inválido (${texto.length})`);
         return { texto, revisar: json?.gabarito_coerente === false };
     } finally {
         clearTimeout(timer);
     }
 }
 
+/**
+ * Gera a explicação. Primeiro tenta o modo rápido (raciocínio baixo); se falhar por
+ * qualquer motivo, tenta uma vez no modo padrão do modelo, que é o que já funcionava.
+ */
+export async function gerarComentario(q: QuestaoParaComentario): Promise<{ texto: string; revisar: boolean }> {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY não configurada.");
+
+    if (RACIOCINIO) {
+        try {
+            return await tentar(q, apiKey, { raciocinio: RACIOCINIO, prazoMs: 20_000 });
+        } catch (e) {
+            console.warn(`Explicação (modo rápido) falhou na questão ${q.id}; tentando no modo padrão:`, e instanceof Error ? e.message : e);
+        }
+    }
+    try {
+        return await tentar(q, apiKey, { raciocinio: null, prazoMs: 30_000 });
+    } catch (e) {
+        throw new Error(`Gemini: ${e instanceof Error ? e.message : String(e)}`);
+    }
+}

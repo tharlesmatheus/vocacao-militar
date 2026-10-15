@@ -166,14 +166,15 @@ select:-webkit-autofill {
   --chart-4: #dc2626;
   --chart-5: #71717a;
 
-  --sidebar: #0a0a0b;
-  --sidebar-foreground: #e4e4e7;
-  --sidebar-primary: #3b82f6;
+  /* Menu lateral claro no tema claro */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #27272a;
+  --sidebar-primary: #1d4ed8;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #18181b;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #1f1f23;
-  --sidebar-ring: #3b82f6;
+  --sidebar-accent: #f4f4f5;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #1d4ed8;
 }
 
 /* ---------- TEMA ESCURO (padrão) ---------- */
@@ -245,4 +246,13 @@ select:-webkit-autofill {
 /* Faixa zebrada azul/preto (divisória decorativa). */
 .faixa-zebrada {
   background-image: repeating-linear-gradient(-45deg, #3b82f6 0 12px, #0a0a0b 12px 24px);
+}
+
+/* Rolagem sem barra visível (menu lateral): rola se precisar, mas a barra não aparece. */
+.sem-barra {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sem-barra::-webkit-scrollbar {
+  display: none;
 }

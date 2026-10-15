@@ -14,7 +14,7 @@ type Comentario = {
 };
 
 const MAX_TEXTO = 2000;
-const TENTATIVAS_ESPERA = 25; // ~30s esperando a geração (em segundo plano ou de outro aluno)
+const TENTATIVAS_ESPERA = 50; // ~60s esperando a geração (em segundo plano ou de outro aluno)
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -50,7 +50,10 @@ export function ComentariosQuestao({ questaoId }: { questaoId: string }) {
             .order("autor_tipo", { ascending: false }) // PLATAFORMA antes de ALUNO
             .order("created_at", { ascending: true });
         if (error) throw error;
-        return (data ?? []) as Comentario[];
+        // Explicação oficial sem texto (falha antiga) é tratada como inexistente: gera de novo.
+        return ((data ?? []) as Comentario[]).filter(
+            (c) => !(c.autor_tipo === "PLATAFORMA" && (c.texto ?? "").trim().length < 40)
+        );
     }, [questaoId]);
 
     const garantirComentarioOficial = useCallback(async (): Promise<Comentario | null> => {

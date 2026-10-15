@@ -16,6 +16,7 @@ import {
     FileText,
     History,
     Home,
+    LogOut,
     Layers3,
     Menu,
     ShieldCheck,
@@ -110,6 +111,11 @@ export function Sidebar({
         onCollapsedChange?.(!collapsed);
     }
 
+    async function sair() {
+        await supabase.auth.signOut();
+        window.location.href = "/auth";
+    }
+
     return (
         <>
             {/* Botão do menu no mobile */}
@@ -133,12 +139,12 @@ export function Sidebar({
             )}
 
             <aside
-                className={`dark fixed inset-y-0 left-0 z-50 flex w-[290px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 ${desktopWidthClass} lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"
+                className={`fixed inset-y-0 left-0 z-50 flex w-[290px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 ${desktopWidthClass} lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"
                     }`}
             >
                 {/* Cabeçalho */}
                 <div
-                    className={`flex h-16 shrink-0 items-center border-b border-sidebar-border ${collapsed
+                    className={`flex h-14 shrink-0 items-center border-b border-sidebar-border ${collapsed
                             ? "justify-center px-2 lg:justify-center"
                             : "justify-between px-5"
                         }`}
@@ -149,7 +155,7 @@ export function Sidebar({
                         className="flex min-w-0 items-center gap-2 font-titulo text-xl font-extrabold uppercase tracking-wide"
                         title={collapsed ? "Vocação Militar" : undefined}
                     >
-                        <ShieldCheck size={26} className="shrink-0 text-sidebar-primary" aria-hidden />
+                        <ShieldCheck size={24} className="shrink-0 text-sidebar-primary" aria-hidden />
                         <span className={collapsed ? "lg:hidden" : ""}>
                             Vocação <span className="text-sidebar-primary">Militar</span>
                         </span>
@@ -166,18 +172,18 @@ export function Sidebar({
                 </div>
 
                 {/* Navegação */}
-                <nav className="flex-1 overflow-y-auto p-3">
-                    <div className="space-y-5">
+                <nav className="sem-barra min-h-0 flex-1 overflow-y-auto px-3 py-[clamp(4px,1vh,14px)]">
+                    <div className="space-y-[clamp(4px,calc(2vh-6px),16px)]">
                         {MENU.map((group) => (
                             <section key={group.category}>
                                 <div
-                                    className={`mb-2 px-3 font-titulo text-xs font-semibold uppercase tracking-[0.22em] text-sidebar-primary/70 ${collapsed ? "lg:hidden" : ""
+                                    className={`mb-1 px-3 font-titulo text-[11px] font-semibold uppercase leading-4 tracking-[0.22em] text-sidebar-primary/80 [@media(max-height:600px)]:hidden ${collapsed ? "lg:hidden" : ""
                                         }`}
                                 >
                                     {group.category}
                                 </div>
 
-                                <div className="space-y-1">
+                                <div className="space-y-px">
                                     {group.items.filter((item) => !item.adminOnly || isAdmin).map((item) => {
                                         const Icon = item.icon;
                                         const active = isActive(
@@ -198,20 +204,20 @@ export function Sidebar({
                                                         : undefined
                                                 }
                                                 className={`relative flex rounded-md transition ${collapsed
-                                                        ? "items-center gap-3 px-3 py-3 lg:justify-center lg:px-2"
-                                                        : "items-center gap-3 px-3 py-3"
+                                                        ? "items-center gap-2.5 px-3 py-[clamp(2px,calc(1.1vh-4px),9px)] lg:justify-center lg:px-2"
+                                                        : "items-center gap-2.5 px-3 py-[clamp(2px,calc(1.1vh-4px),9px)]"
                                                     } ${active
                                                         ? "bg-sidebar-primary/10 text-sidebar-primary before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-sidebar-primary"
                                                         : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                                                     }`}
                                             >
                                                 <Icon
-                                                    size={19}
+                                                    size={17}
                                                     className="shrink-0"
                                                 />
 
                                                 <span
-                                                    className={`min-w-0 text-sm font-medium ${collapsed
+                                                    className={`min-w-0 text-[13px] font-medium leading-[18px] ${collapsed
                                                             ? "lg:hidden"
                                                             : ""
                                                         }`}
@@ -227,39 +233,28 @@ export function Sidebar({
                     </div>
                 </nav>
 
-                {/* Rodapé */}
-                <div className="shrink-0 border-t border-sidebar-border">
-                    <div
-                        className={`p-3 ${collapsed
-                                ? "lg:flex lg:justify-center"
-                                : ""
-                            }`}
-                    >
+                {/* Rodapé: sair da conta + recolher menu */}
+                <div className="shrink-0 border-t border-sidebar-border p-2">
+                    <div className={`flex gap-2 ${collapsed ? "lg:flex-col lg:items-center" : "items-center"}`}>
+                        <button
+                            type="button"
+                            onClick={sair}
+                            className={`inline-flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium text-sidebar-foreground/80 transition hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 ${collapsed ? "lg:h-9 lg:w-9 lg:justify-center lg:px-0" : "flex-1"}`}
+                            aria-label="Sair da conta"
+                            title="Sair da conta"
+                        >
+                            <LogOut size={17} className="shrink-0" aria-hidden />
+                            <span className={collapsed ? "lg:hidden" : ""}>Sair</span>
+                        </button>
+
                         <button
                             type="button"
                             onClick={toggleCollapsed}
-                            className={`hidden items-center rounded-md border border-sidebar-border text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent lg:inline-flex ${collapsed
-                                    ? "h-10 w-10 justify-center"
-                                    : "w-full justify-between gap-3 px-3 py-2.5"
-                                }`}
-                            aria-label={
-                                collapsed
-                                    ? "Expandir menu lateral"
-                                    : "Recolher menu lateral"
-                            }
-                            title={
-                                collapsed
-                                    ? "Expandir menu"
-                                    : "Recolher menu"
-                            }
+                            className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-md border border-sidebar-border text-sidebar-foreground/80 hover:bg-sidebar-accent lg:inline-flex"
+                            aria-label={collapsed ? "Expandir menu lateral" : "Recolher menu lateral"}
+                            title={collapsed ? "Expandir menu" : "Recolher menu"}
                         >
-                            {!collapsed && <span>Recolher menu</span>}
-
-                            {collapsed ? (
-                                <ChevronRight size={18} />
-                            ) : (
-                                <ChevronLeft size={18} />
-                            )}
+                            {collapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
                         </button>
                     </div>
                 </div>

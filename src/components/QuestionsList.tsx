@@ -1,4 +1,5 @@
 "use client";
+import { SeletorSegmentado } from "@/components/app/Pagina";
 
 import React, { useEffect, useState } from "react";
 import { QuestionCard } from "./QuestionCard";
@@ -63,7 +64,15 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
 function QuestionsList({ filters = {} }: QuestionsListProps) {
     const [questoes, setQuestoes] = useState<Questao[]>([]);
     const [page, setPage] = useState(1);
-    const [perPage, setPerPage] = useState(3);
+    const [perPage, setPerPage] = useState<number>(() => {
+        // Lembra a escolha do aluno neste aparelho.
+        try {
+            const salvo = Number(localStorage.getItem("vm-por-pagina"));
+            return [10, 20, 50].includes(salvo) ? salvo : 10;
+        } catch {
+            return 10;
+        }
+    });
     const [loading, setLoading] = useState(true);
     const [total, setTotal] = useState(0);
     const [erroLista, setErroLista] = useState("");
@@ -360,18 +369,20 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                         <span className="text-muted-foreground text-xs">
                             Mostrando {paginated.length} de {total.toLocaleString("pt-BR")} questões
                         </span>
-                        <select
-                            className="bg-muted border border-border rounded px-3 py-1 text-xs text-foreground"
-                            value={perPage}
-                            onChange={(e) => {
-                                setPerPage(Number(e.target.value));
-                                setPage(1);
-                            }}
-                        >
-                            <option value={3}>3 por página</option>
-                            <option value={5}>5 por página</option>
-                            <option value={10}>10 por página</option>
-                        </select>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Por página</span>
+                            <SeletorSegmentado
+                                rotulo="Questões por página"
+                                opcoes={[{ id: "10", nome: "10" }, { id: "20", nome: "20" }, { id: "50", nome: "50" }]}
+                                valor={String(perPage) as "10" | "20" | "50"}
+                                aoMudar={(v) => {
+                                    const n = Number(v);
+                                    setPerPage(n);
+                                    setPage(1);
+                                    try { localStorage.setItem("vm-por-pagina", String(n)); } catch { /* sem armazenamento: só nesta visita */ }
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
 

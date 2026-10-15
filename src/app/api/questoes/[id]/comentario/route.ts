@@ -18,7 +18,7 @@ import { GEMINI_MODEL_COMENTARIO, gerarComentario, type QuestaoParaComentario } 
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 // Inclui as explicações preparadas em segundo plano quando o aluno erra.
 const LIMITE_DIARIO = Number(process.env.COMENTARIO_LIMITE_DIA || 100);
@@ -74,7 +74,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .eq("autor_tipo", "PLATAFORMA")
         .maybeSingle<ComentarioLinha>();
 
-    if (existente?.status === "publicado") return resposta({ comentario: publico(existente) });
+    // Publicada sem texto útil (falha antiga): gera de novo em vez de mostrar um quadro vazio.
+    const semTexto = existente?.status === "publicado" && (existente.texto ?? "").trim().length < 40;
+    if (existente?.status === "publicado" && !semTexto) return resposta({ comentario: publico(existente) });
     if (existente?.status === "oculto") return resposta({ comentario: null });
 
     // Limite diário de gerações por aluno (protege o custo da IA).
@@ -108,7 +110,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             .from("questao_comentarios")
             .update({ status: "gerando", gerado_por: usuario.id })
             .eq("id", existente.id)
-            .or(`status.eq.falhou,and(status.eq.gerando,updated_at.lt.${abandonado})`)
+            .or(semTexto
+                ? "status.eq.publicado"
+                : `status.eq.falhou,and(status.eq.gerando,updated_at.lt.${abandonado})`)
             .select("id");
         if (!retomado?.length) return resposta({ status: "gerando" }, 202);
         reservaId = existente.id;
