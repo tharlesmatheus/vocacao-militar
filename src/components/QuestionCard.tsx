@@ -15,6 +15,7 @@ import {
     XCircle,
 } from "lucide-react";
 import { PainelMaterial, type TipoMaterial } from "./questao/PainelMaterial";
+import { prepararExplicacao } from "@/lib/explicacao";
 
 type Option = { letter?: string; text: string };
 
@@ -605,6 +606,9 @@ export function QuestionCard(props: QuestionCardProps) {
 
                         try {
                             const correta = selected === correct;
+                            // Errou: a explicação começa a ser preparada já, para estar pronta
+                            // quando o aluno abrir "Comentários".
+                            if (!correta) prepararExplicacao(id);
 
                             const { data: auth, error: authError } =
                                 await supabase.auth.getUser();
@@ -777,7 +781,14 @@ export function QuestionCard(props: QuestionCardProps) {
                     )}
                 </div>
 
-                <button type="button" onClick={() => setShowComentarios((v) => !v)} aria-expanded={showComentarios} className={acaoClass(showComentarios)}>
+                <button
+                    type="button"
+                    onClick={() => setShowComentarios((v) => !v)}
+                    onPointerEnter={() => prepararExplicacao(id)}
+                    onFocus={() => prepararExplicacao(id)}
+                    aria-expanded={showComentarios}
+                    className={acaoClass(showComentarios)}
+                >
                     <MessageSquareText className="h-4 w-4" aria-hidden /> Comentários
                 </button>
 

@@ -20,7 +20,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-const LIMITE_DIARIO = Number(process.env.COMENTARIO_LIMITE_DIA || 40);
+// Inclui as explicações preparadas em segundo plano quando o aluno erra.
+const LIMITE_DIARIO = Number(process.env.COMENTARIO_LIMITE_DIA || 100);
 const GERACAO_TRAVADA_MS = 90_000; // "gerando" mais antigo que isso é considerado abandonado
 
 
@@ -85,7 +86,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .eq("gerado_por", usuario.id)
         .gte("created_at", desde);
     if ((count ?? 0) >= LIMITE_DIARIO) {
-        return resposta({ error: "Você atingiu o limite diário de novos comentários. Tente amanhã." }, 429);
+        return resposta({ error: "Você atingiu o limite diário de novas explicações. Tente amanhã." }, 429);
     }
 
     // Reserva a geração: só UM aluno gera; os demais esperam o resultado.
@@ -126,6 +127,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     } catch (e) {
         console.error(`Comentário da questão ${questaoId}:`, e);
         await supabaseAdmin.from("questao_comentarios").update({ status: "falhou" }).eq("id", reservaId);
-        return resposta({ error: "Não foi possível gerar o comentário agora. Tente novamente." }, 502);
+        return resposta({ error: "Não foi possível carregar a explicação agora. Tente novamente." }, 502);
     }
 }

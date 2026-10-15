@@ -14,7 +14,7 @@ type Comentario = {
 };
 
 const MAX_TEXTO = 2000;
-const TENTATIVAS_ESPERA = 12; // ~30s esperando outro aluno terminar a geração
+const TENTATIVAS_ESPERA = 25; // ~30s esperando a geração (em segundo plano ou de outro aluno)
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -67,7 +67,7 @@ export function ComentariosQuestao({ questaoId }: { questaoId: string }) {
 
             if (r.status === 200) return (corpo.comentario ?? null) as Comentario | null;
             if (r.status === 202) {
-                await esperar(2500);
+                await esperar(1200);
                 continue;
             }
             if (r.status === 402) {
@@ -76,7 +76,7 @@ export function ComentariosQuestao({ questaoId }: { questaoId: string }) {
             }
             throw new Error(corpo.error || "Não foi possível carregar o comentário.");
         }
-        throw new Error("O comentário está demorando mais que o normal. Tente novamente em instantes.");
+        throw new Error("A explicação está demorando mais que o normal. Feche e abra os comentários de novo em instantes.");
     }, [questaoId]);
 
     useEffect(() => {
@@ -179,12 +179,15 @@ export function ComentariosQuestao({ questaoId }: { questaoId: string }) {
     return (
         <div className="rounded-xl border border-border bg-muted/40 p-4 flex flex-col gap-4">
             {carregando ? (
-                <div className="text-sm text-muted-foreground">Carregando comentários...</div>
+                <div className="text-sm text-muted-foreground">Carregando explicação…</div>
             ) : (
                 <>
                     {preparando && (
-                        <div className="text-sm text-muted-foreground animate-pulse">
-                            Preparando o comentário da questão...
+                        <div className="flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/5 p-4" role="status" aria-live="polite">
+                            <span className="text-sm font-semibold text-foreground">Carregando explicação…</span>
+                            <span className="h-3 w-11/12 animate-pulse rounded bg-muted" />
+                            <span className="h-3 w-10/12 animate-pulse rounded bg-muted" />
+                            <span className="h-3 w-7/12 animate-pulse rounded bg-muted" />
                         </div>
                     )}
 
