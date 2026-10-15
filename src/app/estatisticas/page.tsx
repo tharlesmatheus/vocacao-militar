@@ -12,6 +12,7 @@ import {
     Target,
     XCircle,
     Percent,
+    ChevronRight,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { todasAsLinhas } from "@/lib/todasAsLinhas";
@@ -25,8 +26,6 @@ import {
     YAxis,
     Tooltip,
     CartesianGrid,
-    BarChart,
-    Bar,
 } from "recharts";
 
 /* ========================================================================== */
@@ -40,8 +39,15 @@ type Daily = {
     revisoes: number;
 };
 
-type TopItem = { nome: string; valor: number };
-type AccItem = { nome: string; acerto: number; total: number };
+/** Uma linha da tabela "Desempenho por disciplina" (ou de um assunto dentro dela). */
+type LinhaDesempenho = {
+    id: string;
+    nome: string;
+    seg: number;
+    total: number;
+    corretas: number;
+    assuntos: LinhaDesempenho[];
+};
 type PeriodMode = "7" | "30" | "90" | "custom" | "all";
 type ReviewMethod = "CADERNO" | "FLASHCARD" | "RESUMO";
 
@@ -314,13 +320,7 @@ export default function EstatisticasPage() {
     });
 
     const [serie, setSerie] = useState<Daily[]>([]);
-    const [topMateriasTempo, setTopMateriasTempo] = useState<TopItem[]>([]);
-    const [topAssuntosTempo, setTopAssuntosTempo] = useState<TopItem[]>([]);
-    const [matAcc, setMatAcc] = useState<TopItem[]>([]);
-    const [assAcc, setAssAcc] = useState<TopItem[]>([]);
-
-    const [pioresMaterias, setPioresMaterias] = useState<AccItem[]>([]);
-    const [pioresAssuntos, setPioresAssuntos] = useState<AccItem[]>([]);
+    const [tabela, setTabela] = useState<LinhaDesempenho[]>([]);
 
     const periodoAtual = useMemo(
         () => rangeLabel(periodMode, customStartApplied, customEndApplied),
@@ -707,6 +707,8 @@ export default function EstatisticasPage() {
                 const byDayMin: Record<string, number> = {};
                 const byMatSec: Record<string, number> = {};
                 const byAssSec: Record<string, number> = {};
+                // De qual disciplina é cada assunto (para agrupar na tabela).
+                const discDoAssunto: Record<string, string> = {};
                 let totalSec = 0;
 
                 for (const session of sessionRows) {
@@ -732,6 +734,10 @@ export default function EstatisticasPage() {
                             (byMatSec[
                                 session.canonicalDisciplinaId
                             ] ?? 0) + dur;
+                    }
+
+                    if (session.canonicalAssuntoId && session.canonicalDisciplinaId) {
+                        discDoAssunto[session.canonicalAssuntoId] ??= session.canonicalDisciplinaId;
                     }
 
                     if (session.canonicalAssuntoId) {
@@ -866,6 +872,10 @@ export default function EstatisticasPage() {
                         row.total += 1;
                         if (acertou) row.corretas += 1;
                         matAgg[meta.disciplinaId] = row;
+                    }
+
+                    if (meta.assuntoId && meta.disciplinaId) {
+                        discDoAssunto[meta.assuntoId] ??= meta.disciplinaId;
                     }
 
                     if (meta.assuntoId) {
@@ -1166,153 +1176,46 @@ export default function EstatisticasPage() {
 
                 setReviewTotals(nextReviewTotals);
 
-                setTopMateriasTempo(
-                    materiaId
-                        ? []
-                        : Object.entries(byMatSec)
-                            .map(([id, sec]) => ({
-                                nome:
-                                    matName[id] ||
-                                    `${id.slice(0, 8)}…`,
-                                valor: Math.round(sec / 60),
-                            }))
-                            .sort(
-                                (a, b) =>
-                                    b.valor - a.valor
-                            )
-                            .slice(0, 5)
-                );
+                {
+                    const linha = (id: string, nome: string): LinhaDesempenho => ({
+                        id,
+                        nome,
+                        seg: 0,
+                        total: 0,
+                        corretas: 0,
+                        assuntos: [],
+                    });
+                    const discs: Record<string, LinhaDesempenho> = {};
+                    const pegarDisc = (id: string) =>
+                        (discs[id] ??= linha(id, matName[id] || "Disciplina sem nome"));
 
-                setTopAssuntosTempo(
-                    Object.entries(byAssSec)
-                        .map(([id, sec]) => ({
-                            nome:
-                                assName[id] ||
-                                `${id.slice(0, 8)}…`,
-                            valor: Math.round(sec / 60),
-                        }))
-                        .sort(
-                            (a, b) => b.valor - a.valor
+                    for (const [id, seg] of Object.entries(byMatSec)) pegarDisc(id).seg += seg;
+                    for (const [id, v] of Object.entries(matAgg)) {
+                        const d = pegarDisc(id);
+                        d.total += v.total;
+                        d.corretas += v.corretas;
+                    }
+
+                    const assLinhas: Record<string, LinhaDesempenho> = {};
+                    const pegarAss = (id: string) =>
+                        (assLinhas[id] ??= linha(id, assName[id] || "Assunto sem nome"));
+                    for (const [id, seg] of Object.entries(byAssSec)) pegarAss(id).seg += seg;
+                    for (const [id, v] of Object.entries(assAgg)) {
+                        const a = pegarAss(id);
+                        a.total += v.total;
+                        a.corretas += v.corretas;
+                    }
+                    for (const a of Object.values(assLinhas)) {
+                        const discId = discDoAssunto[a.id];
+                        if (discId) pegarDisc(discId).assuntos.push(a);
+                    }
+
+                    setTabela(
+                        Object.values(discs).filter(
+                            (d) => d.seg > 0 || d.total > 0
                         )
-                        .slice(0, 5)
-                );
-
-                setMatAcc(
-                    materiaId
-                        ? matAgg[materiaId]
-                            ? [
-                                {
-                                    nome:
-                                        matName[materiaId] ??
-                                        "Disciplina",
-                                    valor: safePct(
-                                        matAgg[materiaId]
-                                            .corretas,
-                                        matAgg[materiaId]
-                                            .total
-                                    ),
-                                },
-                            ]
-                            : []
-                        : Object.entries(matAgg)
-                            .map(([id, v]) => ({
-                                nome:
-                                    matName[id] ||
-                                    `${id.slice(0, 8)}…`,
-                                valor: safePct(
-                                    v.corretas,
-                                    v.total
-                                ),
-                            }))
-                            .sort(
-                                (a, b) =>
-                                    b.valor - a.valor
-                            )
-                            .slice(0, 8)
-                );
-
-                setAssAcc(
-                    assuntoId
-                        ? assAgg[assuntoId]
-                            ? [
-                                {
-                                    nome:
-                                        assName[assuntoId] ??
-                                        "Assunto",
-                                    valor: safePct(
-                                        assAgg[assuntoId]
-                                            .corretas,
-                                        assAgg[assuntoId]
-                                            .total
-                                    ),
-                                },
-                            ]
-                            : []
-                        : Object.entries(assAgg)
-                            .map(([id, v]) => ({
-                                nome:
-                                    assName[id] ||
-                                    `${id.slice(0, 8)}…`,
-                                valor: safePct(
-                                    v.corretas,
-                                    v.total
-                                ),
-                            }))
-                            .sort(
-                                (a, b) =>
-                                    b.valor - a.valor
-                            )
-                            .slice(0, 8)
-                );
-
-                const matWeak: AccItem[] = Object.entries(
-                    matAgg
-                )
-                    .map(([id, v]) => ({
-                        nome:
-                            matName[id] ||
-                            `${id.slice(0, 8)}…`,
-                        acerto: safePct(
-                            v.corretas,
-                            v.total
-                        ),
-                        total: v.total,
-                    }))
-                    .filter(
-                        (x) =>
-                            x.total >= MIN_QTD_FRACO &&
-                            x.acerto < WEAK_THRESHOLD
-                    )
-                    .sort(
-                        (a, b) => a.acerto - b.acerto
-                    )
-                    .slice(0, 8);
-
-                const assWeak: AccItem[] = Object.entries(
-                    assAgg
-                )
-                    .map(([id, v]) => ({
-                        nome:
-                            assName[id] ||
-                            `${id.slice(0, 8)}…`,
-                        acerto: safePct(
-                            v.corretas,
-                            v.total
-                        ),
-                        total: v.total,
-                    }))
-                    .filter(
-                        (x) =>
-                            x.total >= MIN_QTD_FRACO &&
-                            x.acerto < WEAK_THRESHOLD
-                    )
-                    .sort(
-                        (a, b) => a.acerto - b.acerto
-                    )
-                    .slice(0, 8);
-
-                setPioresMaterias(matWeak);
-                setPioresAssuntos(assWeak);
+                    );
+                }
 
                 let seriesStart: Date;
                 let seriesEnd: Date;
@@ -1396,12 +1299,7 @@ export default function EstatisticasPage() {
                         resumos: 0,
                     });
                     setSerie([]);
-                    setTopMateriasTempo([]);
-                    setTopAssuntosTempo([]);
-                    setMatAcc([]);
-                    setAssAcc([]);
-                    setPioresMaterias([]);
-                    setPioresAssuntos([]);
+                    setTabela([]);
                 }
             } finally {
                 if (!cancelled) {
@@ -1862,56 +1760,7 @@ export default function EstatisticasPage() {
                 </Panel>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {!materiaId && (
-                    <Panel title="Top 5 disciplinas por tempo (min)">
-                        <TinyBarH data={topMateriasTempo} />
-                    </Panel>
-                )}
-
-                <Panel
-                    title={`Top 5 assuntos por tempo (min)${materiaId ? " — desta disciplina" : ""
-                        }`}
-                >
-                    <TinyBarH data={topAssuntosTempo} />
-                </Panel>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <Panel
-                    title={`Acerto por Disciplina ${materiaId ? "(item selecionado)" : "(geral)"
-                        }`}
-                >
-                    <TinyBarH data={matAcc} percent />
-                </Panel>
-
-                <Panel
-                    title={`Acerto por Assunto ${assuntoId ? "(item selecionado)" : "(geral)"
-                        }`}
-                >
-                    <TinyBarH data={assAcc} percent />
-                </Panel>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <Panel
-                    title={`Onde estou pior — Disciplinas (acerto < ${WEAK_THRESHOLD}%, min. ${MIN_QTD_FRACO} questões)`}
-                >
-                    <WeakList
-                        items={pioresMaterias}
-                        empty="Sem itens abaixo do limite 👏"
-                    />
-                </Panel>
-
-                <Panel
-                    title={`Onde estou pior — Assuntos (acerto < ${WEAK_THRESHOLD}%, min. ${MIN_QTD_FRACO} questões)`}
-                >
-                    <WeakList
-                        items={pioresAssuntos}
-                        empty="Sem itens abaixo do limite 👏"
-                    />
-                </Panel>
-            </div>
+            <TabelaDesempenho linhas={tabela} carregando={loading} />
 
             {erro && <p className="text-destructive">{erro}</p>}
             {loading && <p className="text-muted-foreground">Carregando…</p>}
@@ -1947,97 +1796,232 @@ function MiniStat({ label, value }: { label: string; value: number }) {
     );
 }
 
-function TinyBarH({
-    data,
-    percent = false,
-}: {
-    data: TopItem[];
-    percent?: boolean;
-}) {
-    if (!data.length) {
-        return (
-            <div className="py-4 text-sm text-muted-foreground">
-                Sem dados para o período selecionado.
-            </div>
-        );
-    }
+/* -------------------------------------------------------------------------- */
+/* Desempenho por disciplina (tabela; clique abre os assuntos)                 */
+/* -------------------------------------------------------------------------- */
 
-    const height = Math.max(120, data.length * 26 + 30);
+type OrdemTabela = "estudo" | "acerto";
 
+function fmtTempoCurto(seg: number) {
+    const min = Math.round(seg / 60);
+    if (min <= 0) return seg > 0 ? "< 1 min" : "—";
+    if (min < 60) return `${min} min`;
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return m ? `${h}h ${String(m).padStart(2, "0")}min` : `${h}h`;
+}
+
+/** Com menos de MIN_QTD_FRACO questões a porcentagem ainda não diz muita coisa. */
+function SeloAcerto({ total, corretas }: { total: number; corretas: number }) {
+    if (!total) return <span className="text-muted-foreground">—</span>;
+    const pct = safePct(corretas, total);
+    const poucas = total < MIN_QTD_FRACO;
+    const cor = poucas
+        ? "bg-muted text-muted-foreground"
+        : pct >= WEAK_THRESHOLD
+            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+            : pct >= 50
+                ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                : "bg-red-500/15 text-red-700 dark:text-red-300";
     return (
-        <div style={{ width: "100%", height }}>
-            <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                    data={data}
-                    layout="vertical"
-                    margin={{ top: 6, bottom: 6, left: 6, right: 10 }}
-                >
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis
-                        type="number"
-                        domain={percent ? [0, 100] : ["auto", "auto"]}
-                        stroke="var(--muted-foreground)"
-                        tick={{ fontSize: 11 }}
-                    />
-                    <YAxis
-                        type="category"
-                        dataKey="nome"
-                        width={140}
-                        stroke="var(--muted-foreground)"
-                        tick={{ fontSize: 11 }}
-                    />
-                    <Tooltip
-                        formatter={(v: any) =>
-                            percent ? [`${v}%`, "Acerto"] : [v, "Minutos"]
-                        }
-                        contentStyle={{
-                            background: "var(--muted)",
-                            border: "1px solid var(--border)",
-                            color: "var(--foreground)",
-                            borderRadius: 12,
-                        }}
-                    />
-                    <Bar
-                        dataKey="valor"
-                        barSize={12}
-                        radius={[0, 8, 8, 0]}
-                        fill={percent ? "var(--primary)" : "var(--muted-foreground)"}
-                    />
-                </BarChart>
-            </ResponsiveContainer>
-        </div>
+        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 sm:justify-end">
+            <span className="text-xs text-muted-foreground">
+                {corretas} de {total}
+            </span>
+            <span
+                className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${cor}`}
+                title={poucas ? `Poucas questões: responda pelo menos ${MIN_QTD_FRACO} para o número ficar confiável.` : undefined}
+            >
+                {pct}%
+            </span>
+        </span>
     );
 }
 
-function WeakList({
-    items,
-    empty,
+function ordenarLinhas(linhas: LinhaDesempenho[], ordem: OrdemTabela) {
+    const copia = [...linhas];
+    if (ordem === "acerto") {
+        // Primeiro quem tem questões suficientes, do pior para o melhor.
+        return copia.sort((a, b) => {
+            const okA = a.total >= MIN_QTD_FRACO ? 0 : a.total ? 1 : 2;
+            const okB = b.total >= MIN_QTD_FRACO ? 0 : b.total ? 1 : 2;
+            if (okA !== okB) return okA - okB;
+            return safePct(a.corretas, a.total) - safePct(b.corretas, b.total) || b.total - a.total;
+        });
+    }
+    return copia.sort((a, b) => b.seg - a.seg || b.total - a.total || a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+function LinhaTabela({
+    l,
+    maxSeg,
+    nivel,
+    aberta,
+    aoAlternar,
 }: {
-    items: AccItem[];
-    empty: string;
+    l: LinhaDesempenho;
+    maxSeg: number;
+    nivel: 0 | 1;
+    aberta?: boolean;
+    aoAlternar?: () => void;
 }) {
-    if (!items.length) {
-        return <div className="text-sm text-muted-foreground">{empty}</div>;
+    const temFilhos = nivel === 0 && l.assuntos.length > 0;
+    const largura = maxSeg > 0 ? Math.max(l.seg > 0 ? 4 : 0, Math.round((l.seg / maxSeg) * 100)) : 0;
+    const nome = (
+        <span className={`flex min-w-0 items-center gap-1.5 ${nivel ? "pl-6 text-sm text-muted-foreground" : "font-medium"}`}>
+            {nivel === 0 && (
+                <ChevronRight
+                    size={16}
+                    aria-hidden
+                    className={`shrink-0 transition-transform ${temFilhos ? "" : "invisible"} ${aberta ? "rotate-90" : ""}`}
+                />
+            )}
+            <span className="truncate" title={l.nome}>
+                {l.nome}
+            </span>
+        </span>
+    );
+
+    const conteudo = (
+        <>
+            <div className="col-span-3 min-w-0 sm:col-span-1">{nome}</div>
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-end sm:gap-2">
+                <span className="text-[11px] text-muted-foreground sm:hidden">Tempo</span>
+                <span className="text-sm tabular-nums sm:w-16 sm:shrink-0 sm:text-right">{fmtTempoCurto(l.seg)}</span>
+                <span className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-muted md:block" aria-hidden>
+                    <span className="block h-full rounded-full bg-primary" style={{ width: `${largura}%` }} />
+                </span>
+            </div>
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-end sm:gap-2">
+                <span className="text-[11px] text-muted-foreground sm:hidden">Questões</span>
+                <span className="text-sm tabular-nums">{l.total || "—"}</span>
+            </div>
+            <div className="flex flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:justify-end sm:gap-2">
+                <span className="text-[11px] text-muted-foreground sm:hidden">Acerto</span>
+                <SeloAcerto total={l.total} corretas={l.corretas} />
+            </div>
+        </>
+    );
+
+    // Celular: nome numa linha e os três números lado a lado embaixo.
+    const grade = "grid grid-cols-3 gap-x-3 gap-y-1.5 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_9rem_5rem_9.5rem] sm:items-center sm:gap-3";
+
+    if (temFilhos) {
+        return (
+            <button
+                type="button"
+                onClick={aoAlternar}
+                aria-expanded={aberta}
+                className={`${grade} w-full text-left transition hover:bg-muted/60`}
+            >
+                {conteudo}
+            </button>
+        );
+    }
+    return <div className={`${grade} ${nivel ? "bg-muted/30" : ""}`}>{conteudo}</div>;
+}
+
+function TabelaDesempenho({ linhas, carregando }: { linhas: LinhaDesempenho[]; carregando: boolean }) {
+    const [ordem, setOrdem] = useState<OrdemTabela>("estudo");
+    const [abertas, setAbertas] = useState<Set<string>>(new Set());
+
+    const ordenadas = useMemo(() => ordenarLinhas(linhas, ordem), [linhas, ordem]);
+    const maxSeg = useMemo(
+        () => Math.max(0, ...linhas.flatMap((l) => [l.seg, ...l.assuntos.map((a) => a.seg)])),
+        [linhas]
+    );
+    const atencao = useMemo(
+        () =>
+            linhas
+                .filter((l) => l.total >= MIN_QTD_FRACO && safePct(l.corretas, l.total) < WEAK_THRESHOLD)
+                .sort((a, b) => safePct(a.corretas, a.total) - safePct(b.corretas, b.total))
+                .slice(0, 3),
+        [linhas]
+    );
+    const algumaComDados = linhas.some((l) => l.total >= MIN_QTD_FRACO);
+
+    function alternar(id: string) {
+        setAbertas((atual) => {
+            const novo = new Set(atual);
+            if (novo.has(id)) novo.delete(id);
+            else novo.add(id);
+            return novo;
+        });
     }
 
     return (
-        <ul className="space-y-2">
-            {items.map((it, i) => (
-                <li
-                    key={`${it.nome}-${i}`}
-                    className="flex items-center justify-between rounded-xl border border-border bg-muted px-3 py-2"
-                >
-                    <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium">{it.nome}</div>
-                        <div className="text-xs text-muted-foreground">
-                            Total: {it.total} questões
-                        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3 className="font-semibold">Desempenho por disciplina</h3>
+                    <p className="text-xs text-muted-foreground">Clique numa disciplina para ver os assuntos dela.</p>
+                </div>
+                <SeletorSegmentado
+                    rotulo="Ordenar"
+                    valor={ordem}
+                    aoMudar={setOrdem}
+                    opcoes={[
+                        { id: "estudo", nome: "Mais estudadas" },
+                        { id: "acerto", nome: "Menor acerto" },
+                    ]}
+                />
+            </div>
+
+            {linhas.length > 0 && (
+                <div className="mb-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+                    {atencao.length > 0 ? (
+                        <>
+                            <span className="font-semibold">Precisa de atenção: </span>
+                            {atencao.map((l, i) => (
+                                <span key={l.id}>
+                                    {i > 0 && ", "}
+                                    {l.nome} ({safePct(l.corretas, l.total)}%)
+                                </span>
+                            ))}
+                        </>
+                    ) : algumaComDados ? (
+                        <span className="text-muted-foreground">
+                            Nenhuma disciplina abaixo de {WEAK_THRESHOLD}% de acerto no período. Continue assim.
+                        </span>
+                    ) : (
+                        <span className="text-muted-foreground">
+                            Responda pelo menos {MIN_QTD_FRACO} questões de uma disciplina para ver onde está mais fraco.
+                        </span>
+                    )}
+                </div>
+            )}
+
+            {linhas.length === 0 ? (
+                <p className="py-4 text-sm text-muted-foreground">
+                    {carregando ? "Carregando…" : "Sem estudo nem questões respondidas no período."}
+                </p>
+            ) : (
+                <div className="overflow-hidden rounded-lg border border-border">
+                    <div className="hidden grid-cols-[minmax(0,1fr)_9rem_5rem_9.5rem] gap-3 border-b border-border bg-muted/50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:grid">
+                        <span>Disciplina</span>
+                        <span className="text-right">Tempo</span>
+                        <span className="text-right">Questões</span>
+                        <span className="text-right">Acerto</span>
                     </div>
-                    <span className="ml-3 text-sm font-bold text-red-600 dark:text-red-400">
-                        {it.acerto}%
-                    </span>
-                </li>
-            ))}
-        </ul>
+                    <div className="divide-y divide-border">
+                        {ordenadas.map((l) => {
+                            const aberta = abertas.has(l.id);
+                            return (
+                                <div key={l.id}>
+                                    <LinhaTabela l={l} maxSeg={maxSeg} nivel={0} aberta={aberta} aoAlternar={() => alternar(l.id)} />
+                                    {aberta && (
+                                        <div className="divide-y divide-border border-t border-border">
+                                            {ordenarLinhas(l.assuntos, ordem).map((a) => (
+                                                <LinhaTabela key={a.id} l={a} maxSeg={maxSeg} nivel={1} />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }
