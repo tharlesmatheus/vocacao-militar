@@ -9,8 +9,6 @@ export interface Filters {
     cargo?: string;
     disciplina?: string;
     assunto?: string;
-    /** Detalhe dentro do assunto (árvore da fonte). */
-    subassunto?: string;
     modalidade?: string;
     banca?: string;
     excluirRespondidas?: boolean;
@@ -31,7 +29,6 @@ type Opcoes = {
     disciplinas: string[];
     modalidades: string[];
     assuntos: string[];
-    subassuntos: string[];
 };
 
 const OPCOES_VAZIAS: Opcoes = {
@@ -41,7 +38,6 @@ const OPCOES_VAZIAS: Opcoes = {
     disciplinas: [],
     modalidades: [],
     assuntos: [],
-    subassuntos: [],
 };
 
 const FILTROS_VAZIOS: Filters = {
@@ -50,7 +46,6 @@ const FILTROS_VAZIOS: Filters = {
     cargo: "",
     disciplina: "",
     assunto: "",
-    subassunto: "",
     modalidade: "",
     banca: "",
     excluirRespondidas: false,
@@ -84,16 +79,11 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
             setLoading(true);
             setErro("");
 
-            const base = {
+            const { data, error } = await supabase.rpc("opcoes_filtro_questoes", {
                 p_origem: ou(selected.origem),
                 p_instituicao: ou(selected.instituicao),
                 p_disciplina: ou(selected.disciplina),
-            };
-            let { data, error } = await supabase.rpc("opcoes_filtro_questoes", { ...base, p_assunto: ou(selected.assunto) });
-            // Banco ainda sem a migração 20261021: versão antiga, sem subassuntos.
-            if (error?.code === "PGRST202") {
-                ({ data, error } = await supabase.rpc("opcoes_filtro_questoes", base));
-            }
+            });
 
             if (cancelado) return;
 
@@ -110,7 +100,7 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
         return () => {
             cancelado = true;
         };
-    }, [selected.origem, selected.instituicao, selected.disciplina, selected.assunto]);
+    }, [selected.origem, selected.instituicao, selected.disciplina]);
 
     function handleChange(
         e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>
@@ -127,17 +117,12 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
 
             // Filtros dependentes: trocar o "pai" limpa o "filho".
             if (name === "instituicao") next.cargo = "";
-            if (name === "disciplina") {
-                next.assunto = "";
-                next.subassunto = "";
-            }
-            if (name === "assunto") next.subassunto = "";
+            if (name === "disciplina") next.assunto = "";
             if (name === "origem") {
                 next.instituicao = "";
                 next.cargo = "";
                 next.disciplina = "";
                 next.assunto = "";
-                next.subassunto = "";
                 next.banca = "";
                 next.modalidade = "";
             }
@@ -189,7 +174,7 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
     return (
         <div className="max-w-full rounded-xl border border-border bg-card p-5 shadow-sm">
             <form
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"
                 onSubmit={handleFiltrar}
             >
                 {campo("instituicao", "Instituição", opcoes.instituicoes)}
@@ -200,63 +185,24 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
                     placeholder: selected.disciplina ? "Selecione" : "Escolha a disciplina primeiro",
                     disabled: !selected.disciplina,
                 })}
-                {campo("subassunto", "Subassunto", opcoes.subassuntos, {
-                    placeholder: !selected.assunto
-                        ? "Escolha o assunto primeiro"
-                        : opcoes.subassuntos.length
-                            ? "Todos"
-                            : "Sem subdivisões",
-                    disabled: !selected.assunto || opcoes.subassuntos.length === 0,
-                })}
                 {campo("modalidade", "Modalidade", opcoes.modalidades, { rotulo: rotuloModalidade })}
 
                 {erro && (
                     <div className="col-span-full text-sm text-red-600 dark:text-red-400">{erro}</div>
                 )}
 
-                {/* Excluir Questões Respondidas / incluir especialidades */}
-                <div className="col-span-full mt-2 grid gap-3 md:grid-cols-2">
-                    <fieldset className="flex items-center gap-4 border border-border bg-muted rounded-xl px-4 py-3">
-                        <legend className="text-muted-foreground text-sm font-semibold mr-3">
-                            Excluir Questões:
-                        </legend>
-                        <label className="flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer select-none">
-                            <input
-                                name="excluirRespondidas"
-                                type="checkbox"
-                                className="form-checkbox accent-primary w-5 h-5 rounded border border-border transition"
-                                checked={selected.excluirRespondidas || false}
-                                onChange={handleChange}
-                            />
-                            Já Respondidas
-                        </label>
-                    </fieldset>
-
-                    <fieldset className="flex flex-col gap-1 border border-border bg-muted rounded-xl px-4 py-3">
-                        <legend className="text-muted-foreground text-sm font-semibold mr-3">
-                            Áreas de saúde e especialistas:
-                        </legend>
-                        <label className="flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer select-none">
-                            <input
-                                name="incluirEspecialidades"
-                                type="checkbox"
-                                className="form-checkbox accent-primary w-5 h-5 rounded border border-border transition"
-                                checked={!!selected.incluirEspecialidades || !!selected.cargo || !!selected.disciplina}
-                                disabled={!!selected.cargo || !!selected.disciplina}
-                                onChange={handleChange}
-                            />
-                            Incluir Medicina, Odontologia, Engenharias e outras
-                        </label>
-                        <span className="text-xs text-muted-foreground">
-                            {selected.cargo || selected.disciplina
-                                ? "Com cargo ou disciplina escolhidos, todas as questões dele aparecem."
-                                : "Ficam de fora quando nenhum cargo é escolhido, para não misturar com a prova policial."}
-                        </span>
-                    </fieldset>
-                </div>
-
                 {/* Botões */}
-                <div className="col-span-full flex flex-wrap gap-3 mt-4 justify-end">
+                <div className="col-span-full mt-2 flex flex-wrap items-center gap-3">
+                    <label className="mr-auto flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer select-none">
+                        <input
+                            name="excluirRespondidas"
+                            type="checkbox"
+                            className="form-checkbox accent-primary w-5 h-5 rounded border border-border transition"
+                            checked={selected.excluirRespondidas || false}
+                            onChange={handleChange}
+                        />
+                        Excluir questões já respondidas
+                    </label>
                     <button
                         type="submit"
                         className="bg-primary hover:bg-primary/80 text-primary-foreground font-bold px-6 py-2 rounded-lg border border-primary shadow-sm text-sm transition"
