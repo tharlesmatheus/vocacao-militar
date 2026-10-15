@@ -8,9 +8,9 @@ import { VALOR_PLANO, eventoPixelEIr } from "@/lib/pixel";
 import { BotaoJaPaguei } from "@/components/BotaoJaPaguei";
 
 const BENEFICIOS = [
-    "Mais de 60 mil questões de PM, PC, PRF, PF, Bombeiros e Guarda",
+    "Questões de provas de PM, PC, PRF, PF, Bombeiros e Guarda",
     "Comentário em cada questão",
-    "Simulados cronometrados com ranking",
+    "Simulados cronometrados",
     "Caderno de erros e revisão automática",
 ];
 
