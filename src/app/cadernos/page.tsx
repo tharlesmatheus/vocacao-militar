@@ -22,6 +22,8 @@ import {
     type ResumoCadernos,
 } from "@/lib/cadernos";
 
+import { questoesPorIds } from "@/lib/questoesPorIds";
+
 /*
  * Cadernos: o lugar de TREINAR o que o aluno errou (ou acertou no chute).
  * - Erros saem do caderno ativo depois de 2 acertos seguidos ("recuperadas").
@@ -39,6 +41,8 @@ type Questao = {
     ano?: number | null;
     enunciado: string;
     alternativas: Record<string, string>;
+    enunciado_fmt?: string | null;
+    alternativas_fmt?: Record<string, string> | null;
     correta: string;
     explicacao: string | null;
 };
@@ -108,9 +112,7 @@ export default function CadernosPage() {
         }
         let ativo = true;
         setCarregandoQ(true);
-        supabase
-            .rpc("questoes_por_ids", { p_ids: ids })
-            .select("id,instituicao,cargo,disciplina,assunto,modalidade,banca,ano,enunciado,alternativas,correta,explicacao")
+        questoesPorIds<Questao>(ids)
             .then(({ data, error }) => {
                 if (!ativo) return;
                 if (error) setErro(error.message);
@@ -289,7 +291,8 @@ export default function CadernosPage() {
                                         rotuloModalidade(q.modalidade),
                                     ]}
                                     statement={q.enunciado}
-                                    options={Object.entries(q.alternativas ?? {}).map(([letter, text]) => ({ letter, text }))}
+                                    statementFmt={q.enunciado_fmt ?? null}
+                                    options={Object.entries(q.alternativas ?? {}).map(([letter, text]) => ({ letter, text, fmt: q.alternativas_fmt?.[letter] ?? null }))}
                                     correct={q.correta}
                                     explanation={q.explicacao ?? ""}
                                 />

@@ -38,6 +38,8 @@ type Questao = {
     ano?: number | null;
     enunciado: string;
     alternativas: { [key: string]: string };
+    enunciado_fmt?: string | null;
+    alternativas_fmt?: Record<string, string> | null;
     correta: string;
     explicacao: string;
     comentarios?: any[];
@@ -434,9 +436,11 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
                                         q.ano ? String(q.ano) : "",
                                     ]}
                                     statement={q.enunciado}
+                                    statementFmt={q.enunciado_fmt ?? null}
                                     options={Object.entries(q.alternativas).map(([letter, text]) => ({
                                         letter,
                                         text,
+                                        fmt: q.alternativas_fmt?.[letter] ?? null,
                                     }))}
                                     correct={q.correta}
                                     explanation={q.explicacao}

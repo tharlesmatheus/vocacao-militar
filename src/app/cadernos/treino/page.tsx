@@ -18,6 +18,8 @@ import {
     type CadernoTipo,
 } from "@/lib/cadernos";
 
+import { questoesPorIds } from "@/lib/questoesPorIds";
+
 /*
  * Treino do caderno: uma questão por vez, até 20 por sessão.
  * Cada resposta passa por registrar_treino_caderno (dentro do QuestionCard):
@@ -37,6 +39,8 @@ type Questao = {
     ano?: number | null;
     enunciado: string;
     alternativas: Record<string, string>;
+    enunciado_fmt?: string | null;
+    alternativas_fmt?: Record<string, string> | null;
     correta: string;
     explicacao: string | null;
 };
@@ -68,9 +72,7 @@ function Treino() {
                     .slice(0, TAMANHO_SESSAO)
                     .map((i) => i.questao_id);
                 if (!fila.length) return setQuestoes([]);
-                const { data, error } = await supabase
-                    .rpc("questoes_por_ids", { p_ids: fila })
-                    .select("id,instituicao,cargo,disciplina,assunto,modalidade,banca,ano,enunciado,alternativas,correta,explicacao");
+                const { data, error } = await questoesPorIds<Questao>(fila);
                 if (error) throw error;
                 const mapa = new Map(((data ?? []) as Questao[]).map((q) => [q.id, q]));
                 setQuestoes(fila.map((id) => mapa.get(id)).filter(Boolean) as Questao[]);
@@ -165,7 +167,8 @@ function Treino() {
                         rotuloModalidade(atual.modalidade),
                     ]}
                     statement={atual.enunciado}
-                    options={Object.entries(atual.alternativas ?? {}).map(([letter, text]) => ({ letter, text }))}
+                    statementFmt={atual.enunciado_fmt ?? null}
+                    options={Object.entries(atual.alternativas ?? {}).map(([letter, text]) => ({ letter, text, fmt: atual.alternativas_fmt?.[letter] ?? null }))}
                     correct={atual.correta}
                     explanation={atual.explicacao ?? ""}
                     aoResponder={(ok) => {

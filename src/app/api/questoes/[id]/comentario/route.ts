@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { temAssinaturaAtiva, usuarioDaRequisicao } from "@/lib/servidor/usuario";
-import { GEMINI_MODEL_COMENTARIO, gerarComentario, type QuestaoParaComentario } from "@/lib/servidor/comentarioIA";
+import { CAMPOS_QUESTAO_COMENTARIO, gerarComentario, modeloDoComentario, type QuestaoParaComentario } from "@/lib/servidor/comentarioIA";
 
 /*
  * POST /api/questoes/:id/comentario
@@ -54,7 +54,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // A questão precisa ser do próprio aluno ou do acervo (com assinatura).
     const { data: questao, error: erroQ } = await supabaseAdmin
         .from("questoes")
-        .select("id,user_id,origem,disciplina,assunto,banca,modalidade,enunciado,alternativas,correta")
+        .select(CAMPOS_QUESTAO_COMENTARIO)
         .eq("id", questaoId)
         .maybeSingle<QuestaoParaComentario>();
     if (erroQ) return resposta({ error: "Erro ao carregar a questão." }, 500);
@@ -122,7 +122,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const { texto, revisar } = await gerarComentario(questao);
         const { data: pronto, error } = await supabaseAdmin
             .from("questao_comentarios")
-            .update({ texto, status: "publicado", revisar, modelo: GEMINI_MODEL_COMENTARIO })
+            .update({ texto, status: "publicado", revisar, modelo: modeloDoComentario(questao) })
             .eq("id", reservaId)
             .select("id,autor_tipo,autor_nome,texto,status,created_at,updated_at")
             .single<ComentarioLinha>();

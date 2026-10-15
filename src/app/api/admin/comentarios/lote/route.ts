@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { exigirAdmin, respostaAdmin } from "@/lib/servidor/admin";
-import { GEMINI_MODEL_COMENTARIO, gerarComentario, type QuestaoParaComentario } from "@/lib/servidor/comentarioIA";
+import { CAMPOS_QUESTAO_COMENTARIO, gerarComentario, modeloDoComentario, type QuestaoParaComentario } from "@/lib/servidor/comentarioIA";
 
 /*
  * Geração antecipada dos comentários "Por Vocação Militar" (só admin).
@@ -18,7 +18,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const CAMPOS = "id,user_id,origem,disciplina,assunto,banca,modalidade,enunciado,alternativas,correta";
+const CAMPOS = CAMPOS_QUESTAO_COMENTARIO;
 
 export async function GET(req: Request) {
     const auth = await exigirAdmin(req);
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
                 const { texto, revisar } = await gerarComentario(q);
                 const { error: erroUp } = await supabaseAdmin
                     .from("questao_comentarios")
-                    .update({ texto, status: "publicado", revisar, modelo: GEMINI_MODEL_COMENTARIO })
+                    .update({ texto, status: "publicado", revisar, modelo: modeloDoComentario(q) })
                     .eq("id", reserva.id);
                 if (erroUp) throw new Error(erroUp.message);
                 return { ok: true, revisar };

@@ -4,6 +4,8 @@
  * lote do painel admin (/api/admin/comentarios/lote). Só roda no servidor.
  */
 
+import { paraIA } from "@/lib/textoFormatado";
+
 export const GEMINI_MODEL_COMENTARIO = process.env.GEMINI_MODEL_COMENTARIO || "gemini-3-flash-preview";
 // Nível de raciocínio do Gemini 3 (minimal | low | medium | high). Vazio = padrão do modelo.
 const RACIOCINIO = process.env.GEMINI_RACIOCINIO_COMENTARIO ?? "low";
@@ -20,12 +22,30 @@ export type QuestaoParaComentario = {
     enunciado: string | null;
     alternativas: Record<string, string> | null;
     correta: string | null;
+    /** Versões com negrito/itálico/sublinhado da fonte (migração 20261023). */
+    enunciado_fmt?: string | null;
+    alternativas_fmt?: Record<string, string> | null;
 };
+
+/** Colunas que as rotas leem para gerar a explicação. */
+export const CAMPOS_QUESTAO_COMENTARIO =
+    "id,user_id,origem,disciplina,assunto,banca,modalidade,enunciado,alternativas,correta,enunciado_fmt,alternativas_fmt";
+
+/** A questão tem destaques (sublinhado etc.)? Usado para marcar o modelo do comentário. */
+export function usaFormatacao(q: QuestaoParaComentario): boolean {
+    return !!q.enunciado_fmt || !!(q.alternativas_fmt && Object.keys(q.alternativas_fmt).length);
+}
+
+/** Nome gravado em questao_comentarios.modelo ("+fmt" = gerado vendo os destaques). */
+export function modeloDoComentario(q: QuestaoParaComentario): string {
+    return usaFormatacao(q) ? `${GEMINI_MODEL_COMENTARIO}+fmt` : GEMINI_MODEL_COMENTARIO;
+}
 
 function montarPrompt(q: QuestaoParaComentario): string {
     const alternativas = Object.entries(q.alternativas ?? {})
-        .map(([letra, texto]) => `${letra}) ${texto}`)
+        .map(([letra, texto]) => `${letra}) ${paraIA(q.alternativas_fmt?.[letra], texto)}`)
         .join("\n");
+    const destaques = usaFormatacao(q);
     const certoErrado = (q.modalidade ?? "").toLowerCase().includes("certo");
     const gabarito = certoErrado
         ? (q.correta === "C" ? "CERTO" : q.correta === "E" ? "ERRADO" : q.correta)
@@ -43,7 +63,8 @@ REGRAS
 4. NÃO invente números de artigos, leis, súmulas, incisos, datas, autores ou precedentes. Só cite um dispositivo se tiver certeza absoluta; caso contrário, explique o conceito sem número.
 5. Não diga que é uma IA, não fale de "gabarito oficial", não use markdown (sem #, *, tabelas). Texto simples, parágrafos curtos.
 6. Se houver uma pegadinha típica de prova, termine com uma linha começando por "Dica:" (no máximo 20 palavras). Se não houver, não escreva dica.
-7. Se você acreditar que o gabarito está errado ou que a questão é ambígua, mesmo assim escreva de forma neutra e coloque "gabarito_coerente": false.
+7. Se você acreditar que o gabarito está errado ou que a questão é ambígua, mesmo assim escreva de forma neutra e coloque "gabarito_coerente": false.${destaques ? `
+8. Na prova, alguns trechos aparecem destacados. Eles estão marcados como [sublinhado: ...], [negrito: ...] ou [itálico: ...]. Quando a questão falar em "termo destacado", "palavra sublinhada" etc., é desse trecho marcado que ela trata. No seu texto, cite o trecho entre aspas, sem os colchetes.` : ""}
 
 Responda SOMENTE com JSON válido no formato:
 {"comentario": "texto do comentário", "gabarito_coerente": true}
@@ -55,7 +76,7 @@ Banca: ${q.banca ?? "-"}
 Tipo: ${certoErrado ? "Certo ou Errado" : "Múltipla escolha"}
 
 Enunciado:
-${q.enunciado ?? ""}
+${paraIA(q.enunciado_fmt, q.enunciado)}
 
 ${certoErrado ? "" : `Alternativas:\n${alternativas}\n`}
 Gabarito: ${gabarito}`;

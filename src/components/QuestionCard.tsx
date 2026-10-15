@@ -1,4 +1,5 @@
 "use client";
+import { TextoFormatado } from "@/components/TextoFormatado";
 import { marcarDisciplina } from "@/lib/tempoAtivo";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
@@ -18,7 +19,7 @@ import {
 import { PainelMaterial, type TipoMaterial } from "./questao/PainelMaterial";
 import { prepararExplicacao } from "@/lib/explicacao";
 
-type Option = { letter?: string; text: string };
+type Option = { letter?: string; text: string; /** texto com <b>/<i>/<u> (ver lib/textoFormatado) */ fmt?: string | null };
 
 type CadernoTipo = "ERROS" | "ACERTOS";
 export type CadernoStatus = { ERROS: boolean; ACERTOS: boolean };
@@ -37,6 +38,8 @@ interface QuestionCardProps {
 
     tags: string[];
     statement: string;
+    /** Enunciado com negrito/itálico/sublinhado da fonte (quando houver). */
+    statementFmt?: string | null;
     options: Option[];
     correct: string;
     explanation: string;
@@ -336,6 +339,7 @@ export function QuestionCard(props: QuestionCardProps) {
         subassuntoNome,
         tags,
         statement,
+        statementFmt,
         options,
         correct,
         explanation,
@@ -512,7 +516,7 @@ export function QuestionCard(props: QuestionCardProps) {
             {cadernoMsg && <div className="mb-4 text-sm text-red-600 dark:text-red-400">{cadernoMsg}</div>}
 
             {/* pre-line: mantém os parágrafos do enunciado (fonte, texto-base, comando). */}
-            <h2 className="mb-5 whitespace-pre-line text-base font-medium leading-relaxed text-foreground sm:text-[17px]">{statement}</h2>
+            <h2 className="mb-5 whitespace-pre-line text-base font-medium leading-relaxed text-foreground sm:text-[17px]"><TextoFormatado texto={statement} fmt={statementFmt} /></h2>
 
             <div className="mb-5 flex flex-col gap-2">
                 {options.map((opt, idx) => {
@@ -545,7 +549,7 @@ export function QuestionCard(props: QuestionCardProps) {
                                 <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${letra}`}>
                                     {value}
                                 </span>
-                                <span className="min-w-0 pt-0.5">{opt.text}</span>
+                                <span className="min-w-0 pt-0.5"><TextoFormatado texto={opt.text} fmt={opt.fmt} /></span>
                             </button>
                             {!showResult && (
                                 <button

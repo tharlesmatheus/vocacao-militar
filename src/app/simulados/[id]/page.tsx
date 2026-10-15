@@ -1,4 +1,5 @@
 "use client";
+import { TextoFormatado } from "@/components/TextoFormatado";
 import { marcarDisciplina, useEstudoAutomatico } from "@/lib/tempoAtivo";
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +16,8 @@ type QuestaoSim = {
     modalidade: string | null;
     enunciado: string;
     alternativas: Record<string, string> | null;
+    enunciado_fmt?: string | null;
+    alternativas_fmt?: Record<string, string> | null;
     correta: string | null; // só vem depois de finalizado
 };
 
@@ -254,7 +257,7 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
                         {q.disciplina && <span className="rounded bg-accent px-2 py-1 text-accent-foreground">{q.disciplina}</span>}
                         {q.banca && <span className="rounded bg-accent px-2 py-1 text-accent-foreground">{rotuloBanca(q.banca)}</span>}
                     </div>
-                    <p className="mb-5 whitespace-pre-line text-base font-medium leading-relaxed text-foreground sm:text-[17px]">{q.enunciado}</p>
+                    <p className="mb-5 whitespace-pre-line text-base font-medium leading-relaxed text-foreground sm:text-[17px]"><TextoFormatado texto={q.enunciado} fmt={q.enunciado_fmt} /></p>
                     <div className="flex flex-col gap-2">
                         {alternativasDe(q).map(([letra, texto]) => {
                             const marcada = respostas[q.id] === letra;
@@ -268,7 +271,7 @@ export default function SimuladoPage({ params }: { params: Promise<{ id: string 
                                     <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${marcada ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
                                         {letra}
                                     </span>
-                                    <span className="pt-0.5 text-foreground">{texto}</span>
+                                    <span className="pt-0.5 text-foreground"><TextoFormatado texto={texto} fmt={q.alternativas_fmt?.[letra]} /></span>
                                 </button>
                             );
                         })}
@@ -381,7 +384,7 @@ function ResultadoView({ dados, resultado }: { dados: DadosSimulado; resultado: 
                                     </span>
                                     <span className="text-muted-foreground">{q.disciplina}</span>
                                 </div>
-                                <p className="mb-3 whitespace-pre-line text-sm leading-relaxed text-foreground">{q.enunciado}</p>
+                                <p className="mb-3 whitespace-pre-line text-sm leading-relaxed text-foreground"><TextoFormatado texto={q.enunciado} fmt={q.enunciado_fmt} /></p>
                                 <ul className="flex flex-col gap-1 text-sm">
                                     {alternativasDe(q).map(([letra, texto]) => (
                                         <li
@@ -394,7 +397,7 @@ function ResultadoView({ dados, resultado }: { dados: DadosSimulado; resultado: 
                                                         : "text-muted-foreground"
                                             }`}
                                         >
-                                            {letra}) {texto}
+                                            {letra}) <TextoFormatado texto={texto} fmt={q.alternativas_fmt?.[letra]} />
                                         </li>
                                     ))}
                                 </ul>

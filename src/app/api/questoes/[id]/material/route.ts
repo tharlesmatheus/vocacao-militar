@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { paraIA } from "@/lib/textoFormatado";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { temAssinaturaAtiva, usuarioDaRequisicao } from "@/lib/servidor/usuario";
 import { gerarJSON, textoLimpo } from "@/lib/servidor/gemini";
@@ -34,6 +35,8 @@ type Questao = {
     enunciado: string | null;
     alternativas: Record<string, string> | null;
     correta: string | null;
+    enunciado_fmt?: string | null;
+    alternativas_fmt?: Record<string, string> | null;
 };
 
 function resposta(corpo: unknown, status = 200) {
@@ -47,7 +50,7 @@ async function carregar(req: Request, questaoId: string) {
 
     const { data: q } = await supabaseAdmin
         .from("questoes")
-        .select("id,user_id,origem,disciplina,assunto,banca,modalidade,enunciado,alternativas,correta")
+        .select("id,user_id,origem,disciplina,assunto,banca,modalidade,enunciado,alternativas,correta,enunciado_fmt,alternativas_fmt")
         .eq("id", questaoId)
         .maybeSingle<Questao>();
     if (!q) return { erro: resposta({ error: "Questão não encontrada." }, 404) };
@@ -72,14 +75,14 @@ async function geracoesHoje(userId: string) {
 function descreverQuestao(q: Questao, comentario: string | null) {
     const ce = /certo/i.test(q.modalidade ?? "");
     const gabarito = ce ? (q.correta === "C" ? "CERTO" : "ERRADO") : q.correta;
-    const alternativas = ce ? "" : Object.entries(q.alternativas ?? {}).map(([l, t]) => `${l}) ${t}`).join("\n");
+    const alternativas = ce ? "" : Object.entries(q.alternativas ?? {}).map(([l, t]) => `${l}) ${paraIA(q.alternativas_fmt?.[l], t)}`).join("\n");
     return `Disciplina: ${q.disciplina ?? "-"}
 Assunto: ${q.assunto ?? "-"}
 Banca: ${q.banca ?? "-"}
 Tipo: ${ce ? "Certo ou errado" : "Múltipla escolha"}
 
 Enunciado:
-${q.enunciado ?? ""}
+${paraIA(q.enunciado_fmt, q.enunciado)}
 ${alternativas ? `\nAlternativas:\n${alternativas}\n` : ""}
 Gabarito oficial: ${gabarito}
 ${comentario ? `\nComentário do professor (use como base):\n${comentario}\n` : ""}`;
