@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
+import { MetaPixel } from "@/components/MetaPixel";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -127,6 +128,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
 
       <body className="bg-background text-foreground font-sans antialiased overflow-x-hidden">
+        <MetaPixel />
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} storageKey="vm-tema" disableTransitionOnChange>
           {showChrome && (
             <Sidebar

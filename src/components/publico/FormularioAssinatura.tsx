@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
+import { VALOR_PLANO, eventoPixel, eventoPixelEIr } from "@/lib/pixel";
 
 const UTM_CHAVES = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "src"];
 
@@ -33,6 +34,11 @@ export function FormularioAssinatura({ preco }: { preco: string }) {
     const [token, setToken] = useState<string | null>(null);
 
     // Se a pessoa já tem conta e está logada, preenche com os dados dela.
+    // Pixel: viu a página de venda.
+    useEffect(() => {
+        eventoPixel("ViewContent", { content_name: "Assinatura mensal", ...VALOR_PLANO });
+    }, []);
+
     useEffect(() => {
         (async () => {
             const { data } = await supabase.auth.getSession();
@@ -81,7 +87,8 @@ export function FormularioAssinatura({ preco }: { preco: string }) {
             const corpo = await r.json().catch(() => ({}));
             if (!r.ok || !corpo.url) throw new Error(corpo.error || "Não foi possível continuar. Tente novamente.");
 
-            window.location.href = corpo.url;
+            // Pixel: virou lead e foi para o checkout (a compra é registrada pela Kiwify).
+            eventoPixelEIr(corpo.url, [["Lead", VALOR_PLANO], ["InitiateCheckout", VALOR_PLANO]]);
         } catch (e: any) {
             setErro(e?.message || "Não foi possível continuar. Tente novamente.");
             setEnviando(false);

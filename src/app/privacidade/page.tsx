@@ -19,6 +19,10 @@ export default function PrivacidadePage() {
                 <li>Assinatura: situação do plano, datas e valores informados pela Kiwify. Não recebemos nem guardamos dados de cartão.</li>
                 <li>Uso da plataforma: questões respondidas, acertos e erros, cadernos, anotações, comentários e tempo de estudo.</li>
                 <li>Dados técnicos mínimos para segurança, como um código derivado do IP para limitar tentativas abusivas.</li>
+                <li>
+                    Navegação e anúncios: usamos o Pixel da Meta (Facebook/Instagram), que grava cookies e registra
+                    páginas visitadas, cadastro e início da compra, para medir e melhorar nossos anúncios.
+                </li>
             </ul>
 
             <h2>2. Para que usamos</h2>
@@ -32,6 +36,10 @@ export default function PrivacidadePage() {
             <h2>3. Com quem compartilhamos</h2>
             <ul>
                 <li>Kiwify, para processar pagamentos.</li>
+                <li>
+                    Meta Platforms (Facebook/Instagram), que recebe os eventos do Pixel para medir anúncios. Você pode
+                    bloquear esses cookies no seu navegador ou ajustar suas preferências de anúncios na própria Meta.
+                </li>
                 <li>Fornecedores de infraestrutura (hospedagem, banco de dados e envio de e-mails) e de inteligência artificial usada para gerar comentários das questões. Esses comentários são gerados a partir da questão, sem seus dados pessoais.</li>
                 <li>Autoridades, quando exigido por lei.</li>
             </ul>

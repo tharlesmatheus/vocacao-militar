@@ -1,4 +1,5 @@
 "use client";
+import { eventoPixel } from "@/lib/pixel";
 import { useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
@@ -63,6 +64,7 @@ export default function AuthPage() {
         });
         setLoading(false);
         if (error) return setErro(erroAuth(error.message));
+        eventoPixel("CompleteRegistration");
         setMode("login");
         setAviso("Cadastro feito! Confirme pelo link que enviamos para o seu e-mail (veja também o spam) e depois entre.");
     }

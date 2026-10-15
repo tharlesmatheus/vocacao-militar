@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckCircle2, Lock } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { PRECO_PLANO, linkCheckout } from "@/lib/plano";
+import { VALOR_PLANO, eventoPixelEIr } from "@/lib/pixel";
 import { BotaoJaPaguei } from "@/components/BotaoJaPaguei";
 
 const BENEFICIOS = [
@@ -20,7 +21,7 @@ export function ChamadaAssinatura({ titulo = "Assine para liberar o banco de que
     async function assinar() {
         setAbrindo(true);
         const { data } = await supabase.auth.getUser();
-        window.location.assign(linkCheckout(data.user?.email));
+        eventoPixelEIr(linkCheckout(data.user?.email), [["InitiateCheckout", VALOR_PLANO]]);
     }
 
     return (

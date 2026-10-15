@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { linkCheckout } from "@/lib/plano";
+import { VALOR_PLANO, eventoPixelEIr } from "@/lib/pixel";
 import { supabase } from "../lib/supabaseClient";
 
 type Comentario = {
@@ -170,7 +171,7 @@ export function ComentariosQuestao({ questaoId }: { questaoId: string }) {
                     className="font-semibold text-primary underline"
                     onClick={async () => {
                         const { data } = await supabase.auth.getUser();
-                        window.location.assign(linkCheckout(data.user?.email));
+                        eventoPixelEIr(linkCheckout(data.user?.email), [["InitiateCheckout", VALOR_PLANO]]);
                     }}
                 >
                     Assinar agora
