@@ -68,9 +68,9 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
     }, [iniciais]);
 
     /*
-     * As opções vêm do banco já agregadas (valores distintos), em vez de
-     * baixar todas as questões. Cargos dependem da instituição e assuntos
-     * dependem da disciplina: o acervo tem milhares de assuntos.
+     * Filtros em cascata (ordem da tela): cada lista vem do banco só com o que
+     * existe nos filtros acima dela (PM BA -> só cargos, bancas e disciplinas
+     * da PM BA). Assunto só aparece depois da disciplina (são mais de mil).
      */
     useEffect(() => {
         let cancelado = false;
@@ -79,11 +79,22 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
             setLoading(true);
             setErro("");
 
-            const { data, error } = await supabase.rpc("opcoes_filtro_questoes", {
+            const base = {
                 p_origem: ou(selected.origem),
                 p_instituicao: ou(selected.instituicao),
                 p_disciplina: ou(selected.disciplina),
+            };
+            let { data, error } = await supabase.rpc("opcoes_filtro_questoes", {
+                ...base,
+                p_cargo: ou(selected.cargo),
+                p_banca: ou(selected.banca),
+                p_assunto: ou(selected.assunto),
+                p_modalidade: ou(selected.modalidade),
             });
+            // Banco ainda sem a migração 20261022: versão antiga (só instituição e disciplina).
+            if (error?.code === "PGRST202") {
+                ({ data, error } = await supabase.rpc("opcoes_filtro_questoes", base));
+            }
 
             if (cancelado) return;
 
@@ -100,7 +111,35 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
         return () => {
             cancelado = true;
         };
-    }, [selected.origem, selected.instituicao, selected.disciplina]);
+    }, [selected.origem, selected.instituicao, selected.cargo, selected.banca, selected.disciplina, selected.assunto, selected.modalidade]);
+
+    /*
+     * Valor escolhido que deixou de existir com os outros filtros (ex.: trocou
+     * a instituição e o cargo não existe nela) volta para "Selecione".
+     */
+    useEffect(() => {
+        if (loading || erro) return;
+        const listas: Array<[keyof Filters, string[]]> = [
+            ["instituicao", opcoes.instituicoes],
+            ["cargo", opcoes.cargos],
+            ["banca", opcoes.bancas],
+            ["disciplina", opcoes.disciplinas],
+            ["assunto", opcoes.assuntos],
+            ["modalidade", opcoes.modalidades],
+        ];
+        const invalidos = listas.filter(([nome, lista]) => {
+            const v = selected[nome];
+            return typeof v === "string" && v !== "" && !lista.includes(v);
+        });
+        if (!invalidos.length) return;
+        setSelected((prev) => {
+            const next = { ...prev };
+            for (const [nome] of invalidos) (next as Record<string, unknown>)[nome] = "";
+            if (invalidos.some(([nome]) => nome === "disciplina")) next.assunto = "";
+            return next;
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [opcoes, loading, erro]);
 
     function handleChange(
         e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>
