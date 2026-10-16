@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { usuarioDaRequisicao } from "@/lib/servidor/usuario";
+import { CHECKOUT_URL } from "@/lib/plano";
 
 /*
  * POST /api/leads
@@ -15,7 +16,7 @@ import { usuarioDaRequisicao } from "@/lib/servidor/usuario";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const CHECKOUT_URL = process.env.KIWIFY_CHECKOUT_URL || "https://pay.kiwify.com.br/ptQ62f5";
+// Link do checkout: um lugar só, em lib/plano.ts.
 const PARAMETROS_CHECKOUT = { nome: "name", email: "email", telefone: "phone" } as const;
 const LIMITE_POR_IP = 5;          // envios
 const JANELA_LIMITE_MIN = 10;     // minutos
