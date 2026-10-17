@@ -2,24 +2,30 @@ import type { CSSProperties, ReactNode } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Barlow_Condensed } from "next/font/google";
-import { PRECO_PLANO } from "@/lib/plano";
+import { PRECO_ANTERIOR, PRECO_PLANO } from "@/lib/plano";
 import {
     ArrowRight,
     BarChart3,
     BookX,
+    CalendarDays,
     Check,
     Clock3,
     Crosshair,
+    FileText,
+    Flag,
     HelpCircle,
     Layers3,
     MessageSquareText,
     NotebookPen,
+    RefreshCw,
     ShieldCheck,
     Siren,
+    SlidersHorizontal,
     Target,
+    Timer,
     TimerReset,
 } from "lucide-react";
-import { FormularioAssinatura } from "@/components/publico/FormularioAssinatura";
+import { BotaoCheckout, PixelPaginaVenda } from "@/components/publico/BotaoCheckout";
 
 /*
  * Página pública de vendas (sem login, sem barra lateral; ver isPublicRoute em app/layout.tsx).
@@ -27,9 +33,15 @@ import { FormularioAssinatura } from "@/components/publico/FormularioAssinatura"
  * As imagens em /public/vendas são capturas das telas reais do app (com uma questão
  * real da PM BA e textos de exemplo). Se as telas mudarem, gere as imagens de novo.
  * Não use números de acervo nem depoimentos inventados: só o que o produto entrega.
+ * Compra sem formulário: todo botão vai direto para o checkout (BotaoCheckout).
  */
 
 const PRECO = PRECO_PLANO;
+const PRECO_DE = PRECO_ANTERIOR;
+const POR_DIA = (() => {
+    const valor = Number(PRECO.replace(/[^\d,]/g, "").replace(",", "."));
+    return `R$ ${(valor / 30).toFixed(2).replace(".", ",")}`;
+})();
 
 const fonteTitulo = Barlow_Condensed({ subsets: ["latin"], weight: ["600", "700", "800"], display: "swap" });
 
@@ -50,7 +62,7 @@ const temaTatico = {
 export const metadata: Metadata = {
     title: "Vocação Militar — Treino para concursos policiais",
     description:
-        "Questões de provas anteriores de PM, PC, PRF, PF, Bombeiros e Guarda, com comentário em cada questão, caderno de erros automático, flashcards, revisão e simulados. R$ 14,90/mês, 7 dias de garantia.",
+        `Plataforma de questões focada em concursos policiais de todo o Brasil: questões comentadas, simulados, flashcards, resumos, revisão programada e cronograma. ${PRECO_PLANO}/mês, cancele quando quiser.`,
 };
 
 const carreiras = ["Polícia Militar", "Polícia Civil", "PRF", "Polícia Federal", "Bombeiro Militar", "Guarda Municipal", "Polícia Penal"];
@@ -88,6 +100,17 @@ const metodo: Bloco[] = [
         largura: 1360,
         altura: 1414,
         alt: "Questão de Direito Penal da PM BA respondida no Vocação Militar",
+    },
+    {
+        tag: "Filtros",
+        icone: SlidersHorizontal,
+        titulo: "Encontre exatamente as questões do seu concurso",
+        texto: "Polícia Militar, Civil, Penal, PRF, PF, Bombeiros e Guarda de todo o Brasil. Digite e filtre por instituição, cargo, banca, disciplina e assunto.",
+        itens: ["Busca enquanto digita, sem precisar rolar listas", "Exclua as questões que você já respondeu", "A sua meta já vem aplicada: abre e treina"],
+        imagem: "/vendas/filtros.webp",
+        largura: 1180,
+        altura: 714,
+        alt: "Filtros de questões por instituição, cargo, banca, disciplina e assunto",
     },
     {
         tag: "Comentário",
@@ -146,12 +169,30 @@ const metodo: Bloco[] = [
     },
 ];
 
+/* Ferramentas de organização do app (sem captura de tela por enquanto). */
+const organizacao = [
+    { icone: CalendarDays, titulo: "Cronograma de estudos", texto: "Monte a sua semana por disciplina e saiba o que estudar em cada dia." },
+    { icone: FileText, titulo: "Resumos", texto: "Escreva resumos a partir das questões e guarde tudo organizado por disciplina e assunto." },
+    { icone: RefreshCw, titulo: "Revisões programadas", texto: "Flashcards e resumos voltam no dia certo para você revisar antes de esquecer." },
+    { icone: Target, titulo: "Meta e missão do dia", texto: "Escolha o seu concurso e receba a missão diária de questões e revisões." },
+    { icone: Timer, titulo: "Tempo de estudo", texto: "O tempo é contado enquanto você resolve, por disciplina, para acompanhar a sua constância." },
+    { icone: Flag, titulo: "Edital organizado", texto: "Acompanhe o conteúdo do edital e marque o que já estudou." },
+];
+
+/*
+ * Depoimentos: SÓ de alunos reais, com autorização para publicar (nome como a pessoa
+ * permitir e o concurso). Enquanto a lista estiver vazia, a seção não aparece.
+ * Ex.: { texto: "…", nome: "Carlos S.", concurso: "Soldado PM PE" }
+ */
+const depoimentos: { texto: string; nome: string; concurso: string }[] = [];
+
 const incluso = [
-    "Questões de provas anteriores de concursos policiais",
+    "Questões de concursos policiais de todo o Brasil",
     "Comentário explicando cada questão",
     "Caderno de erros automático",
     "Flashcards, resumos e revisão programada",
     "Simulados cronometrados",
+    "Cronograma de estudos e tempo de estudo",
     "Estatísticas por disciplina e assunto",
     "Meta do seu concurso e missão do dia",
     "No computador e no celular",
@@ -164,13 +205,13 @@ const faq = [
     },
     {
         p: "Como funciona a cobrança?",
-        r: `É uma assinatura mensal de ${PRECO}. No cartão ou no Pix automático, a renovação é feita sozinha todo mês: você autoriza uma vez e não precisa pagar manualmente.`,
+        r: `É uma assinatura mensal de ${PRECO}. No cartão ou no Pix automático, a renovação é feita sozinha todo mês: você autoriza uma vez e não precisa pagar manualmente. Você pode cancelar quando quiser.`,
     },
     { p: "Posso cancelar quando quiser?", r: "Sim, sem multa. Ao cancelar, você continua com acesso até o fim do período que já pagou." },
     { p: "E se eu não gostar?", r: "Você tem 7 dias, a partir da compra, para pedir o reembolso integral, como prevê o Código de Defesa do Consumidor." },
     {
         p: "Como acesso depois de pagar?",
-        r: "Assim que o pagamento é aprovado, você recebe um e-mail para criar sua senha e já entra com acesso liberado. Se já tem conta, o acesso é liberado nela.",
+        r: "Clique em Obter acesso, pague no checkout seguro da Kiwify e, assim que o pagamento for aprovado, você recebe um e-mail para criar sua senha e entrar. Se já tem conta com o mesmo e-mail, o acesso é liberado nela.",
     },
     { p: "Funciona no celular?", r: "Sim. Funciona no navegador do celular, do tablet e do computador, e pode ser instalado na tela inicial do celular como um aplicativo." },
 ];
@@ -194,15 +235,25 @@ function Rotulo({ children }: { children: ReactNode }) {
     );
 }
 
+/** Todos os botões de compra vão direto para o checkout (sem formulário). */
 function BotaoAssinar({ children, className = "" }: { children: ReactNode; className?: string }) {
     return (
-        <a
-            href="#assinar"
+        <BotaoCheckout
             className={`${fonteTitulo.className} inline-flex items-center justify-center gap-2 bg-primary px-7 py-4 text-xl font-bold uppercase tracking-wide text-primary-foreground shadow-[0_10px_40px_rgba(59,130,246,0.35)] transition hover:brightness-110 ${className}`}
         >
             {children}
             <ArrowRight className="h-5 w-5" aria-hidden />
-        </a>
+        </BotaoCheckout>
+    );
+}
+
+/** "R$ 14,90/mês", ou "de X por Y/mês" quando houver preço anterior. */
+function PrecoDePor({ grande = false }: { grande?: boolean }) {
+    return (
+        <span className="inline-flex flex-wrap items-baseline gap-x-2">
+            {PRECO_DE && <span className="text-muted-foreground line-through">de {PRECO_DE}</span>}
+            <span className={grande ? "" : "font-semibold text-foreground"}>{PRECO_DE ? "por " : ""}{PRECO}/mês</span>
+        </span>
     );
 }
 
@@ -229,6 +280,7 @@ export default function AssinarPage() {
 
     return (
         <div style={temaTatico} className="min-h-screen w-full overflow-x-clip bg-background pb-20 text-foreground [color-scheme:dark] md:pb-0">
+            <PixelPaginaVenda />
             {/* Topo */}
             <header className="sticky top-0 z-40 border-b border-border bg-black/80 backdrop-blur">
                 <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-5 py-3">
@@ -240,9 +292,9 @@ export default function AssinarPage() {
                         <Link href="/auth" className="shrink-0 px-3 py-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground hover:text-primary">
                             Entrar
                         </Link>
-                        <a href="#assinar" className="hidden shrink-0 bg-primary px-4 py-2 text-sm font-bold uppercase tracking-wider text-primary-foreground hover:brightness-110 sm:inline-block">
-                            Assinar
-                        </a>
+                        <BotaoCheckout className="hidden shrink-0 bg-primary px-4 py-2 text-sm font-bold uppercase tracking-wider text-primary-foreground hover:brightness-110 sm:inline-block">
+                            Obter acesso
+                        </BotaoCheckout>
                     </nav>
                 </div>
             </header>
@@ -260,25 +312,25 @@ export default function AssinarPage() {
                 />
                 <div className="relative mx-auto grid w-full max-w-6xl items-center gap-12 px-5 pb-16 pt-12 lg:grid-cols-[1.15fr_0.85fr] lg:pt-16">
                     <div className="flex flex-col gap-6">
-                        <Rotulo><Siren className="h-4 w-4" aria-hidden /> Concursos policiais</Rotulo>
+                        <Rotulo><Siren className="h-4 w-4" aria-hidden /> Concursos policiais de todo o Brasil</Rotulo>
                         <h1 className={`${h} text-5xl font-extrabold leading-[0.92] sm:text-6xl lg:text-7xl`}>
                             A farda se conquista <span className="text-primary">questão por questão.</span>
                         </h1>
                         <p className="max-w-xl text-lg text-zinc-300 sm:text-xl">
-                            Treine com questões de provas anteriores da sua corporação, entenda cada gabarito e
-                            transforme cada erro em ponto na prova. Um método simples, todo dia, até a aprovação.
+                            A plataforma de questões feita só para concursos policiais de todo o Brasil. Questões
+                            comentadas, simulados, flashcards, resumos, revisão programada e cronograma, tudo no mesmo lugar.
                         </p>
                         <ul className="grid max-w-xl gap-2 text-zinc-200 sm:grid-cols-2">
-                            {["Comentário em cada questão", "Caderno de erros automático", "Revisão no dia certo", "Simulados com cronômetro"].map((t) => (
+                            {["Questões comentadas", "Simulados com cronômetro", "Flashcards e resumos", "Revisões programadas", "Cronograma e organização", "Caderno de erros automático"].map((t) => (
                                 <li key={t} className="flex items-center gap-2">
                                     <Check className="h-5 w-5 shrink-0 text-primary" aria-hidden /> {t}
                                 </li>
                             ))}
                         </ul>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                            <BotaoAssinar>Começar agora</BotaoAssinar>
+                            <BotaoAssinar>Obter acesso</BotaoAssinar>
                             <div className="text-sm text-muted-foreground">
-                                <span className="font-semibold text-foreground">{PRECO}/mês</span> · 7 dias de garantia · cancele quando quiser
+                                <PrecoDePor /> · cancele quando quiser
                             </div>
                         </div>
                     </div>
@@ -386,6 +438,47 @@ export default function AssinarPage() {
 
             <Faixa />
 
+            {/* Organização */}
+            <section className="bg-black">
+                <div className="mx-auto w-full max-w-6xl px-5 py-16 sm:py-20">
+                    <div className="mb-10 flex flex-col items-center gap-3 text-center">
+                        <Rotulo>Organização</Rotulo>
+                        <h2 className={`${h} text-4xl font-extrabold sm:text-5xl`}>Seu estudo inteiro em um lugar só</h2>
+                        <p className="max-w-2xl text-muted-foreground">Além das questões, as ferramentas para planejar, revisar e manter a constância até a prova.</p>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {organizacao.map(({ icone: Icone, titulo, texto }) => (
+                            <div key={titulo} className="border border-border bg-card p-6">
+                                <Icone className="mb-4 h-8 w-8 text-primary" aria-hidden />
+                                <h3 className={`${h} mb-2 text-2xl font-bold`}>{titulo}</h3>
+                                <p className="text-muted-foreground">{texto}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {depoimentos.length > 0 && (
+                <section className="mx-auto w-full max-w-6xl px-5 py-16 sm:py-20">
+                    <div className="mb-10 flex flex-col items-center gap-3 text-center">
+                        <Rotulo>Quem usa</Rotulo>
+                        <h2 className={`${h} text-4xl font-extrabold sm:text-5xl`}>O que dizem os alunos</h2>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-3">
+                        {depoimentos.map((d) => (
+                            <figure key={d.nome + d.texto.slice(0, 20)} className="border border-border bg-card p-6">
+                                <blockquote className="text-zinc-200">“{d.texto}”</blockquote>
+                                <figcaption className="mt-4 text-sm text-muted-foreground">
+                                    <b className="text-foreground">{d.nome}</b> · {d.concurso}
+                                </figcaption>
+                            </figure>
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            <Faixa />
+
             {/* Rotina */}
             <section className="mx-auto w-full max-w-6xl px-5 py-16 sm:py-20">
                 <div className="mb-10 flex flex-col items-center gap-3 text-center">
@@ -422,7 +515,7 @@ export default function AssinarPage() {
                     <div className="flex flex-col gap-5">
                         <Rotulo>Acesso completo</Rotulo>
                         <h2 className={`${h} text-4xl font-extrabold sm:text-5xl`}>
-                            Tudo isso por menos de <span className="text-primary">R$ 0,50 por dia</span>
+                            Tudo isso por <span className="text-primary">{POR_DIA} por dia</span>
                         </h2>
                         <p className="text-lg text-zinc-300">
                             Menos que um lanche por mês para treinar todos os dias com o mesmo método de quem leva a aprovação a sério.
@@ -447,13 +540,22 @@ export default function AssinarPage() {
                         <span aria-hidden className="absolute -top-px left-6 right-6 h-[3px] bg-primary" />
                         <div className="mb-5">
                             <div className={`${fonteTitulo.className} text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground`}>Assinatura mensal</div>
+                            {PRECO_DE && <div className="mt-1 text-lg text-muted-foreground line-through">de {PRECO_DE}/mês</div>}
                             <div className="flex items-end gap-1">
-                                <span className={`${fonteTitulo.className} text-6xl font-extrabold text-primary`}>{PRECO}</span>
+                                {PRECO_DE && <span className="pb-3 text-lg font-semibold text-foreground">por</span>}
+                                <span className={`${fonteTitulo.className} text-7xl font-extrabold text-primary`}>{PRECO}</span>
                                 <span className="pb-2 text-muted-foreground">/mês</span>
                             </div>
                             <div className="mt-1 text-sm text-muted-foreground">Cartão ou Pix · renovação automática · cancele quando quiser</div>
                         </div>
-                        <FormularioAssinatura preco={PRECO} />
+                        <BotaoAssinar className="w-full">Obter acesso</BotaoAssinar>
+                        <ul className="mt-5 flex flex-col gap-2 text-sm text-zinc-300">
+                            {["Acesso liberado assim que o pagamento é aprovado", "Pagamento seguro pela Kiwify", "Cancele quando quiser, sem multa", "7 dias de garantia"].map((t) => (
+                                <li key={t} className="flex items-center gap-2">
+                                    <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden /> {t}
+                                </li>
+                            ))}
+                        </ul>
                     </div>
                 </div>
             </section>
@@ -479,9 +581,9 @@ export default function AssinarPage() {
                 <div className="flex flex-col items-center gap-5 border border-primary/40 bg-primary/5 p-8 text-center sm:p-12">
                     <h2 className={`${h} text-4xl font-extrabold sm:text-5xl`}>A sua vaga não vai esperar</h2>
                     <p className="max-w-2xl text-lg text-zinc-300">
-                        O edital sai e quem já vinha treinando sai na frente. Comece hoje, com 7 dias de garantia.
+                        O edital sai e quem já vinha treinando sai na frente. Comece hoje por {PRECO}/mês e cancele quando quiser.
                     </p>
-                    <BotaoAssinar>Quero começar por {PRECO}/mês</BotaoAssinar>
+                    <BotaoAssinar>Obter acesso por {PRECO}/mês</BotaoAssinar>
                 </div>
             </section>
 
@@ -499,12 +601,11 @@ export default function AssinarPage() {
 
             {/* Barra fixa no celular */}
             <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-black/95 p-3 backdrop-blur md:hidden">
-                <a
-                    href="#assinar"
+                <BotaoCheckout
                     className={`${fonteTitulo.className} flex w-full items-center justify-center gap-2 bg-primary py-3 text-lg font-bold uppercase tracking-wide text-primary-foreground`}
                 >
-                    Começar por {PRECO}/mês <ArrowRight className="h-5 w-5" aria-hidden />
-                </a>
+                    Obter acesso por {PRECO}/mês <ArrowRight className="h-5 w-5" aria-hidden />
+                </BotaoCheckout>
             </div>
         </div>
     );
