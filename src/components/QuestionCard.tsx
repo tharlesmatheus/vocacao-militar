@@ -11,12 +11,14 @@ import {
     CheckCircle2,
     ChevronDown,
     FileText,
+    Flag,
     Layers3,
     MessageSquareText,
     Scissors,
     XCircle,
 } from "lucide-react";
 import { PainelMaterial, type TipoMaterial } from "./questao/PainelMaterial";
+import { ReportarErro } from "./questao/ReportarErro";
 import { prepararExplicacao } from "@/lib/explicacao";
 
 type Option = { letter?: string; text: string; /** texto com <b>/<i>/<u> (ver lib/textoFormatado) */ fmt?: string | null };
@@ -365,6 +367,8 @@ export function QuestionCard(props: QuestionCardProps) {
         useState(false);
     const [showModal, setShowModal] = useState(false);
     const [showComentarios, setShowComentarios] = useState(false);
+    const [reportando, setReportando] = useState(false);
+    const fecharReporte = React.useCallback(() => setReportando(false), []);
     const [errorText, setErrorText] = useState("");
     const [loadingErro, setLoadingErro] = useState(false);
     const [comentarioText, setComentarioText] = useState("");
@@ -822,6 +826,10 @@ export function QuestionCard(props: QuestionCardProps) {
                         <FileText className="h-4 w-4" aria-hidden /> Resumo
                     </button>
                 )}
+
+                <button type="button" onClick={() => setReportando(true)} className={`${acaoClass(false)} sm:ml-auto`}>
+                    <Flag className="h-4 w-4" aria-hidden /> Reportar erro
+                </button>
             </div>
 
             {showComentarios && (
@@ -836,6 +844,8 @@ export function QuestionCard(props: QuestionCardProps) {
                     <p className="mt-1 whitespace-pre-line">{explanation}</p>
                 </div>
             )}
+
+            <ReportarErro questaoId={id} aberto={reportando} aoFechar={fecharReporte} />
 
             <PainelMaterial
                 questaoId={id}

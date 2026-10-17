@@ -8,6 +8,7 @@ import AdminVendas from "./components/AdminVendas";
 import AdminModeracao from "./components/AdminModeracao";
 import AdminAcervo from "./components/AdminAcervo";
 import AdminNomes from "./components/AdminNomes";
+import AdminReportes from "./components/AdminReportes";
 import ClientesList from "./components/ClientesList";
 import NovoClienteForm from "./components/NovoClienteForm";
 
@@ -15,6 +16,7 @@ const ABAS: Record<string, { titulo: string; componente: () => React.ReactElemen
     resumo: { titulo: "Visão geral", componente: () => <AdminResumo /> },
     vendas: { titulo: "Vendas e assinaturas", componente: () => <AdminVendas /> },
     moderacao: { titulo: "Moderação de comentários", componente: () => <AdminModeracao /> },
+    reportes: { titulo: "Erros reportados pelos alunos", componente: () => <AdminReportes /> },
     questoes: { titulo: "Questões do acervo", componente: () => <AdminAcervo /> },
     nomes: { titulo: "Nomes de cargos e instituições", componente: () => <AdminNomes /> },
     clientes: { titulo: "Clientes", componente: () => <ClientesList /> },

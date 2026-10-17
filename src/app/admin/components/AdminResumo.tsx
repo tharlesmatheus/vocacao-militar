@@ -14,6 +14,7 @@ type Resumo = {
     denunciasPendentes: number;
     questoesAcervo: number;
     questoesOcultas: number;
+    errosReportados: number;
     vendasMes: number;
     faturamentoMes: number;
 };
@@ -70,6 +71,13 @@ export default function AdminResumo() {
                         detalhe="Possível problema no gabarito"
                         alerta={dados.comentariosRevisar > 0}
                         href="/admin?tab=moderacao"
+                    />
+                    <Indicador
+                        titulo="Erros reportados"
+                        valor={n(dados.errosReportados ?? 0)}
+                        detalhe="Avisos dos alunos em aberto"
+                        alerta={(dados.errosReportados ?? 0) > 0}
+                        href="/admin?tab=reportes"
                     />
                     <Indicador
                         titulo="Denúncias pendentes"

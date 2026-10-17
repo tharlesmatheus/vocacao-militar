@@ -24,6 +24,7 @@ export async function GET(req: Request) {
         denunciasPendentes,
         questoesAcervo,
         questoesOcultas,
+        errosReportados,
         vendasMes,
     ] = await Promise.all([
         // Mesma regra de assinatura_ativa_de(): ativo/atrasado até access_until + 7 dias, ou período pago.
@@ -43,6 +44,8 @@ export async function GET(req: Request) {
             .eq("origem", "ACERVO").eq("oculta", false)),
         contar(supabaseAdmin.from("questoes").select("id", { count: "exact", head: true })
             .eq("origem", "ACERVO").eq("oculta", true)),
+        // Sem a migração 20261025 a contagem falha e fica 0.
+        contar(supabaseAdmin.from("questao_reportes").select("id", { count: "exact", head: true }).eq("status", "aberto")),
         supabaseAdmin.from("kiwify_events")
             .select("event, valor:payload->Commissions->charge_amount")
             .eq("aplicado", true)
@@ -64,6 +67,7 @@ export async function GET(req: Request) {
         denunciasPendentes,
         questoesAcervo,
         questoesOcultas,
+        errosReportados,
         vendasMes: linhas.length,
         faturamentoMes: brutoCentavos / 100,
     });
