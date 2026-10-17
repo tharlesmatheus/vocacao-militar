@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { adminApi, botao, cartao, dataHora } from "./adminApi";
 import AdminComentariosLote from "./AdminComentariosLote";
+import AdminComentariosOpenAI from "./AdminComentariosOpenAI";
 
 type Comentario = {
     id: string;
@@ -121,6 +122,7 @@ export default function AdminModeracao() {
     return (
         <div className="flex flex-col gap-8">
             <AdminComentariosLote />
+            <AdminComentariosOpenAI />
 
             <section>
                 <h2 className="mb-1 text-lg font-bold text-foreground">Denunciados ({dados.denunciados.length})</h2>

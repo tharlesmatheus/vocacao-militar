@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { rotuloBanca, rotuloModalidade } from "@/lib/rotulos";
+import SearchSelect from "./SearchSelect";
 
 export interface Filters {
     origem?: string; // "" = todas | "USUARIO" = minhas | "ACERVO" = acervo da plataforma
@@ -145,14 +146,12 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
         e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>
     ) {
         const { name, value, type } = e.target;
+        definir(name as keyof Filters, type === "checkbox" ? (e.target as HTMLInputElement).checked : value);
+    }
 
+    function definir(name: keyof Filters, valor: string | boolean) {
         setSelected((prev) => {
-            const next: Filters = {
-                ...prev,
-                [name]: type === "checkbox"
-                    ? (e.target as HTMLInputElement).checked
-                    : value,
-            };
+            const next: Filters = { ...prev, [name]: valor };
 
             // Filtros dependentes: trocar o "pai" limpa o "filho".
             if (name === "instituicao") next.cargo = "";
@@ -191,21 +190,17 @@ export function QuestionFilters({ onFiltrar, iniciais }: QuestionFiltersProps) {
                 <label htmlFor={`filtro-${name}`} className="block mb-2 text-sm font-medium text-muted-foreground">
                     {label}
                 </label>
-                <select
+                <SearchSelect
                     id={`filtro-${name}`}
                     name={name}
                     className={selectClass}
                     value={(selected[name] as string) ?? ""}
-                    onChange={handleChange}
+                    options={lista}
+                    onChange={(v) => definir(name, v)}
+                    placeholder={opts.placeholder ?? "Selecione"}
                     disabled={loading || opts.disabled}
-                >
-                    <option value="">{opts.placeholder ?? "Selecione"}</option>
-                    {lista.map((nome) => (
-                        <option key={nome} value={nome} title={nome}>
-                            {opts.rotulo ? opts.rotulo(nome) : nome}
-                        </option>
-                    ))}
-                </select>
+                    rotulo={opts.rotulo}
+                />
             </div>
         );
     }

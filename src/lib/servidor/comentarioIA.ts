@@ -36,20 +36,57 @@ export function usaFormatacao(q: QuestaoParaComentario): boolean {
     return !!q.enunciado_fmt || !!(q.alternativas_fmt && Object.keys(q.alternativas_fmt).length);
 }
 
-/** Nome gravado em questao_comentarios.modelo ("+fmt" = gerado vendo os destaques). */
-export function modeloDoComentario(q: QuestaoParaComentario): string {
-    return usaFormatacao(q) ? `${GEMINI_MODEL_COMENTARIO}+fmt` : GEMINI_MODEL_COMENTARIO;
+/**
+ * Versão do formato da explicação. "v2" = termina com "Portanto, a alternativa
+ * correta é a letra X." Comentários sem "+v2" no modelo são do formato antigo.
+ */
+const VERSAO_FORMATO = "v2";
+
+/** Nome gravado em questao_comentarios.modelo ("+fmt" = gerado vendo os destaques; sempre por último). */
+export function modeloDoComentario(q: QuestaoParaComentario, modelo: string = GEMINI_MODEL_COMENTARIO): string {
+    const base = `${modelo}+${VERSAO_FORMATO}`;
+    return usaFormatacao(q) ? `${base}+fmt` : base;
 }
 
-function montarPrompt(q: QuestaoParaComentario): string {
+function gabaritoPorExtenso(q: QuestaoParaComentario): { certoErrado: boolean; gabarito: string } {
+    const certoErrado = (q.modalidade ?? "").toLowerCase().includes("certo");
+    const g = (q.correta ?? "").trim().toUpperCase();
+    return { certoErrado, gabarito: certoErrado ? (g === "C" ? "CERTO" : g === "E" ? "ERRADO" : g) : g };
+}
+
+/**
+ * Garante a conclusão no fim ("Portanto, a alternativa correta é a letra X."),
+ * sempre com o gabarito oficial: remove a linha "Portanto..." que o modelo tenha
+ * escrito (pode vir com a letra errada) e coloca a nossa antes da "Dica:".
+ */
+export function fecharComConclusao(texto: string, q: QuestaoParaComentario): string {
+    const { certoErrado, gabarito } = gabaritoPorExtenso(q);
+    if (!gabarito) return texto;
+    const conclusao = certoErrado
+        ? `Portanto, o item está ${gabarito}.`
+        : `Portanto, a alternativa correta é a letra ${gabarito}.`;
+    const linhas = texto
+        .replace(/\s*Portanto,? (a alternativa correta|a resposta correta|o gabarito) é (a )?(letra )?[A-E]\.?/gi, "")
+        .split("\n")
+        .filter((l) => !/^\s*portanto\b/i.test(l));
+    const iDica = linhas.findIndex((l) => /^\s*dica\s*:/i.test(l));
+    const corpo = (iDica >= 0 ? linhas.slice(0, iDica) : linhas).join("\n").trimEnd();
+    const dica = iDica >= 0 ? linhas.slice(iDica).join("\n").trim() : "";
+    return [corpo, conclusao, dica].filter(Boolean).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** Texto em português sem nenhum acento (ex.: "combinacao", "propria") = resposta com defeito. */
+function semAcentuacao(texto: string): boolean {
+    return texto.length > 200 && !/[áàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÇ]/.test(texto);
+}
+
+/** Prompt da explicação (o mesmo para o Gemini da rota do aluno e para o lote da OpenAI). */
+export function montarPrompt(q: QuestaoParaComentario): string {
     const alternativas = Object.entries(q.alternativas ?? {})
         .map(([letra, texto]) => `${letra}) ${paraIA(q.alternativas_fmt?.[letra], texto)}`)
         .join("\n");
     const destaques = usaFormatacao(q);
-    const certoErrado = (q.modalidade ?? "").toLowerCase().includes("certo");
-    const gabarito = certoErrado
-        ? (q.correta === "C" ? "CERTO" : q.correta === "E" ? "ERRADO" : q.correta)
-        : q.correta;
+    const { certoErrado, gabarito } = gabaritoPorExtenso(q);
 
     return `Você é professor(a) de cursinho preparatório para concursos policiais.
 Escreva a explicação da questão abaixo: curta, objetiva e fácil de revisar.
@@ -57,14 +94,15 @@ Escreva a explicação da questão abaixo: curta, objetiva e fácil de revisar.
 REGRAS
 1. O gabarito informado é o oficial. Explique por que ele está correto. Não o contradiga.
 2. ${certoErrado
-            ? "Em 2 a 4 frases, diga por que o item está certo ou errado, citando o trecho decisivo do enunciado."
-            : "Primeiro, em 2 a 3 frases, por que a alternativa correta está certa. Depois, uma linha curta para cada alternativa errada, no formato \"A) motivo\" (no máximo 15 palavras cada)."}
-3. Entre 50 e 150 palavras no total. Nada de introdução, repetição do enunciado ou conclusão genérica.
+            ? `Em 2 a 4 frases, diga por que o item está certo ou errado, citando o trecho decisivo do enunciado. Termine com a linha "Portanto, o item está ${gabarito}."`
+            : `Primeiro, em 2 a 3 frases, por que a alternativa correta está certa. Depois, uma linha curta para cada alternativa errada, no formato "A) motivo" (no máximo 15 palavras cada). Termine com a linha "Portanto, a alternativa correta é a letra ${gabarito}."`}
+3. Entre 50 e 150 palavras no total. Nada de introdução, repetição do enunciado ou frases genéricas: a única conclusão é a linha "Portanto...".
 4. NÃO invente números de artigos, leis, súmulas, incisos, datas, autores ou precedentes. Só cite um dispositivo se tiver certeza absoluta; caso contrário, explique o conceito sem número.
 5. Não diga que é uma IA, não fale de "gabarito oficial", não use markdown (sem #, *, tabelas). Texto simples, parágrafos curtos.
-6. Se houver uma pegadinha típica de prova, termine com uma linha começando por "Dica:" (no máximo 20 palavras). Se não houver, não escreva dica.
-7. Se você acreditar que o gabarito está errado ou que a questão é ambígua, mesmo assim escreva de forma neutra e coloque "gabarito_coerente": false.${destaques ? `
-8. Na prova, alguns trechos aparecem destacados. Eles estão marcados como [sublinhado: ...], [negrito: ...] ou [itálico: ...]. Quando a questão falar em "termo destacado", "palavra sublinhada" etc., é desse trecho marcado que ela trata. No seu texto, cite o trecho entre aspas, sem os colchetes.` : ""}
+6. Se houver uma pegadinha típica de prova, depois da conclusão escreva uma linha começando por "Dica:" (no máximo 20 palavras). Se não houver, não escreva dica.
+7. Escreva em português do Brasil, com acentuação e pontuação corretas.
+8. Se você acreditar que o gabarito está errado ou que a questão é ambígua, mesmo assim escreva de forma neutra e coloque "gabarito_coerente": false.${destaques ? `
+9. Na prova, alguns trechos aparecem destacados. Eles estão marcados como [sublinhado: ...], [negrito: ...] ou [itálico: ...]. Quando a questão falar em "termo destacado", "palavra sublinhada" etc., é desse trecho marcado que ela trata. No seu texto, cite o trecho entre aspas, sem os colchetes.` : ""}
 
 Responda SOMENTE com JSON válido no formato:
 {"comentario": "texto do comentário", "gabarito_coerente": true}
@@ -80,6 +118,21 @@ ${paraIA(q.enunciado_fmt, q.enunciado)}
 
 ${certoErrado ? "" : `Alternativas:\n${alternativas}\n`}
 Gabarito: ${gabarito}`;
+}
+
+/**
+ * Valida e limpa o JSON {"comentario", "gabarito_coerente"} devolvido pela IA
+ * (qualquer provedor). Lança erro se o texto não servir.
+ */
+export function lerComentario(json: any, q: QuestaoParaComentario): { texto: string; revisar: boolean } {
+    const texto = String(json?.comentario ?? "")
+        .replace(/\r\n/g, "\n")
+        .replace(/[*#`]+/g, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    if (texto.length < 80 || texto.length > 4000) throw new Error(`tamanho inválido (${texto.length})`);
+    if (semAcentuacao(texto)) throw new Error("resposta sem acentuação");
+    return { texto: fecharComConclusao(texto, q), revisar: json?.gabarito_coerente === false };
 }
 
 type Tentativa = { raciocinio: string | null; prazoMs: number };
@@ -128,13 +181,7 @@ async function tentar(q: QuestaoParaComentario, apiKey: string, t: Tentativa): P
             json = JSON.parse(semCerca.slice(ini, fim + 1));
         }
 
-        const texto = String(json?.comentario ?? "")
-            .replace(/\r\n/g, "\n")
-            .replace(/[*#`]+/g, "")
-            .replace(/\n{3,}/g, "\n\n")
-            .trim();
-        if (texto.length < 80 || texto.length > 4000) throw new Error(`tamanho inválido (${texto.length})`);
-        return { texto, revisar: json?.gabarito_coerente === false };
+        return lerComentario(json, q);
     } finally {
         clearTimeout(timer);
     }
