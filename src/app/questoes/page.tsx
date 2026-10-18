@@ -36,9 +36,25 @@ export default function QuestoesPage() {
         [perfil, semMeta]
     );
 
+    /*
+     * Link vindo de fora (ex.: "Resolver questões" do Edital) abre com
+     * ?instituicao=&cargo=&disciplina=&assunto= e passa na frente da meta.
+     */
+    const [filtrosLink] = useState<Filters | null>(() => {
+        if (typeof window === "undefined") return null;
+        const p = new URLSearchParams(window.location.search);
+        const f: Record<string, string> = {};
+        for (const k of ["instituicao", "cargo", "disciplina", "assunto", "banca"]) {
+            const v = p.get(k)?.trim();
+            if (v) f[k] = v.slice(0, 200);
+        }
+        return Object.keys(f).length ? (f as Filters) : null;
+    });
+
     useEffect(() => {
-        if (!carregandoPerfil) setFilters(filtrosMeta);
-    }, [carregandoPerfil, filtrosMeta]);
+        if (carregandoPerfil) return;
+        setFilters(filtrosLink && !semMeta ? filtrosLink : filtrosMeta);
+    }, [carregandoPerfil, filtrosMeta, filtrosLink, semMeta]);
 
     // O aviso da meta acompanha os filtros de verdade (ex.: "Limpar filtros" sai da meta).
     const naMeta = !!perfil?.meta_instituicao

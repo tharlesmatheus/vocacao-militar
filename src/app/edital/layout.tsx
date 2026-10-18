@@ -12,9 +12,6 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
         supabase.auth.getUser().then(({ data }) => {
             if (!data.user) {
                 router.replace("/auth");
-            } else if (data.user.app_metadata?.is_admin !== true) {
-                // Edital está em reformulação: por enquanto só o administrador usa.
-                router.replace("/");
             } else {
                 setLoading(false);
             }

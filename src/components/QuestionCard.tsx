@@ -494,7 +494,7 @@ export function QuestionCard(props: QuestionCardProps) {
         <article
             onPointerDown={() => marcarDisciplina({ nome: materiaNome })}
             onKeyDown={() => marcarDisciplina({ nome: materiaNome })}
-            className="relative mx-auto mb-6 w-full rounded-xl border border-border border-l-4 border-l-primary bg-card p-5 shadow-sm sm:p-7">
+            className="relative mx-auto mb-6 w-full rounded-xl border border-border border-l-4 border-l-primary bg-card p-4 shadow-sm sm:p-7">
             {feedbackMsg && (
                 <div className="fixed left-1/2 top-6 z-[200] -translate-x-1/2 rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background shadow-lg" role="status">
                     {feedbackMsg}
@@ -520,7 +520,7 @@ export function QuestionCard(props: QuestionCardProps) {
             {cadernoMsg && <div className="mb-4 text-sm text-red-600 dark:text-red-400">{cadernoMsg}</div>}
 
             {/* pre-line: mantém os parágrafos do enunciado (fonte, texto-base, comando). */}
-            <h2 className="mb-5 whitespace-pre-line text-base font-medium leading-relaxed text-foreground sm:text-[17px]"><TextoFormatado texto={statement} fmt={statementFmt} /></h2>
+            <h2 className="mb-5 whitespace-pre-line break-words text-[15px] font-medium leading-relaxed text-foreground sm:text-[17px]"><TextoFormatado texto={statement} fmt={statementFmt} /></h2>
 
             <div className="mb-5 flex flex-col gap-2">
                 {options.map((opt, idx) => {
@@ -544,16 +544,16 @@ export function QuestionCard(props: QuestionCardProps) {
                         <div key={value} className={`group relative flex items-stretch rounded-lg border transition ${caixa}`}>
                             <button
                                 type="button"
-                                className={`flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-left text-[15px] leading-relaxed ${eliminada ? "text-muted-foreground line-through opacity-60" : "text-foreground"}`}
+                                className={`flex min-w-0 flex-1 items-start gap-2.5 px-3 py-2.5 text-left text-[15px] leading-relaxed sm:gap-3 sm:px-4 sm:py-3 ${eliminada ? "text-muted-foreground line-through opacity-60" : "text-foreground"}`}
                                 disabled={showResult}
                                 onClick={() => setSelected(value)}
                                 aria-pressed={isSelected}
                             >
                                 {/* shrink-0: a letra não encolhe com alternativa longa (texto alinhado) */}
-                                <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${letra}`}>
+                                <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold sm:h-7 sm:w-7 sm:text-sm ${letra}`}>
                                     {value}
                                 </span>
-                                <span className="min-w-0 pt-0.5"><TextoFormatado texto={opt.text} fmt={opt.fmt} /></span>
+                                <span className="min-w-0 flex-1 break-words pt-0.5"><TextoFormatado texto={opt.text} fmt={opt.fmt} /></span>
                             </button>
                             {!showResult && (
                                 <button
@@ -561,7 +561,7 @@ export function QuestionCard(props: QuestionCardProps) {
                                     onClick={() => toggleEliminada(idx)}
                                     title={eliminada ? "Restaurar alternativa" : "Eliminar alternativa"}
                                     aria-label={eliminada ? `Restaurar alternativa ${value}` : `Eliminar alternativa ${value}`}
-                                    className={`flex shrink-0 items-center px-3 text-muted-foreground transition hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 ${eliminada ? "sm:opacity-100 text-primary" : ""}`}
+                                    className={`flex shrink-0 items-center px-2 text-muted-foreground transition sm:px-3 hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 ${eliminada ? "sm:opacity-100 text-primary" : ""}`}
                                 >
                                     <Scissors className="h-4 w-4" aria-hidden />
                                 </button>

@@ -367,7 +367,8 @@ function QuestionsList({ filters = {} }: QuestionsListProps) {
 
     return (
         <div className="mt-2">
-            <div className="bg-card rounded-xl p-8 shadow-xl mb-8 transition-colors border border-border">
+            {/* Celular: sem a caixa externa (o próprio card da questão já tem borda), para o texto usar a largura toda. */}
+            <div className="mb-8 transition-colors sm:rounded-xl sm:border sm:border-border sm:bg-card sm:p-6 sm:shadow-xl lg:p-8">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border pb-3 mb-4">
                     <span className="text-sm font-medium text-muted-foreground tracking-tight">
                         Questões encontradas

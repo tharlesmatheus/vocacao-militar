@@ -67,7 +67,7 @@ const MENU: MenuGroup[] = [
             { name: "Simulados", href: "/simulados", icon: Timer },
             { name: "Cadernos", href: "/cadernos", icon: NotebookText },
             { name: "Flashcards", href: "/flashcards", icon: Layers3 },
-            { name: "Edital", href: "/edital", icon: BookOpen, adminOnly: true },
+            { name: "Edital", href: "/edital", icon: BookOpen },
             { name: "Resumos", href: "/resumos", icon: FileText },
             { name: "Revisão", href: "/revisao", icon: History },
             { name: "Cronograma", href: "/cronograma", icon: CalendarDays },
