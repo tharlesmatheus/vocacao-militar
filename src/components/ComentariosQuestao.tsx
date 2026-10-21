@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { linkCheckout } from "@/lib/plano";
 import { VALOR_PLANO, eventoPixelEIr } from "@/lib/pixel";
 import { supabase } from "../lib/supabaseClient";
+import { organizarComentario } from "@/lib/comentarioFormato";
 
 type Comentario = {
     id: string;
@@ -209,7 +210,11 @@ export function ComentariosQuestao({ questaoId }: { questaoId: string }) {
                                     </span>
                                     <span className="text-xs text-muted-foreground">{dataCurta(c.created_at)}</span>
                                 </div>
-                                <p className="whitespace-pre-line leading-relaxed text-foreground">{c.texto}</p>
+                                {oficial ? (
+                                    <ComentarioOficial texto={c.texto} />
+                                ) : (
+                                    <p className="whitespace-pre-line leading-relaxed text-foreground">{c.texto}</p>
+                                )}
                                 <div className="flex gap-3 mt-3 text-xs">
                                     {meu ? (
                                         <button type="button" onClick={() => excluir(c.id)} className="text-red-600 dark:text-red-400 hover:underline">
@@ -260,3 +265,45 @@ export function ComentariosQuestao({ questaoId }: { questaoId: string }) {
 }
 
 export default ComentariosQuestao;
+
+
+/*
+ * Comentário da plataforma em blocos: explicação, uma linha por alternativa,
+ * conclusão e os fechos (Ponto-chave, Pegadinha, Dica) destacados.
+ * organizarComentario também arruma os comentários antigos que vieram num parágrafo só.
+ */
+const ROTULO = /^(Ponto[- ]chave|Pegadinha|Dica|Como a banca mudaria)\s*:\s*/i;
+
+function ComentarioOficial({ texto }: { texto: string }) {
+    const blocos = organizarComentario(texto).split(/\n{2,}/);
+    return (
+        <div className="flex flex-col gap-3 leading-relaxed text-foreground">
+            {blocos.map((bloco, i) => {
+                const rotulo = bloco.match(ROTULO);
+                if (rotulo) {
+                    const destaque = /pegadinha/i.test(rotulo[1]) ? "border-amber-500/60" : "border-primary/60";
+                    return (
+                        <p key={i} className={`border-l-2 pl-3 ${destaque}`}>
+                            <strong>{rotulo[1]}:</strong> {bloco.slice(rotulo[0].length)}
+                        </p>
+                    );
+                }
+                if (/^Portanto,/.test(bloco)) return <p key={i} className="font-semibold">{bloco}</p>;
+                const linhas = bloco.split("\n");
+                if (linhas.every((l) => /^[A-E]\) /.test(l))) {
+                    return (
+                        <ul key={i} className="flex flex-col gap-1.5">
+                            {linhas.map((l, j) => (
+                                <li key={j}>
+                                    <strong>{l.slice(0, 2)}</strong>
+                                    {l.slice(2)}
+                                </li>
+                            ))}
+                        </ul>
+                    );
+                }
+                return <p key={i} className="whitespace-pre-line">{bloco}</p>;
+            })}
+        </div>
+    );
+}

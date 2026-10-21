@@ -5,6 +5,7 @@
  */
 
 import { paraIA } from "@/lib/textoFormatado";
+import { organizarComentario } from "@/lib/comentarioFormato";
 
 export const GEMINI_MODEL_COMENTARIO = process.env.GEMINI_MODEL_COMENTARIO || "gemini-3-flash-preview";
 // Nível de raciocínio do Gemini 3 (minimal | low | medium | high). Vazio = padrão do modelo.
@@ -37,10 +38,11 @@ export function usaFormatacao(q: QuestaoParaComentario): boolean {
 }
 
 /**
- * Versão do formato da explicação. "v2" = termina com "Portanto, a alternativa
- * correta é a letra X." Comentários sem "+v2" no modelo são do formato antigo.
+ * Versão do formato da explicação. "v3" = explicação aprofundada: alternativa por
+ * alternativa, "Portanto, a alternativa correta é a letra X.", "Ponto-chave:" e
+ * "Pegadinha:". Igual ao VM3 (comentarios_ia.py). Sem "+v3" no modelo = formato antigo.
  */
-const VERSAO_FORMATO = "v2";
+const VERSAO_FORMATO = "v3";
 
 /** Nome gravado em questao_comentarios.modelo ("+fmt" = gerado vendo os destaques; sempre por último). */
 export function modeloDoComentario(q: QuestaoParaComentario, modelo: string = GEMINI_MODEL_COMENTARIO): string {
@@ -69,7 +71,8 @@ export function fecharComConclusao(texto: string, q: QuestaoParaComentario): str
         .replace(/\s*Portanto,? (a alternativa correta|a resposta correta|o gabarito) é (a )?(letra )?[A-E]\.?/gi, "")
         .split("\n")
         .filter((l) => !/^\s*portanto\b/i.test(l));
-    const iDica = linhas.findIndex((l) => /^\s*dica\s*:/i.test(l));
+    // Fecho: a conclusão entra antes de "Ponto-chave:", "Pegadinha:" ou "Dica:" (o que vier primeiro).
+    const iDica = linhas.findIndex((l) => /^\s*(dica|ponto-chave|ponto chave|pegadinha)\s*:/i.test(l));
     const corpo = (iDica >= 0 ? linhas.slice(0, iDica) : linhas).join("\n").trimEnd();
     const dica = iDica >= 0 ? linhas.slice(iDica).join("\n").trim() : "";
     return [corpo, conclusao, dica].filter(Boolean).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -88,21 +91,33 @@ export function montarPrompt(q: QuestaoParaComentario): string {
     const destaques = usaFormatacao(q);
     const { certoErrado, gabarito } = gabaritoPorExtenso(q);
 
+    const regra2 = certoErrado
+        ? `Explique em 3 a 5 frases por que o item está ${gabarito}: a regra ou o conceito cobrado e o trecho decisivo do enunciado. Depois, numa linha começando por "Como a banca mudaria:", mostre em uma frase como o mesmo ponto apareceria com a resposta oposta. Em seguida escreva a linha "Portanto, o item está ${gabarito}."`
+        : `Primeiro, em 3 a 5 frases, explique por que a alternativa correta está certa: a regra ou o conceito cobrado e o raciocínio para chegar nela. Depois, uma linha para CADA alternativa, na ordem, no formato "A) ..." (até 35 palavras): na correta, confirme em poucas palavras; em cada errada, diga exatamente o que a torna errada (a palavra, o prazo, o conceito trocado) e, quando couber, como ela ficaria certa. Em seguida escreva a linha "Portanto, a alternativa correta é a letra ${gabarito}."`;
+    const regra10 = destaques
+        ? `
+10. Na prova, alguns trechos aparecem destacados. Eles estão marcados como [sublinhado: ...], [negrito: ...] ou [itálico: ...]. Quando a questão falar em "termo destacado", "palavra sublinhada" etc., é desse trecho marcado que ela trata. No seu texto, cite o trecho entre aspas, sem os colchetes.`
+        : "";
+
     return `Você é professor(a) de cursinho preparatório para concursos policiais.
-Escreva a explicação da questão abaixo: curta, objetiva e fácil de revisar.
+Escreva a explicação completa da questão abaixo, para um aluno que estuda por questões e quer entender o assunto
+e a forma como a banca cobra, não só a resposta.
 
 REGRAS
 1. O gabarito informado é o oficial. Explique por que ele está correto. Não o contradiga.
-2. ${certoErrado
-            ? `Em 2 a 4 frases, diga por que o item está certo ou errado, citando o trecho decisivo do enunciado. Termine com a linha "Portanto, o item está ${gabarito}."`
-            : `Primeiro, em 2 a 3 frases, por que a alternativa correta está certa. Depois, uma linha curta para cada alternativa errada, no formato "A) motivo" (no máximo 15 palavras cada). Termine com a linha "Portanto, a alternativa correta é a letra ${gabarito}."`}
-3. Entre 50 e 150 palavras no total. Nada de introdução, repetição do enunciado ou frases genéricas: a única conclusão é a linha "Portanto...".
-4. NÃO invente números de artigos, leis, súmulas, incisos, datas, autores ou precedentes. Só cite um dispositivo se tiver certeza absoluta; caso contrário, explique o conceito sem número.
-5. Não diga que é uma IA, não fale de "gabarito oficial", não use markdown (sem #, *, tabelas). Texto simples, parágrafos curtos.
-6. Se houver uma pegadinha típica de prova, depois da conclusão escreva uma linha começando por "Dica:" (no máximo 20 palavras). Se não houver, não escreva dica.
-7. Escreva em português do Brasil, com acentuação e pontuação corretas.
-8. Se você acreditar que o gabarito está errado ou que a questão é ambígua, mesmo assim escreva de forma neutra e coloque "gabarito_coerente": false.${destaques ? `
-9. Na prova, alguns trechos aparecem destacados. Eles estão marcados como [sublinhado: ...], [negrito: ...] ou [itálico: ...]. Quando a questão falar em "termo destacado", "palavra sublinhada" etc., é desse trecho marcado que ela trata. No seu texto, cite o trecho entre aspas, sem os colchetes.` : ""}
+2. ${regra2}
+3. Depois da linha "Portanto...", escreva uma linha começando por "Ponto-chave:" com a regra que o aluno deve
+   memorizar deste assunto (até 30 palavras).
+4. Se houver uma pegadinha típica (troca de palavra, prazo, conceito parecido, exceção), escreva também uma linha
+   começando por "Pegadinha:" (até 30 palavras). Se não houver, não escreva essa linha.
+5. Entre 120 e 320 palavras no total. Nada de introdução, repetição do enunciado ou frases genéricas.
+6. NÃO invente números de artigos, leis, súmulas, incisos, datas, autores ou precedentes. Só cite um dispositivo se
+   tiver certeza absoluta; caso contrário, explique o conceito sem número.
+7. Não diga que é uma IA, não fale de "gabarito oficial", não use markdown (sem #, *, tabelas). Texto simples,
+   parágrafos curtos, cada alternativa na própria linha.
+8. Escreva em português do Brasil, com acentuação e pontuação corretas.
+9. Se você acreditar que o gabarito está errado ou que a questão é ambígua, mesmo assim escreva de forma neutra e
+   coloque "gabarito_coerente": false.${regra10}
 
 Responda SOMENTE com JSON válido no formato:
 {"comentario": "texto do comentário", "gabarito_coerente": true}
@@ -132,7 +147,8 @@ export function lerComentario(json: any, q: QuestaoParaComentario): { texto: str
         .trim();
     if (texto.length < 80 || texto.length > 4000) throw new Error(`tamanho inválido (${texto.length})`);
     if (semAcentuacao(texto)) throw new Error("resposta sem acentuação");
-    return { texto: fecharComConclusao(texto, q), revisar: json?.gabarito_coerente === false };
+    // Organiza em blocos (alternativa por linha, fechos em parágrafo) antes de fixar a conclusão.
+    return { texto: fecharComConclusao(organizarComentario(texto), q), revisar: json?.gabarito_coerente === false };
 }
 
 type Tentativa = { raciocinio: string | null; prazoMs: number };
