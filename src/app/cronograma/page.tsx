@@ -435,8 +435,6 @@ export default function CronogramaPage() {
                 const [
                     disciplinasReq,
                     assuntosReq,
-                    legacyMateriasReq,
-                    legacyAssuntosReq,
                     cronogramaReq,
                 ] = await Promise.all([
                     supabase
@@ -454,16 +452,6 @@ export default function CronogramaPage() {
                         .order("nome"),
 
                     supabase
-                        .from("materias")
-                        .select("id,nome")
-                        .eq("user_id", uid),
-
-                    supabase
-                        .from("assuntos")
-                        .select("id,materia_id,nome")
-                        .eq("user_id", uid),
-
-                    supabase
                         .from("cronograma")
                         .select("id,blocos")
                         .eq("user_id", uid)
@@ -475,8 +463,6 @@ export default function CronogramaPage() {
                 const firstError =
                     disciplinasReq.error ||
                     assuntosReq.error ||
-                    legacyMateriasReq.error ||
-                    legacyAssuntosReq.error ||
                     cronogramaReq.error;
 
                 if (firstError) throw firstError;
@@ -487,11 +473,11 @@ export default function CronogramaPage() {
                 const listaAssuntos =
                     (assuntosReq.data ?? []) as Assunto[];
 
-                const listaLegacyMaterias =
-                    (legacyMateriasReq.data ?? []) as LegacyMateria[];
-
-                const listaLegacyAssuntos =
-                    (legacyAssuntosReq.data ?? []) as LegacyAssunto[];
+                // O edital antigo (materias/assuntos) foi removido do banco: itens
+                // antigos do cronograma que só apontavam para ele mantêm o título
+                // gravado (legacy_title) ou aparecem como "Disciplina não vinculada".
+                const listaLegacyMaterias: LegacyMateria[] = [];
+                const listaLegacyAssuntos: LegacyAssunto[] = [];
 
                 setUserId(uid);
                 setDisciplinas(listaDisciplinas);

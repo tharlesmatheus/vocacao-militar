@@ -456,17 +456,12 @@ export default function EstatisticasPage() {
                     );
                 }
 
-                const [legacyMateriasReq, legacyAssuntosReq] =
-                    await Promise.all([
-                        supabase
-                            .from("materias")
-                            .select("id,nome")
-                            .eq("user_id", userId),
-                        supabase
-                            .from("assuntos")
-                            .select("id,nome,materia_id")
-                            .eq("user_id", userId),
-                    ]);
+                // O edital antigo (materias/assuntos) foi removido do banco: sessões
+                // antigas que só tinham materia_id/assunto_id (ex.: Pomodoro) contam
+                // no tempo total, mas ficam sem disciplina.
+                type LinhaLegada = { id: string; nome: string | null; materia_id?: string | null };
+                const legacyMateriasReq: { data: LinhaLegada[] } = { data: [] };
+                const legacyAssuntosReq: { data: LinhaLegada[] } = { data: [] };
 
                 const legacyMateriaToCanonical: Record<string, string> = {};
                 const legacyMateriaName: Record<string, string> = {};

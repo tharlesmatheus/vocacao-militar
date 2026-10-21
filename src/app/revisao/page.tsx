@@ -34,17 +34,6 @@ type CatalogAssunto = {
     disciplina_id: string;
 };
 
-type LegacyMateria = {
-    id: string;
-    nome: string;
-};
-
-type LegacyAssunto = {
-    id: string;
-    nome: string;
-    materia_id: string | null;
-};
-
 type MethodSettings = Record<ReviewMethod, number[]>;
 
 type ReviewProgress = {
@@ -122,10 +111,6 @@ type BaseReviewItem = {
     assuntoId: string | null;
     disciplinaNome: string;
     assuntoNome: string;
-
-    // Somente para compatibilidade do review_progress antigo.
-    legacyMateriaId: string | null;
-    legacyAssuntoId: string | null;
 
     createdAt: string;
     progress: ReviewProgress;
@@ -372,8 +357,6 @@ export default function RevisaoPage() {
         sourceItems: Array<{
             method: ReviewMethod;
             itemId: string;
-            legacyMateriaId: string | null;
-            legacyAssuntoId: string | null;
             createdAt: string;
         }>,
         currentSettings: MethodSettings
@@ -405,11 +388,9 @@ export default function RevisaoPage() {
 
                 /*
                  * A classificação canônica não é duplicada em review_progress.
-                 * Esses campos antigos só são preservados quando o item-fonte
-                 * ainda possui vínculo legado.
+                 * materia_id/assunto_id (edital antigo, tabelas removidas) não
+                 * são mais gravados.
                  */
-                materia_id: item.legacyMateriaId,
-                assunto_id: item.legacyAssuntoId,
 
                 etapa: 1,
                 review_count: 0,
@@ -449,8 +430,6 @@ export default function RevisaoPage() {
             const [
                 disciplinasReq,
                 assuntosReq,
-                legacyMateriasReq,
-                legacyAssuntosReq,
                 flashcardsReq,
                 cadernoReq,
                 resumosReq,
@@ -468,17 +447,6 @@ export default function RevisaoPage() {
                     .eq("user_id", uid)
                     .eq("ativo", true)
                     .order("nome"),
-
-                // Apenas fallback para registros antigos.
-                supabase
-                    .from("materias")
-                    .select("id,nome")
-                    .eq("user_id", uid),
-
-                supabase
-                    .from("assuntos")
-                    .select("id,nome,materia_id")
-                    .eq("user_id", uid),
 
                 supabase
                     .from("flashcards")
@@ -515,8 +483,6 @@ export default function RevisaoPage() {
 
             if (disciplinasReq.error) throw disciplinasReq.error;
             if (assuntosReq.error) throw assuntosReq.error;
-            if (legacyMateriasReq.error) throw legacyMateriasReq.error;
-            if (legacyAssuntosReq.error) throw legacyAssuntosReq.error;
             if (flashcardsReq.error) throw flashcardsReq.error;
             if (cadernoReq.error) throw cadernoReq.error;
             if (resumosReq.error) throw resumosReq.error;
@@ -526,12 +492,6 @@ export default function RevisaoPage() {
 
             const catalogAssuntos =
                 (assuntosReq.data ?? []) as CatalogAssunto[];
-
-            const legacyMaterias =
-                (legacyMateriasReq.data ?? []) as LegacyMateria[];
-
-            const legacyAssuntos =
-                (legacyAssuntosReq.data ?? []) as LegacyAssunto[];
 
             const disciplinaNomeMap: Record<string, string> = {};
             const assuntoNomeMap: Record<string, string> = {};
@@ -559,59 +519,20 @@ export default function RevisaoPage() {
                 );
             }
 
-            const legacyMateriaToCanonical: Record<string, string> = {};
-            const legacyAssuntoToCanonical: Record<string, string> = {};
-
-            for (const materia of legacyMaterias) {
-                const canonicalId =
-                    canonicalDiscByNorm.get(
-                        normalizeCatalogName(materia.nome)
-                    ) ?? "";
-
-                if (canonicalId) {
-                    legacyMateriaToCanonical[materia.id] =
-                        canonicalId;
-                }
-            }
-
-            for (const assunto of legacyAssuntos) {
-                const canonicalDisciplinaId =
-                    assunto.materia_id
-                        ? legacyMateriaToCanonical[
-                        assunto.materia_id
-                        ]
-                        : "";
-
-                if (!canonicalDisciplinaId) continue;
-
-                const canonicalAssuntoId =
-                    canonicalAssByKey.get(
-                        `${canonicalDisciplinaId}:${normalizeCatalogName(
-                            assunto.nome
-                        )}`
-                    ) ?? "";
-
-                if (canonicalAssuntoId) {
-                    legacyAssuntoToCanonical[assunto.id] =
-                        canonicalAssuntoId;
-                }
-            }
-
+            /*
+             * Só o catálogo canônico (e, para questões, o texto
+             * disciplina/assunto) classifica. Itens que tinham apenas
+             * materia_id/assunto_id (edital antigo, tabelas removidas)
+             * ficam em "Sem disciplina"/"Sem assunto".
+             */
             function resolveCanonical(
                 canonicalDisciplinaId?: string | null,
                 canonicalAssuntoId?: string | null,
-                legacyMateriaId?: string | null,
-                legacyAssuntoId?: string | null,
                 disciplinaTexto?: string | null,
                 assuntoTexto?: string | null
             ) {
                 const disciplinaId =
                     canonicalDisciplinaId ||
-                    (legacyMateriaId
-                        ? legacyMateriaToCanonical[
-                        legacyMateriaId
-                        ]
-                        : "") ||
                     (disciplinaTexto
                         ? canonicalDiscByNorm.get(
                             normalizeCatalogName(
@@ -623,11 +544,6 @@ export default function RevisaoPage() {
 
                 let assuntoId =
                     canonicalAssuntoId ||
-                    (legacyAssuntoId
-                        ? legacyAssuntoToCanonical[
-                        legacyAssuntoId
-                        ]
-                        : "") ||
                     null;
 
                 if (
@@ -713,8 +629,6 @@ export default function RevisaoPage() {
                 itemId: string;
                 disciplinaId: string | null;
                 assuntoId: string | null;
-                legacyMateriaId: string | null;
-                legacyAssuntoId: string | null;
                 createdAt: string;
                 raw:
                 | FlashcardRow
@@ -726,9 +640,7 @@ export default function RevisaoPage() {
                 (flashcardsReq.data ?? []) as FlashcardRow[]) {
                 const pair = resolveCanonical(
                     card.disciplina_catalogo_id,
-                    card.assunto_catalogo_id,
-                    card.materia_id ?? null,
-                    card.assunto_id ?? null
+                    card.assunto_catalogo_id
                 );
 
                 source.push({
@@ -736,10 +648,6 @@ export default function RevisaoPage() {
                     itemId: card.id,
                     disciplinaId: pair.disciplinaId,
                     assuntoId: pair.assuntoId,
-                    legacyMateriaId:
-                        card.materia_id ?? null,
-                    legacyAssuntoId:
-                        card.assunto_id ?? null,
                     createdAt:
                         card.created_at ??
                         new Date().toISOString(),
@@ -751,8 +659,6 @@ export default function RevisaoPage() {
                 const pair = resolveCanonical(
                     questao.questao_disciplina_id,
                     questao.questao_assunto_id,
-                    questao.materia_id ?? null,
-                    questao.assunto_id ?? null,
                     questao.disciplina ?? null,
                     questao.assunto ?? null
                 );
@@ -762,10 +668,6 @@ export default function RevisaoPage() {
                     itemId: questao.id,
                     disciplinaId: pair.disciplinaId,
                     assuntoId: pair.assuntoId,
-                    legacyMateriaId:
-                        questao.materia_id ?? null,
-                    legacyAssuntoId:
-                        questao.assunto_id ?? null,
                     createdAt:
                         cadernoCreatedAt.get(
                             questao.id
@@ -780,9 +682,7 @@ export default function RevisaoPage() {
                 (resumosReq.data ?? []) as ResumoRow[]) {
                 const pair = resolveCanonical(
                     resumo.disciplina_catalogo_id,
-                    resumo.assunto_catalogo_id,
-                    resumo.materia_id ?? null,
-                    resumo.assunto_id ?? null
+                    resumo.assunto_catalogo_id
                 );
 
                 source.push({
@@ -790,10 +690,6 @@ export default function RevisaoPage() {
                     itemId: resumo.id,
                     disciplinaId: pair.disciplinaId,
                     assuntoId: pair.assuntoId,
-                    legacyMateriaId:
-                        resumo.materia_id ?? null,
-                    legacyAssuntoId:
-                        resumo.assunto_id ?? null,
                     createdAt:
                         resumo.created_at ??
                         new Date().toISOString(),
@@ -815,10 +711,6 @@ export default function RevisaoPage() {
                 sourceUnique.map((item) => ({
                     method: item.method,
                     itemId: item.itemId,
-                    legacyMateriaId:
-                        item.legacyMateriaId,
-                    legacyAssuntoId:
-                        item.legacyAssuntoId,
                     createdAt: item.createdAt,
                 })),
                 currentSettings
@@ -878,10 +770,6 @@ export default function RevisaoPage() {
                     assuntoId: item.assuntoId,
                     disciplinaNome,
                     assuntoNome,
-                    legacyMateriaId:
-                        item.legacyMateriaId,
-                    legacyAssuntoId:
-                        item.legacyAssuntoId,
                     createdAt: item.createdAt,
                     progress,
                 };

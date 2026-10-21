@@ -47,17 +47,6 @@ type Assunto = {
     ativo: boolean;
 };
 
-type LegacyMateria = {
-    id: string;
-    nome: string;
-};
-
-type LegacyAssunto = {
-    id: string;
-    materia_id: string | null;
-    nome: string;
-};
-
 type ViewLevel = "disciplinas" | "assuntos" | "resumos";
 type ViewMode = "grid" | "list";
 type ModalMode = "create" | "edit";
@@ -65,14 +54,6 @@ type ModalMode = "create" | "edit";
 /* ============================================================================
  * Helpers
  * ========================================================================== */
-
-function normalizar(valor: string) {
-    return valor
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLocaleLowerCase("pt-BR")
-        .replace(/[^a-z0-9]+/g, "");
-}
 
 function mensagemErro(error: unknown) {
     if (error instanceof Error) return error.message;
@@ -103,10 +84,6 @@ export default function ResumosPage() {
     const [resumos, setResumos] = useState<Resumo[]>([]);
     const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
     const [assuntos, setAssuntos] = useState<Assunto[]>([]);
-
-    // Compatibilidade temporária com resumos antigos.
-    const [legacyMaterias, setLegacyMaterias] = useState<LegacyMateria[]>([]);
-    const [legacyAssuntos, setLegacyAssuntos] = useState<LegacyAssunto[]>([]);
 
     const [viewLevel, setViewLevel] = useState<ViewLevel>("disciplinas");
     const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -150,8 +127,6 @@ export default function ResumosPage() {
                 resumosReq,
                 disciplinasReq,
                 assuntosReq,
-                legacyMateriasReq,
-                legacyAssuntosReq,
             ] = await Promise.all([
                 supabase
                     .from("resumos")
@@ -182,32 +157,18 @@ export default function ResumosPage() {
                     .eq("user_id", uid)
                     .order("ativo", { ascending: false })
                     .order("nome"),
-
-                supabase
-                    .from("materias")
-                    .select("id,nome")
-                    .eq("user_id", uid),
-
-                supabase
-                    .from("assuntos")
-                    .select("id,materia_id,nome")
-                    .eq("user_id", uid),
             ]);
 
             const firstError =
                 resumosReq.error ||
                 disciplinasReq.error ||
-                assuntosReq.error ||
-                legacyMateriasReq.error ||
-                legacyAssuntosReq.error;
+                assuntosReq.error;
 
             if (firstError) throw firstError;
 
             setResumos((resumosReq.data ?? []) as Resumo[]);
             setDisciplinas((disciplinasReq.data ?? []) as Disciplina[]);
             setAssuntos((assuntosReq.data ?? []) as Assunto[]);
-            setLegacyMaterias((legacyMateriasReq.data ?? []) as LegacyMateria[]);
-            setLegacyAssuntos((legacyAssuntosReq.data ?? []) as LegacyAssunto[]);
         } catch (e) {
             setErro(
                 "Não foi possível carregar agora. Atualize a página; se continuar, fale com o suporte."
@@ -222,7 +183,10 @@ export default function ResumosPage() {
     }, []);
 
     /* ------------------------------------------------------------------------
-     * Mapas / fallback legado
+     * Mapas
+     * Só o catálogo canônico classifica. Resumos que tinham apenas
+     * materia_id/assunto_id (edital antigo, tabelas removidas) caem em
+     * "Sem disciplina"/"Sem assunto".
      * ---------------------------------------------------------------------- */
 
     const disciplinaMap = useMemo(() => {
@@ -237,24 +201,6 @@ export default function ResumosPage() {
         return map;
     }, [assuntos]);
 
-    const disciplinaPorNome = useMemo(() => {
-        const map = new Map<string, Disciplina>();
-        disciplinas.forEach((item) => map.set(normalizar(item.nome), item));
-        return map;
-    }, [disciplinas]);
-
-    const legacyMateriaMap = useMemo(() => {
-        const map = new Map<string, LegacyMateria>();
-        legacyMaterias.forEach((item) => map.set(item.id, item));
-        return map;
-    }, [legacyMaterias]);
-
-    const legacyAssuntoMap = useMemo(() => {
-        const map = new Map<string, LegacyAssunto>();
-        legacyAssuntos.forEach((item) => map.set(item.id, item));
-        return map;
-    }, [legacyAssuntos]);
-
     function disciplinaEfetivaId(resumo: Resumo) {
         if (
             resumo.disciplina_catalogo_id &&
@@ -263,20 +209,10 @@ export default function ResumosPage() {
             return resumo.disciplina_catalogo_id;
         }
 
-        if (resumo.materia_id) {
-            const legacy = legacyMateriaMap.get(resumo.materia_id);
-
-            if (legacy) {
-                return disciplinaPorNome.get(normalizar(legacy.nome))?.id ?? null;
-            }
-        }
-
         return null;
     }
 
     function assuntoEfetivoId(resumo: Resumo) {
-        const disciplinaId = disciplinaEfetivaId(resumo);
-
         if (
             resumo.assunto_catalogo_id &&
             assuntoMap.has(resumo.assunto_catalogo_id)
@@ -284,18 +220,7 @@ export default function ResumosPage() {
             return resumo.assunto_catalogo_id;
         }
 
-        if (!disciplinaId || !resumo.assunto_id) return null;
-
-        const legacy = legacyAssuntoMap.get(resumo.assunto_id);
-        if (!legacy) return null;
-
-        return (
-            assuntos.find(
-                (item) =>
-                    item.disciplina_id === disciplinaId &&
-                    normalizar(item.nome) === normalizar(legacy.nome)
-            )?.id ?? null
-        );
+        return null;
     }
 
     function nomeDisciplina(id: string | null) {
@@ -348,9 +273,6 @@ export default function ResumosPage() {
         resumos,
         disciplinaMap,
         assuntoMap,
-        legacyMateriaMap,
-        legacyAssuntoMap,
-        disciplinaPorNome,
         pendentes,
     ]);
 
@@ -396,9 +318,6 @@ export default function ResumosPage() {
         disciplinaSel,
         disciplinaMap,
         assuntoMap,
-        legacyMateriaMap,
-        legacyAssuntoMap,
-        disciplinaPorNome,
         pendentes,
     ]);
 
@@ -418,9 +337,6 @@ export default function ResumosPage() {
         assuntoSel,
         disciplinaMap,
         assuntoMap,
-        legacyMateriaMap,
-        legacyAssuntoMap,
-        disciplinaPorNome,
     ]);
 
     const assuntosDoFormulario = useMemo(

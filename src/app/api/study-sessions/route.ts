@@ -1,13 +1,11 @@
 // =====================================================================================
 // ARQUIVO: src/app/api/study-sessions/route.ts
 //
-// Compatível com:
-// - fluxo legado: materia_id / assunto_id
-// - fluxo canônico: disciplina_catalogo_id / assunto_catalogo_id
+// Classificação: disciplina_catalogo_id / assunto_catalogo_id (catálogo do usuário).
 //
-// A página nova de Tempo de Estudo usa o catálogo canônico.
-// A landing antiga ainda pode enviar materia_id/assunto_id; a API converte
-// esses IDs para o catálogo canônico sempre que encontra correspondência.
+// materia_id/assunto_id eram do edital antigo (tabelas materias/assuntos,
+// removidas do banco). Se ainda vierem no payload são ignorados: a sessão
+// é gravada sem classificação, e as colunas legadas não são mais escritas.
 // =====================================================================================
 
 import { NextResponse } from "next/server";
@@ -22,7 +20,7 @@ type StartPayload = {
     disciplina_catalogo_id?: string | null;
     assunto_catalogo_id?: string | null;
 
-    // Compatibilidade com telas ainda não migradas.
+    // Edital antigo: aceitos no payload, mas ignorados.
     materia_id?: string | null;
     assunto_id?: string | null;
 };
@@ -40,7 +38,7 @@ type ManualPayload = {
     disciplina_catalogo_id?: string | null;
     assunto_catalogo_id?: string | null;
 
-    // Compatibilidade com telas ainda não migradas.
+    // Edital antigo: aceitos no payload, mas ignorados.
     materia_id?: string | null;
     assunto_id?: string | null;
 
@@ -79,14 +77,6 @@ async function getUserIdFromAccessToken(
     if (error) return null;
 
     return data?.user?.id ?? null;
-}
-
-function normalizeCatalogName(value: string | null | undefined) {
-    return String(value ?? "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLocaleLowerCase("pt-BR")
-        .replace(/[^a-z0-9]+/g, "");
 }
 
 async function validateCanonicalPair(
@@ -149,89 +139,6 @@ async function validateCanonicalPair(
     };
 }
 
-async function resolveCanonicalFromLegacy(
-    userId: string,
-    materiaId: string | null,
-    assuntoId: string | null
-) {
-    if (!materiaId) {
-        return {
-            disciplina_catalogo_id: null,
-            assunto_catalogo_id: null,
-        };
-    }
-
-    const { data: materia, error: materiaError } =
-        await supabaseAdmin
-            .from("materias")
-            .select("id,nome")
-            .eq("id", materiaId)
-            .eq("user_id", userId)
-            .maybeSingle();
-
-    if (materiaError || !materia) {
-        return {
-            disciplina_catalogo_id: null,
-            assunto_catalogo_id: null,
-        };
-    }
-
-    const disciplinaKey = normalizeCatalogName(materia.nome);
-
-    const { data: disciplina } = await supabaseAdmin
-        .from("questao_disciplinas")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("nome_normalizado", disciplinaKey)
-        .maybeSingle();
-
-    if (!disciplina?.id) {
-        return {
-            disciplina_catalogo_id: null,
-            assunto_catalogo_id: null,
-        };
-    }
-
-    if (!assuntoId) {
-        return {
-            disciplina_catalogo_id: disciplina.id,
-            assunto_catalogo_id: null,
-        };
-    }
-
-    const { data: assuntoLegado } = await supabaseAdmin
-        .from("assuntos")
-        .select("id,nome,materia_id")
-        .eq("id", assuntoId)
-        .eq("user_id", userId)
-        .maybeSingle();
-
-    if (
-        !assuntoLegado?.id ||
-        String(assuntoLegado.materia_id ?? "") !== String(materiaId)
-    ) {
-        return {
-            disciplina_catalogo_id: disciplina.id,
-            assunto_catalogo_id: null,
-        };
-    }
-
-    const assuntoKey = normalizeCatalogName(assuntoLegado.nome);
-
-    const { data: assuntoCanonico } = await supabaseAdmin
-        .from("questao_assuntos")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("disciplina_id", disciplina.id)
-        .eq("nome_normalizado", assuntoKey)
-        .maybeSingle();
-
-    return {
-        disciplina_catalogo_id: disciplina.id,
-        assunto_catalogo_id: assuntoCanonico?.id ?? null,
-    };
-}
-
 async function resolveClassification(
     userId: string,
     body: Partial<StartPayload | ManualPayload>
@@ -242,21 +149,12 @@ async function resolveClassification(
     const assuntoCatalogoId =
         body.assunto_catalogo_id ?? null;
 
-    const materiaId = body.materia_id ?? null;
-    const assuntoId = body.assunto_id ?? null;
-
-    if (disciplinaCatalogoId || assuntoCatalogoId) {
-        return validateCanonicalPair(
-            userId,
-            disciplinaCatalogoId,
-            assuntoCatalogoId
-        );
-    }
-
-    return resolveCanonicalFromLegacy(
+    // Sem ids canônicos => sessão sem classificação (validateCanonicalPair
+    // devolve nulls). Ids legados não são mais convertidos.
+    return validateCanonicalPair(
         userId,
-        materiaId,
-        assuntoId
+        disciplinaCatalogoId,
+        assuntoCatalogoId
     );
 }
 
@@ -293,9 +191,6 @@ export async function POST(req: Request) {
 
         if (action === "start") {
             const startBody = body as Partial<StartPayload>;
-
-            const materiaId = startBody.materia_id ?? null;
-            const assuntoId = startBody.assunto_id ?? null;
 
             const canonical =
                 await resolveClassification(userId, startBody);
@@ -355,10 +250,6 @@ export async function POST(req: Request) {
                         canonical.disciplina_catalogo_id,
                     assunto_catalogo_id:
                         canonical.assunto_catalogo_id,
-
-                    // Legado opcional
-                    materia_id: materiaId,
-                    assunto_id: assuntoId,
 
                     mode: "cronometro",
                     origem: "cronometro",
@@ -517,11 +408,6 @@ export async function POST(req: Request) {
                             canonical.disciplina_catalogo_id,
                         assunto_catalogo_id:
                             canonical.assunto_catalogo_id,
-
-                        materia_id:
-                            manualBody.materia_id ?? null,
-                        assunto_id:
-                            manualBody.assunto_id ?? null,
 
                         mode: "manual",
                         origem: "lancado",

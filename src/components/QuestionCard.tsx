@@ -1,7 +1,7 @@
 "use client";
 import { TextoFormatado } from "@/components/TextoFormatado";
 import { marcarDisciplina } from "@/lib/tempoAtivo";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { ComentariosQuestao } from "./ComentariosQuestao";
 import Link from "next/link";
@@ -29,10 +29,11 @@ export type CadernoStatus = { ERROS: boolean; ACERTOS: boolean };
 interface QuestionCardProps {
     id: string;
 
-    // ideal: passe os IDs reais aqui
+    // Ids do edital antigo (materias/assuntos, removidas): aceitos por
+    // compatibilidade com quem ainda passa, mas ignorados.
     materiaId?: string | null;
     assuntoId?: string | null;
-    // fallback por nome (se você preferir passar nomes)
+    // nomes exibidos no cabeçalho do card
     materiaNome?: string | null;
     assuntoNome?: string | null;
     /** Detalhe do assunto (ex.: "Lei de Drogas" dentro de "Legislação Especial"). */
@@ -73,119 +74,25 @@ interface QuestionCardProps {
     aoResponder?: (acertou: boolean) => void;
 }
 
-/* ===================== HELPERS ===================== */
-// tenta extrair nomes de "Matéria: X" / "Assunto: Y" nas tags
-function parseFromTags(tags: string[]) {
-    let matName: string | null = null;
-    let assName: string | null = null;
-    for (const t of tags) {
-        const txt = (t || "").toLowerCase();
-        if (!matName && (txt.startsWith("matéria:") || txt.startsWith("materia:"))) {
-            matName = t.split(":")[1]?.trim() || null;
-        }
-        if (!assName && txt.startsWith("assunto:")) {
-            assName = t.split(":")[1]?.trim() || null;
-        }
-    }
-    return { matName, assName };
-}
-
-/** Resolve IDs a partir de IDs (se já vierem), ou de nomes (props/tags). */
-async function ensureIds(
-    uid: string,
-    materiaId?: string | null,
-    assuntoId?: string | null,
-    materiaNome?: string | null,
-    assuntoNome?: string | null,
-    tags?: string[],
-    caches?: { matByName: Map<string, string>; assByName: Map<string, string> }
-): Promise<{ mid: string | null; aid: string | null }> {
-    const matCache = caches?.matByName ?? new Map<string, string>();
-    const assCache = caches?.assByName ?? new Map<string, string>();
-
-    let mid: string | null = materiaId ?? null;
-    let aid: string | null = assuntoId ?? null;
-
-    // nomes vindos por props ou parseados das tags
-    let matName = (materiaNome || null)?.trim() || null;
-    let assName = (assuntoNome || null)?.trim() || null;
-    if ((!matName || !assName) && tags?.length) {
-        const p = parseFromTags(tags);
-        if (!matName && p.matName) matName = p.matName;
-        if (!assName && p.assName) assName = p.assName;
-    }
-
-    // resolve matéria por nome
-    if (!mid && matName) {
-        const key = matName.toLowerCase();
-        if (matCache.has(key)) {
-            mid = matCache.get(key)!;
-        } else {
-            const { data } = await supabase
-                .from("materias")
-                .select("id")
-                .eq("user_id", uid)
-                .ilike("nome", key)
-                .limit(1)
-                .maybeSingle();
-            if (data?.id) {
-                mid = data.id as string;
-                matCache.set(key, mid);
-            }
-        }
-    }
-
-    // resolve assunto por nome (ajuda ter a matéria)
-    if (!aid && assName) {
-        const raw = assName.toLowerCase();
-        const cacheKey = (mid ?? "_no_materia_") + "|" + raw;
-        if (assCache.has(cacheKey)) {
-            aid = assCache.get(cacheKey)!;
-        } else {
-            let query = supabase.from("assuntos").select("id").eq("user_id", uid);
-            if (mid) query = query.eq("materia_id", mid as string);
-            const { data } = await query.ilike("nome", raw).limit(1).maybeSingle();
-            if (data?.id) {
-                aid = data.id as string;
-                assCache.set(cacheKey, aid);
-            }
-        }
-    }
-
-    return { mid: mid ?? null, aid: aid ?? null };
-}
-
 /* ===================== PERSISTÊNCIA ===================== */
-async function atualizarEstatisticasQuestao(
-    acertou: boolean,
-    materiaId?: string | null,
-    assuntoId?: string | null
-) {
+/**
+ * Mantém só os totais gerais de `estatisticas`. Os mapas acc_por_materia /
+ * acc_por_assunto eram chaveados pelos ids do edital antigo (tabelas
+ * materias/assuntos, removidas); não são mais incrementados e o JSON
+ * existente fica intacto. O desempenho por disciplina sai de question_attempts.
+ */
+async function atualizarEstatisticasQuestao(acertou: boolean) {
     const { data: auth } = await supabase.auth.getUser();
     const user = auth?.user;
     if (!user?.id) return;
 
     const { data, error } = await supabase
         .from("estatisticas")
-        .select(
-            "id, questoes_respondidas, taxa_acerto, progresso_semanal, acc_por_materia, acc_por_assunto"
-        )
+        .select("id, questoes_respondidas, taxa_acerto, progresso_semanal")
         .eq("user_id", user.id as string)
         .maybeSingle();
 
     const hoje = new Date().toLocaleDateString("pt-BR");
-
-    const bump = (obj: Record<string, any>, key?: string | null, ok?: boolean) => {
-        if (!key) return obj; // sem chave, não mexe
-        const cur = obj[key] ?? { total: 0, corretas: 0 };
-        return {
-            ...obj,
-            [key]: {
-                total: (cur.total ?? 0) + 1,
-                corretas: (cur.corretas ?? 0) + (ok ? 1 : 0),
-            },
-        };
-    };
 
     if (error || !data) {
         await supabase.from("estatisticas").insert({
@@ -194,12 +101,8 @@ async function atualizarEstatisticasQuestao(
             taxa_acerto: acertou ? 100 : 0,
             tempo_estudado: "00:00:00",
             progresso_semanal: [{ dia: hoje, questoes: 1 }],
-            acc_por_materia: materiaId
-                ? { [materiaId]: { total: 1, corretas: acertou ? 1 : 0 } }
-                : {},
-            acc_por_assunto: assuntoId
-                ? { [assuntoId]: { total: 1, corretas: acertou ? 1 : 0 } }
-                : {},
+            acc_por_materia: {},
+            acc_por_assunto: {},
             atualizado_em: new Date().toISOString(),
         });
         return;
@@ -217,28 +120,20 @@ async function atualizarEstatisticasQuestao(
     if (idx > -1) progresso[idx].questoes += 1;
     else progresso.push({ dia: hoje, questoes: 1 });
 
-    const acc_por_materia = bump(data.acc_por_materia ?? {}, materiaId, acertou);
-    const acc_por_assunto = bump(data.acc_por_assunto ?? {}, assuntoId, acertou);
-
     await supabase
         .from("estatisticas")
         .update({
             questoes_respondidas: novasQuestoes,
             taxa_acerto,
             progresso_semanal: progresso,
-            acc_por_materia,
-            acc_por_assunto,
             atualizado_em: new Date().toISOString(),
         })
         .eq("id", data.id as string);
 }
 
-async function registrarResolucao(
-    questaoId: string,
-    correta: boolean,
-    materiaId?: string | null,
-    assuntoId?: string | null
-) {
+// materia_id/assunto_id apontavam para o edital antigo (tabelas removidas):
+// gravados como null para não criar referências órfãs.
+async function registrarResolucao(questaoId: string, correta: boolean) {
     const { data: auth } = await supabase.auth.getUser();
     const user = auth?.user;
     if (!user?.id) return;
@@ -247,8 +142,8 @@ async function registrarResolucao(
         user_id: user.id as string,
         questao_id: questaoId,
         correta,
-        materia_id: materiaId ?? null,
-        assunto_id: assuntoId ?? null,
+        materia_id: null,
+        assunto_id: null,
         created_at: new Date().toISOString(),
     });
 }
@@ -334,8 +229,6 @@ function acaoClass(ativo: boolean) {
 export function QuestionCard(props: QuestionCardProps) {
     const {
         id,
-        materiaId,
-        assuntoId,
         materiaNome,
         assuntoNome,
         subassuntoNome,
@@ -397,12 +290,6 @@ export function QuestionCard(props: QuestionCardProps) {
         ERROS: cadernoLoading?.ERROS ?? localBusy.ERROS,
         ACERTOS: cadernoLoading?.ACERTOS ?? localBusy.ACERTOS,
     };
-
-    // caches locais
-    const caches = useMemo(
-        () => ({ matByName: new Map<string, string>(), assByName: new Map<string, string>() }),
-        []
-    );
 
     const showFeedback = (msg: string) => {
         setFeedbackMsg(msg);
@@ -636,25 +523,6 @@ export function QuestionCard(props: QuestionCardProps) {
                                 );
                             }
 
-                            let resolvedMid: string | null =
-                                materiaId ?? null;
-
-                            let resolvedAid: string | null =
-                                assuntoId ?? null;
-
-                            const resolved = await ensureIds(
-                                uid,
-                                materiaId ?? null,
-                                assuntoId ?? null,
-                                materiaNome ?? null,
-                                assuntoNome ?? null,
-                                tags,
-                                caches
-                            );
-
-                            resolvedMid = resolved.mid;
-                            resolvedAid = resolved.aid;
-
                             /*
                              * 1) QUESTION_ATTEMPTS é a fonte de verdade.
                              * Só mostramos o resultado depois que a tentativa
@@ -677,14 +545,10 @@ export function QuestionCard(props: QuestionCardProps) {
                                 await Promise.allSettled([
                                     registrarResolucao(
                                         id,
-                                        correta,
-                                        resolvedMid,
-                                        resolvedAid
+                                        correta
                                     ),
                                     atualizarEstatisticasQuestao(
-                                        correta,
-                                        resolvedMid,
-                                        resolvedAid
+                                        correta
                                     ),
                                 ]);
 
